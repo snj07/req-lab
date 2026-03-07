@@ -718,7 +718,9 @@ private fun CollectionTreeNode(
     onNodePositioned: (TreeNodeHitArea) -> Unit,
     onDragEnd: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(true) }
+    // Read from the session-persistent map rather than a local remember so that
+    // Collapse All / Expand All and cross-recomposition state changes take effect.
+    val expanded = state.collectionExpandedState.getOrDefault(node.id, true)
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     val indent = (28 + depth * 16).dp
@@ -794,7 +796,7 @@ private fun CollectionTreeNode(
                 }
                 .clickable {
                     if (node.isFolder) {
-                        expanded = !expanded
+                        state.collectionExpandedState[node.id] = !expanded
                         if (isCollectionRoot) state.selectedCollectionId = node.id
                     } else if (node.method != null && node.url != null) {
                         state.openRequest(requestId = node.id, name = node.name, method = node.method, url = node.url)

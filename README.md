@@ -1,100 +1,116 @@
 # ReqLab
 
-ReqLab is a Kotlin Multiplatform API client inspired by Postman, Insomnia, Hoppscotch, and Bruno.
+> A lightweight, open-source API client for macOS, Windows, and Linux — built with Kotlin and Compose Multiplatform.
 
-This repository is initialized with a production-oriented, modular architecture and the first implemented milestone:
+ReqLab lets you craft, send, and inspect HTTP requests right from your desktop, without telemetry, accounts, or cloud sync required.
 
-- Project architecture and module boundaries
-- Gradle Kotlin DSL setup (Kotlin 2.x)
-- Core network engine (Ktor Client + Coroutines/Flow + kotlinx.serialization)
-- Initial domain models and shared contracts
-- Initial tests for core network behavior
+---
 
-## Tech Stack
+## Features
 
-- Kotlin Multiplatform (Kotlin 2.1.x)
-- Compose Multiplatform (Desktop, Web, Android, iOS shells)
-- Ktor Client
-- kotlinx.serialization
-- Coroutines + Flow
-- Koin (DI foundations)
-- SQLDelight (storage foundations)
+### Request Editor
+- **HTTP methods** — GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD
+- **URL bar** — live two-way sync between the URL and the Params table
+- **Query Parameters** — inline key-value editor, toggle individual params on/off
+- **Headers** — key-value editor with system-header detection and user/system labels
+- **Request Body** — JSON, GraphQL, Form Data, URL-encoded, Raw Text, Binary
+- **Authentication** — None, Basic, Bearer token, API Key, JWT, OAuth 2.0
+- **Pre-request Scripts** — run code before a request fires
+- **Test Scripts** — assert conditions after a response arrives
+- **Retry Controls** — configure attempt count and delay between retries
+- **Copy as cURL** — one-click cURL command generation
+- **Save requests** — persist edits between sessions
 
-## Module Layout
+### Collections & Workspaces
+- Organise requests into named collections with nested folders
+- Drag-and-drop reordering
+- Workspace state persisted automatically on close
 
-### Core
+### Environments & Variables
+- Multiple named environments (Local, Staging, Production, …)
+- Variable interpolation using `{{variableName}}` syntax anywhere in URL, headers, body, or auth fields
+- Secret variables masked in the UI
 
-- `core-model`
-- `core-network`
-- `core-storage`
-- `core-scripting`
+### Tabs
+- Open multiple requests simultaneously in independent tabs
+- Unsaved indicator (●) per tab
+- Per-tab close button; right-click context menu for close/close others/close all
+- Keyboard shortcuts: `⌘↵` Send · `⌘S` Save · `⌘W` Close tab · `⌘N` New tab
 
-### Features
+### Response Viewer
+- Status code, status text, response time, and payload size at a glance
+- Pretty-printed and raw response body views
+- Response headers panel
 
-- `feature-requests`
-- `feature-collections`
-- `feature-history`
-- `feature-environments`
+### Network Log
+- Live event stream showing request lifecycle (started, retries, success, errors)
+- Colour-coded log levels (info, warning, error, success)
 
-### Platform UI
+### Settings
+- Configurable request timeout
+- HTTP proxy support (HTTP and HTTPS)
+- Follow/ignore redirects toggle
+- Auto-save on edit
+- Confirm-before-delete prompt
+- Light and dark theme
 
-- `ui-desktop`
-- `ui-web`
-- `ui-android`
-- `ui-ios`
+---
 
-## Build
+## Getting Started
 
-From repository root:
+### Run from source
+
+ReqLab currently runs from source. See [DEVELOPMENT.md](DEVELOPMENT.md) for prerequisites.
 
 ```bash
-./gradlew build
-```
-
-Desktop run:
-
-```bash
+git clone https://github.com/snj07/req-lab.git
+cd req-lab
 ./gradlew :ui-desktop:desktopRun
 ```
 
-Web development build:
+> **Requirements:** JDK 17 or later (JDK 21 recommended).
 
-```bash
-./gradlew :ui-web:jsBrowserDevelopmentRun
-```
+### Pre-built binaries
 
-## Testing
+Packaged releases are planned. Watch the [Releases](https://github.com/snj07/req-lab/releases) page for updates.
 
-```bash
-./gradlew :core-network:allTests
-./gradlew :core-storage:allTests
-./gradlew :qa-tests:jvmTest
-./gradlew :ui-desktop:desktopTest
-```
+---
 
-Detailed testing coverage and server endpoints: `docs/testing.md`.
+## Keyboard Shortcuts
 
-## Current Milestone Scope
+| Shortcut | Action |
+|---|---|
+| `⌘↵` / `Ctrl+Enter` | Send request |
+| `⌘S` / `Ctrl+S` | Save request |
+| `⌘W` / `Ctrl+W` | Close current tab |
+| `⌘N` / `Ctrl+N` | New tab |
+| `⌘,` / `Ctrl+,` | Open Settings |
+| `⌘⇧[` / `Ctrl+Shift+[` | Move tab left |
+| `⌘⇧]` / `Ctrl+Shift+]` | Move tab right |
 
-Implemented:
+---
 
-- KMP project structure and module graph
-- Shared request/response models
-- Ktor-backed API client with:
-  - HTTP method support
-  - headers/query/cookies/auth/body support
-  - variable interpolation (`{{var}}`)
-  - retry policy
-  - interceptor extension points
-  - network event stream (`Flow`)
+## Tech Stack
 
-Planned next milestones:
+| Layer | Technology |
+|---|---|
+| Language | Kotlin 2.1 (Multiplatform) |
+| UI | Compose Multiplatform 1.8 |
+| HTTP engine | Ktor Client 3.1 |
+| Serialization | kotlinx.serialization |
+| Async | Kotlin Coroutines + Flow |
+| Build | Gradle with Kotlin DSL |
 
-1. Request editor UI and response viewer (pretty/raw/tree)
-2. Collections tree with folders and drag-and-drop
-3. Environment manager + secret variable handling
-4. History + search + re-run
-5. Script engine and collection runner
-6. Import/export and code generation
-7. WebSocket and optional gRPC support
-8. Plugin system and extension SDK
+---
+
+## Contributing
+
+Bug reports and pull requests are welcome. Please open an issue first for significant changes so the approach can be discussed.
+
+Developer setup, module layout, build commands, and testing instructions are in [DEVELOPMENT.md](DEVELOPMENT.md).
+
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE) for details.

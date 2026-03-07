@@ -2,6 +2,7 @@ package com.reqlab.ui.desktop.state
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
@@ -230,6 +231,9 @@ class AppState {
     var selectedRequestId    by mutableStateOf<String?>(null)
     var collectionsRevision  by mutableStateOf(0)
 
+    /** Per-folder expanded state. Absent key → expanded (true) by default. */
+    val collectionExpandedState = mutableStateMapOf<String, Boolean>()
+
     // ── split fractions ─
     var requestResponseSplit by mutableStateOf(0.50f)
     var mainVerticalSplit    by mutableStateOf(0.73f)   // main area / bottom panel
@@ -392,6 +396,22 @@ class AppState {
         // automatically observes add/remove on them — no .copy() trick needed.
         collectionsRevision++
     }
+
+    /** Collapse every folder in the collection tree. */
+    fun collapseAllCollections() {
+        for (id in allFolderIds(collections)) collectionExpandedState[id] = false
+    }
+
+    /** Expand every folder in the collection tree. */
+    fun expandAllCollections() {
+        for (id in allFolderIds(collections)) collectionExpandedState[id] = true
+    }
+
+    private fun allFolderIds(nodes: List<CollectionNode>): List<String> =
+        nodes.flatMap { node ->
+            if (node.isFolder) listOf(node.id) + allFolderIds(node.children)
+            else emptyList()
+        }
 
     /** Add a new request node inside the given collection (folder). Opens it as a tab. */
     fun addRequestToCollection(collectionId: String) {
