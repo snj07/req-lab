@@ -39,9 +39,29 @@ class VariableHighlightTest {
     }
 
     @Test
-    fun `parseVariableNames – token with spaces is trimmed`() {
+    fun `parseVariableNames – spaces in token name are not matched`() {
+        // Strict regex only allows [a-zA-Z0-9_]; spaces cause no match
         val names = parseVariableNames("{{ my var }}")
-        assertEquals(listOf("my var"), names)
+        assertEquals(emptyList<String>(), names)
+    }
+
+    @Test
+    fun `parseVariableNames – underscore is allowed`() {
+        val names = parseVariableNames("{{my_var}}/path")
+        assertEquals(listOf("my_var"), names)
+    }
+
+    @Test
+    fun `parseVariableNames – digits are allowed`() {
+        val names = parseVariableNames("{{var1}}/{{v2}}")
+        assertEquals(listOf("var1", "v2"), names)
+    }
+
+    @Test
+    fun `parseVariableNames – hyphens are not matched`() {
+        // Hyphens are not in [a-zA-Z0-9_]
+        val names = parseVariableNames("{{my-var}}")
+        assertEquals(emptyList<String>(), names)
     }
 
     @Test
@@ -57,14 +77,11 @@ class VariableHighlightTest {
     }
 
     @Test
-    fun `parseVariableNames – outer braces absorb nested-looking incomplete tokens`() {
-        // The regex is greedy: the first {{ matches everything (including inner {{)
-        // up to the first }}, so "valid" is not a separate variable name.
+    fun `parseVariableNames – strict regex finds valid token despite surrounding garbage`() {
+        // The strict [a-zA-Z0-9_]+ regex skips over the invalid opening token
+        // and finds the properly-formed {{valid}} later in the string.
         val names = parseVariableNames("{{notClosed and {{valid}}")
-        // Only one match: the outer {{ consumes up to the first }}
-        assertEquals(1, names.size)
-        // The captured group contains "valid" as part of the longer variable name
-        assertTrue(names.first().contains("valid"))
+        assertEquals(listOf("valid"), names)
     }
 
     // ── highlightVariables ────────────────────────────────────────
