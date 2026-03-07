@@ -1,0 +1,11 @@
+{
+    "type": "reqLabEnvironment",
+    "name": "Local Dev – Sample Server",
+    "variables": {
+        "baseUrl": "http://localhost:8080",
+        "token": "test-token",
+        "apiKey": "test-api-key",
+        "basicUser": "admin",
+        "basicPassword": "password"
+    }
+}

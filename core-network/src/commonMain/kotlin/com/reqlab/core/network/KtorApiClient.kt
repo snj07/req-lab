@@ -1,0 +1,345 @@
+package com.reqlab.core.network
+
+import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.KeyValueEntry
+import com.reqlab.core.model.RequestDefinition
+import com.reqlab.core.model.ResponseDefinition
+import com.reqlab.core.model.ResponseMetrics
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.header
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
+import io.ktor.client.request.url
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.Parameters
+import io.ktor.http.contentType
+import io.ktor.http.encodeURLPath
+import io.ktor.http.formUrlEncode
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.datetime.Clock
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+class KtorApiClient(
+    private val httpClient: HttpClient = defaultHttpClient(),
+    private val retryPolicy: RetryPolicy = RetryPolicy(),
+    private val interceptors: List<NetworkInterceptor> = emptyList(),
+    private val logger: NetworkLogger = NoOpNetworkLogger,
+    private val json: Json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = true
+    }
+) : ApiClient {
+
+    override fun execute(
+        request: RequestDefinition,
+        variableLayers: List<Map<String, String>>
+    ): Flow<NetworkEvent> = flow {
+        emit(NetworkEvent.Started(request.id, currentTimeMillis()))
+
+        var attempt = 0
+        var lastThrowable: Throwable? = null
+
+        while (attempt < retryPolicy.maxAttempts) {
+            attempt++
+            val startTime = currentTimeMillis()
+
+            try {
+                val preparedRequest = buildRequest(request, variableLayers)
+                interceptors.forEach { interceptor -> interceptor.onRequest(preparedRequest) }
+
+                val response = httpClient.request(preparedRequest)
+                val headersReceivedTime = currentTimeMillis()
+                val serverMs = headersReceivedTime - startTime
+                val duration = currentTimeMillis() - startTime
+                interceptors.forEach { interceptor -> interceptor.onResponse(response, duration) }
+
+                val mappedResponse = response.toResponseDefinition(
+                    request.id, duration,
+                    serverMs = serverMs,
+                    requestStartTime = startTime,
+                )
+                val shouldRetry = mappedResponse.statusCode in retryPolicy.retryOnStatusCodes
+
+                if (!shouldRetry || attempt == retryPolicy.maxAttempts) {
+                    emit(NetworkEvent.Success(mappedResponse))
+                    return@flow
+                }
+
+                val delayMs = retryPolicy.delayForAttempt(attempt)
+                emit(NetworkEvent.RetryScheduled(attempt, delayMs, "status=${mappedResponse.statusCode}"))
+                delay(delayMs)
+            } catch (throwable: Throwable) {
+                lastThrowable = throwable
+                logger.error("Request failed at attempt $attempt", throwable)
+                interceptors.forEach { interceptor -> interceptor.onFailure(throwable, attempt) }
+
+                if (attempt == retryPolicy.maxAttempts) {
+                    break
+                }
+
+                val delayMs = retryPolicy.delayForAttempt(attempt)
+                emit(NetworkEvent.RetryScheduled(attempt, delayMs, throwable.message ?: "unknown error"))
+                delay(delayMs)
+            }
+        }
+
+        emit(
+            NetworkEvent.Failure(
+                NetworkError(
+                    requestId = request.id,
+                    message = lastThrowable?.message ?: "Request failed",
+                    cause = lastThrowable,
+                    isRetryExhausted = true
+                )
+            )
+        )
+    }
+
+    private fun buildRequest(
+        request: RequestDefinition,
+        variableLayers: List<Map<String, String>>
+    ): HttpRequestBuilder {
+        val builder = HttpRequestBuilder()
+        val resolvedUrl = VariableResolver.resolve(request.url, variableLayers)
+
+        builder.method = request.method.toKtorMethod()
+        builder.url(resolvedUrl)
+
+        request.queryParams.filter { it.enabled }.forEach { queryParam ->
+            builder.url.parameters.append(
+                queryParam.key,
+                VariableResolver.resolve(queryParam.value, variableLayers)
+            )
+        }
+
+        request.headers.filter { it.enabled }.forEach { header ->
+            builder.header(header.key, VariableResolver.resolve(header.value, variableLayers))
+        }
+
+        if (request.cookies.isNotEmpty()) {
+            builder.header(HttpHeaders.Cookie, request.cookies.filter { it.enabled }
+                .joinToString(separator = "; ") { cookie ->
+                    "${cookie.key}=${VariableResolver.resolve(cookie.value, variableLayers)}"
+                })
+        }
+
+        applyAuth(builder, request, variableLayers)
+        applyBody(builder, request, variableLayers)
+
+        return builder
+    }
+
+    private fun applyAuth(
+        builder: HttpRequestBuilder,
+        request: RequestDefinition,
+        variableLayers: List<Map<String, String>>
+    ) {
+        val auth = request.auth
+        when (auth.type) {
+            AuthType.NONE -> Unit
+            AuthType.BASIC -> {
+                val username = VariableResolver.resolve(auth.params["username"].orEmpty(), variableLayers)
+                val password = VariableResolver.resolve(auth.params["password"].orEmpty(), variableLayers)
+                val value = "$username:$password".encodeToByteArray().encodeBase64()
+                builder.header(HttpHeaders.Authorization, "Basic $value")
+            }
+
+            AuthType.BEARER,
+            AuthType.JWT -> {
+                val token = VariableResolver.resolve(auth.params["token"].orEmpty(), variableLayers)
+                if (token.isNotBlank()) {
+                    builder.header(HttpHeaders.Authorization, "Bearer $token")
+                }
+            }
+
+            AuthType.API_KEY -> {
+                val key = auth.params["key"].orEmpty()
+                val value = VariableResolver.resolve(auth.params["value"].orEmpty(), variableLayers)
+                val placement = auth.params["placement"]?.lowercase() ?: "header"
+                if (placement == "query") {
+                    builder.url.parameters.append(key, value)
+                } else {
+                    builder.header(key, value)
+                }
+            }
+
+            AuthType.OAUTH2 -> {
+                val accessToken = VariableResolver.resolve(auth.params["accessToken"].orEmpty(), variableLayers)
+                if (accessToken.isNotBlank()) {
+                    builder.header(HttpHeaders.Authorization, "Bearer $accessToken")
+                }
+            }
+        }
+    }
+
+    private fun applyBody(
+        builder: HttpRequestBuilder,
+        request: RequestDefinition,
+        variableLayers: List<Map<String, String>>
+    ) {
+        val body = request.body
+        when (body.type) {
+            BodyType.NONE -> Unit
+            BodyType.JSON -> {
+                builder.contentType(ContentType.Application.Json)
+                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
+                builder.setBody(payload)
+            }
+
+            BodyType.RAW_TEXT -> {
+                builder.contentType(ContentType.Text.Plain)
+                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
+                builder.setBody(payload)
+            }
+
+            BodyType.GRAPHQL -> {
+                builder.contentType(ContentType.Application.Json)
+                val graphQlBody = body.graphQl
+                val query = VariableResolver.resolve(graphQlBody?.query.orEmpty(), variableLayers)
+                val operationName = graphQlBody?.operationName
+                val variables = graphQlBody?.variablesJson
+                val payload = buildString {
+                    append("{\"query\":")
+                    append(json.encodeToString(String.serializer(), query))
+                    if (!operationName.isNullOrBlank()) {
+                        append(",\"operationName\":")
+                        append(json.encodeToString(String.serializer(), operationName))
+                    }
+                    if (!variables.isNullOrBlank()) {
+                        append(",\"variables\":")
+                        append(variables)
+                    }
+                    append("}")
+                }
+                builder.setBody(payload)
+            }
+
+            BodyType.X_WWW_FORM_URLENCODED -> {
+                val parameters = Parameters.build {
+                    body.formEntries.filter { it.enabled }.forEach { entry ->
+                        append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
+                    }
+                }
+                builder.contentType(ContentType.Application.FormUrlEncoded)
+                builder.setBody(parameters.formUrlEncode())
+            }
+
+            BodyType.FORM_DATA -> {
+                val payload = body.formEntries
+                    .filter { it.enabled }
+                    .joinToString("&") { entry ->
+                        "${entry.key.encodeURLPath()}=${VariableResolver.resolve(entry.value, variableLayers).encodeURLPath()}"
+                    }
+                builder.setBody(payload)
+            }
+
+            BodyType.BINARY -> {
+                val content = body.content.orEmpty()
+                builder.setBody(content.encodeToByteArray())
+            }
+        }
+    }
+}
+
+private fun HttpMethodType.toKtorMethod(): HttpMethod = when (this) {
+    HttpMethodType.GET -> HttpMethod.Get
+    HttpMethodType.POST -> HttpMethod.Post
+    HttpMethodType.PUT -> HttpMethod.Put
+    HttpMethodType.PATCH -> HttpMethod.Patch
+    HttpMethodType.DELETE -> HttpMethod.Delete
+    HttpMethodType.OPTIONS -> HttpMethod.Options
+    HttpMethodType.HEAD -> HttpMethod.Head
+}
+
+private suspend fun HttpResponse.toResponseDefinition(
+    requestId: String,
+    responseTimeMs: Long,
+    serverMs: Long = -1,
+    requestStartTime: Long = -1,
+): ResponseDefinition {
+    val bodyReadStart = currentTimeMillis()
+    val bodyText = runCatching { bodyAsText() }.getOrElse { "" }
+    val bodyReadEnd = currentTimeMillis()
+    val downloadMs = bodyReadEnd - bodyReadStart
+    val responseHeaders = headers.entries().flatMap { (name, values) ->
+        values.map { value -> KeyValueEntry(name, value) }
+    }
+    val cookies = responseHeaders.filter { it.key.equals(HttpHeaders.SetCookie, ignoreCase = true) }
+    val sizeFromHeader = headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: -1L
+    val bodyBytes = bodyText.encodeToByteArray().size.toLong()
+    val responseSize = if (sizeFromHeader > 0) sizeFromHeader else bodyBytes
+
+    return ResponseDefinition(
+        requestId = requestId,
+        statusCode = status.value,
+        statusText = status.description,
+        headers = responseHeaders,
+        cookies = cookies,
+        bodyText = bodyText,
+        contentType = contentType()?.toString(),
+        executedAtEpochMillis = currentTimeMillis(),
+        metrics = ResponseMetrics(
+            statusCode = status.value,
+            responseTimeMs = responseTimeMs,
+            responseSizeBytes = responseSize,
+            serverMs = serverMs,
+            downloadMs = downloadMs,
+        )
+    )
+}
+
+private fun defaultHttpClient(): HttpClient = createPlatformHttpClient {
+    install(ContentNegotiation) {
+        json(Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            prettyPrint = true
+            explicitNulls = false
+        })
+    }
+    expectSuccess = false
+}
+
+private fun currentTimeMillis(): Long = Clock.System.now().toEpochMilliseconds()
+
+private val base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+private fun ByteArray.encodeBase64(): String {
+    if (isEmpty()) return ""
+    val result = StringBuilder((size + 2) / 3 * 4)
+    var index = 0
+    while (index < size) {
+        val b0 = this[index++].toInt() and 0xFF
+        val b1 = if (index < size) this[index++].toInt() and 0xFF else -1
+        val b2 = if (index < size) this[index++].toInt() and 0xFF else -1
+
+        result.append(base64Alphabet[b0 ushr 2])
+        result.append(base64Alphabet[((b0 and 0x03) shl 4) or (if (b1 >= 0) b1 ushr 4 else 0)])
+
+        if (b1 >= 0) {
+            result.append(base64Alphabet[((b1 and 0x0F) shl 2) or (if (b2 >= 0) b2 ushr 6 else 0)])
+        } else {
+            result.append('=')
+        }
+
+        if (b2 >= 0) {
+            result.append(base64Alphabet[b2 and 0x3F])
+        } else {
+            result.append('=')
+        }
+    }
+    return result.toString()
+}

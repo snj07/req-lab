@@ -1,0 +1,272 @@
+{
+    "type": "reqLabCollection",
+    "version": "1.0",
+    "name": "ReqLab Test Suite",
+    "folders": [
+        {
+            "name": "HTTP Methods",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "GET All Users",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/users"
+                },
+                {
+                    "name": "POST Create User",
+                    "method": "POST",
+                    "url": "{{baseUrl}}/api/users"
+                },
+                {
+                    "name": "PUT Update User",
+                    "method": "PUT",
+                    "url": "{{baseUrl}}/api/users/1"
+                },
+                {
+                    "name": "PATCH Patch User",
+                    "method": "PATCH",
+                    "url": "{{baseUrl}}/api/users/1"
+                },
+                {
+                    "name": "DELETE Delete User",
+                    "method": "DELETE",
+                    "url": "{{baseUrl}}/api/users/1"
+                },
+                {
+                    "name": "OPTIONS Users",
+                    "method": "OPTIONS",
+                    "url": "{{baseUrl}}/api/users"
+                },
+                {
+                    "name": "HEAD Users",
+                    "method": "HEAD",
+                    "url": "{{baseUrl}}/api/users"
+                }
+            ]
+        },
+        {
+            "name": "Query Params",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "Search – q, page, limit",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/search?q=test&page=1&limit=10"
+                },
+                {
+                    "name": "Search – page 2",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/search?q=hello&page=2&limit=25"
+                },
+                {
+                    "name": "Search – no params",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/search"
+                }
+            ]
+        },
+        {
+            "name": "Headers",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "Echo Request Headers",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/echo-headers"
+                }
+            ]
+        },
+        {
+            "name": "Body Types",
+            "folders": [
+                {
+                    "name": "JSON",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "POST JSON Body",
+                            "method": "POST",
+                            "url": "{{baseUrl}}/api/json"
+                        }
+                    ]
+                },
+                {
+                    "name": "Raw Text",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "POST Raw Text",
+                            "method": "POST",
+                            "url": "{{baseUrl}}/api/raw"
+                        }
+                    ]
+                },
+                {
+                    "name": "Form Data",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "POST Form Data (multipart)",
+                            "method": "POST",
+                            "url": "{{baseUrl}}/api/form-data"
+                        }
+                    ]
+                },
+                {
+                    "name": "URL Encoded",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "POST URL Encoded",
+                            "method": "POST",
+                            "url": "{{baseUrl}}/api/urlencoded"
+                        }
+                    ]
+                },
+                {
+                    "name": "File Upload",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "POST Binary File Upload",
+                            "method": "POST",
+                            "url": "{{baseUrl}}/api/upload"
+                        }
+                    ]
+                }
+            ],
+            "requests": []
+        },
+        {
+            "name": "Authentication",
+            "folders": [
+                {
+                    "name": "Basic Auth",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "GET – Basic Auth (admin:password)",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/basic"
+                        }
+                    ]
+                },
+                {
+                    "name": "Bearer Token",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "GET – Bearer Token",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/bearer"
+                        }
+                    ]
+                },
+                {
+                    "name": "API Key",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "GET – API Key Header",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/apikey"
+                        }
+                    ]
+                }
+            ],
+            "requests": []
+        },
+        {
+            "name": "Cookies",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "GET Cookies (set + echo)",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/cookies"
+                }
+            ]
+        },
+        {
+            "name": "Redirects",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "302 Redirect",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/redirect"
+                },
+                {
+                    "name": "Redirect Target (Final)",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/final"
+                }
+            ]
+        },
+        {
+            "name": "Error Responses",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "400 Bad Request",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/400"
+                },
+                {
+                    "name": "401 Unauthorized",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/401"
+                },
+                {
+                    "name": "403 Forbidden",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/403"
+                },
+                {
+                    "name": "404 Not Found",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/404"
+                },
+                {
+                    "name": "500 Internal Server Error",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/500"
+                }
+            ]
+        },
+        {
+            "name": "WebSocket",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "WS Echo Server",
+                    "method": "GET",
+                    "url": "ws://localhost:8080/ws"
+                }
+            ]
+        },
+        {
+            "name": "Slow Requests",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "Slow Response – 3 second delay",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/slow"
+                }
+            ]
+        }
+    ],
+    "requests": [
+        {
+            "name": "Health Check",
+            "method": "GET",
+            "url": "{{baseUrl}}/"
+        },
+        {
+            "name": "Current Server Time",
+            "method": "GET",
+            "url": "{{baseUrl}}/api/time"
+        }
+    ]
+}
