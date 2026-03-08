@@ -1,10 +1,12 @@
 package com.reqlab.ui.desktop
 
+import com.reqlab.ui.shared.MainScreen
+
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import com.reqlab.ui.desktop.state.AppState
+import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
 import org.junit.Test
 
@@ -22,7 +24,7 @@ class SettingsDialogUiTest {
 
     @Test
     fun settings_dialog_opens_when_settings_button_is_clicked() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
@@ -32,7 +34,7 @@ class SettingsDialogUiTest {
 
     @Test
     fun settings_dialog_closes_when_close_button_is_clicked() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         // Open
         composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
@@ -51,7 +53,7 @@ class SettingsDialogUiTest {
     @Test
     fun confirm_dialog_is_shown_when_state_showConfirm_is_called() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state = state) }
+        composeRule.setContent { MainScreen(state = state) }
 
         composeRule.runOnUiThread {
             state.showConfirm("Delete item?", "This cannot be undone.") { /* no-op */ }
@@ -65,7 +67,7 @@ class SettingsDialogUiTest {
     fun confirm_dialog_dismisses_on_cancel_without_invoking_action() {
         val state = AppState()
         var actionCalled = false
-        composeRule.setContent { DesktopShell(state = state) }
+        composeRule.setContent { MainScreen(state = state) }
 
         composeRule.runOnUiThread {
             state.showConfirm("Delete?", "Are you sure?") { actionCalled = true }
@@ -83,7 +85,7 @@ class SettingsDialogUiTest {
     fun confirm_dialog_invokes_action_on_confirm_click() {
         val state = AppState()
         var actionCalled = false
-        composeRule.setContent { DesktopShell(state = state) }
+        composeRule.setContent { MainScreen(state = state) }
 
         composeRule.runOnUiThread {
             state.showConfirm("Delete?", "Are you sure?") { actionCalled = true }

@@ -1,7 +1,7 @@
-package com.reqlab.ui.desktop.network
+package com.reqlab.ui.shared.network
 
 import com.reqlab.core.network.NoOpNetworkLogger
-import com.reqlab.ui.desktop.state.AppSettings
+import com.reqlab.ui.shared.state.AppSettings
 import org.junit.Test
 import kotlin.test.assertNotNull
 

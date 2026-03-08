@@ -18,17 +18,9 @@ kotlin {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
-                implementation(compose.materialIconsExtended)
-                implementation(project(":core-model"))
-                implementation(project(":core-network"))
-                implementation(project(":feature-requests"))
+                implementation(project(":ui-shared"))
                 implementation(libs.coroutines.core)
                 implementation(libs.coroutines.swing)
-                implementation(libs.serialization.json)
-                implementation(libs.ktor.client.cio)
-                implementation(libs.ktor.client.core)
-                implementation(libs.ktor.client.content.negotiation)
-                implementation(libs.ktor.serialization.kotlinx.json)
             }
         }
         val desktopTest by getting {

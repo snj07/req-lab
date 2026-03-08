@@ -1,7 +1,7 @@
-package com.reqlab.ui.desktop.components
+package com.reqlab.ui.shared.components
 
 import com.reqlab.core.model.HttpMethodType
-import com.reqlab.ui.desktop.state.CollectionNode
+import com.reqlab.ui.shared.state.CollectionNode
 import androidx.compose.runtime.mutableStateListOf
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -144,6 +144,58 @@ class SidebarCollectionHelpersTest {
         assertEquals(2, collections[0].children.size)
         assertEquals(2, collections[1].children.size)
         assertEquals("r1", collections[1].children.last().id)
+    }
+
+    @Test
+    fun addSubfolderInCollections_creates_nested_folder_with_unique_name() {
+        val collections = sampleCollections()
+        val parentId = collections.first().id
+
+        val first = addSubfolderInCollections(collections, parentId, "Folder A")
+        val second = addSubfolderInCollections(collections, parentId, "Folder A")
+
+        assertNotNull(first)
+        assertNotNull(second)
+        assertEquals("Folder A", first.name)
+        assertEquals("Folder A (1)", second.name)
+        assertTrue(collections.first().children.any { it.id == first.id && it.isFolder })
+        assertTrue(collections.first().children.any { it.id == second.id && it.isFolder })
+    }
+
+    @Test
+    fun renameFolderInCollections_renames_nested_folder() {
+        val collections = sampleCollections()
+        val nested = addSubfolderInCollections(collections, "c1", "Nested") ?: error("Expected folder")
+
+        val renamed = renameFolderInCollections(collections, nested.id, "Nested Renamed")
+
+        assertTrue(renamed)
+        assertTrue(collections.first().children.any { it.id == nested.id && it.name == "Nested Renamed" })
+    }
+
+    @Test
+    fun deleteFolderFromCollections_removes_folder_and_children() {
+        val collections = sampleCollections()
+        val nested = addSubfolderInCollections(collections, "c1", "To Delete") ?: error("Expected folder")
+        nested.children.add(CollectionNode("r9", "Nested Request", method = HttpMethodType.GET, url = "/nested"))
+
+        val deleted = deleteFolderFromCollections(collections, nested.id)
+
+        assertNotNull(deleted)
+        assertEquals(nested.id, deleted.id)
+        assertFalse(collections.first().children.any { it.id == nested.id })
+    }
+
+    @Test
+    fun countRequestsInFolder_counts_deep_nested_requests() {
+        val collections = sampleCollections()
+        val root = collections.first()
+        val nested = addSubfolderInCollections(collections, root.id, "Nested") ?: error("Expected folder")
+        nested.children.add(CollectionNode("r9", "Nested Request", method = HttpMethodType.GET, url = "/nested"))
+
+        val count = countRequestsInFolder(root)
+
+        assertEquals(4, count)
     }
 
     // ── duplicateRequestInCollections ──

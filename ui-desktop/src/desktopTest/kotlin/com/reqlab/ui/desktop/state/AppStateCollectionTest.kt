@@ -1,4 +1,4 @@
-package com.reqlab.ui.desktop.state
+package com.reqlab.ui.shared.state
 
 import com.reqlab.core.model.HttpMethodType
 import org.junit.Test
@@ -93,28 +93,44 @@ class AppStateCollectionTest {
     }
 
     @Test
-    fun markDirty_sets_isDirty_true() {
+    fun markDirty_sets_isDirty_true_when_state_differs_from_saved_snapshot() {
         val tab = RequestTabState(name = "Test")
+        tab.url = "https://example.com"
         tab.markDirty()
         assertTrue(tab.isDirty)
     }
 
     @Test
-    fun markDirty_always_marks_dirty() {
+    fun markDirty_keeps_clean_when_state_matches_saved_snapshot() {
         val tab = RequestTabState(name = "Test")
         tab.markDirty()
-        assertEquals(true, tab.isDirty)
+        assertEquals(false, tab.isDirty)
     }
 
     @Test
     fun markSaved_clears_isDirty() {
         val tab = RequestTabState(name = "Test")
+        tab.url = "https://changed.example.com"
         tab.markDirty()
         assertTrue(tab.isDirty)
 
         tab.markSaved()
         assertEquals(false, tab.isDirty)
         assertNotNull(tab.lastSavedTimestamp)
+    }
+
+    @Test
+    fun dirty_state_resets_when_changes_are_reverted_to_saved_snapshot() {
+        val tab = RequestTabState(name = "Test", url = "https://example.com")
+        tab.markSaved()
+
+        tab.url = "https://example.com/v2"
+        tab.markDirty()
+        assertTrue(tab.isDirty)
+
+        tab.url = "https://example.com"
+        tab.markDirty()
+        assertEquals(false, tab.isDirty)
     }
 
     @Test

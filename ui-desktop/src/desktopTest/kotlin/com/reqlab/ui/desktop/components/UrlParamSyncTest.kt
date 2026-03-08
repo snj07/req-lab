@@ -1,6 +1,6 @@
-package com.reqlab.ui.desktop.components
+package com.reqlab.ui.shared.components
 
-import com.reqlab.ui.desktop.state.RequestTabState
+import com.reqlab.ui.shared.state.RequestTabState
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -152,7 +152,7 @@ class UrlParamSyncTest {
         syncParamsFromUrl(tab, "http://localhost:8080/api?page=1")
         // Simulate user typing a second param
         syncParamsFromUrl(tab, "http://localhost:8080/api?page=1")
-        tab.params.add(com.reqlab.ui.desktop.state.MutableKeyValue("limit", "20"))
+        tab.params.add(com.reqlab.ui.shared.state.MutableKeyValue("limit", "20"))
         syncUrlFromParams(tab)
 
         assertTrue(tab.url.contains("page=1"))

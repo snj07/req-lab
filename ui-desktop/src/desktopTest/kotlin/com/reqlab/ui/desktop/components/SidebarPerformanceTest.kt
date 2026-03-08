@@ -1,7 +1,7 @@
-package com.reqlab.ui.desktop.components
+package com.reqlab.ui.shared.components
 
 import com.reqlab.core.model.HttpMethodType
-import com.reqlab.ui.desktop.state.CollectionNode
+import com.reqlab.ui.shared.state.CollectionNode
 import androidx.compose.runtime.mutableStateListOf
 import org.junit.Test
 import kotlin.system.measureTimeMillis

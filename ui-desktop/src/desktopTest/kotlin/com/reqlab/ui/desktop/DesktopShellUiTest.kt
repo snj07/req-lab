@@ -1,5 +1,7 @@
 package com.reqlab.ui.desktop
 
+import com.reqlab.ui.shared.MainScreen
+
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -7,24 +9,25 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
-import com.reqlab.ui.desktop.state.AppState
+import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
 import org.junit.Test
 
-class DesktopShellUiTest {
+class MainScreenUiTest {
 
     @get:Rule
     val composeRule = createComposeRule()
 
     @Test
     fun renders_main_layout_panels() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
-        composeRule.onNodeWithTag("desktop-shell").assertIsDisplayed()
+        composeRule.onNodeWithTag("main-screen").assertIsDisplayed()
         composeRule.onNodeWithTag("top-toolbar").assertIsDisplayed()
         composeRule.onNodeWithTag("sidebar").assertIsDisplayed()
         composeRule.onNodeWithTag("request-editor").assertIsDisplayed()
@@ -34,7 +37,7 @@ class DesktopShellUiTest {
 
     @Test
     fun renders_request_bar_with_send_button() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("request-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("method-dropdown").assertIsDisplayed()
@@ -44,7 +47,7 @@ class DesktopShellUiTest {
 
     @Test
     fun renders_request_tabs_bar_with_new_tab() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("request-tabs-bar").assertIsDisplayed()
         composeRule.onNodeWithText("Untitled").assertIsDisplayed()
@@ -52,7 +55,7 @@ class DesktopShellUiTest {
 
     @Test
     fun renders_sidebar_sections() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithText("History").assertIsDisplayed()
         composeRule.onNodeWithText("Collections").assertIsDisplayed()
@@ -61,7 +64,7 @@ class DesktopShellUiTest {
 
     @Test
     fun renders_editor_tab_labels() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithText("Params").assertIsDisplayed()
         composeRule.onNodeWithText("Headers").assertIsDisplayed()
@@ -72,7 +75,7 @@ class DesktopShellUiTest {
 
     @Test
     fun renders_toolbar_brand_and_environment() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithText("ReqLab").assertIsDisplayed()
         // "Development" appears in both toolbar chip and sidebar environment list
@@ -81,14 +84,14 @@ class DesktopShellUiTest {
 
     @Test
     fun renders_response_empty_state() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithText("Response").assertIsDisplayed()
     }
 
     @Test
     fun renders_bottom_panel_tabs() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithText("Console").assertIsDisplayed()
         composeRule.onNodeWithText("Test Results").assertIsDisplayed()
@@ -97,7 +100,7 @@ class DesktopShellUiTest {
 
     @Test
     fun clicking_sidebar_history_item_opens_request_tab() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         // Click the first history item via the sidebar
         composeRule.onAllNodesWithText("List users")[0].performClick()
@@ -110,20 +113,20 @@ class DesktopShellUiTest {
 
     @Test
     fun send_button_displays_text() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithText("Send").assertIsDisplayed()
     }
 
     @Test
     fun request_bar_shows_save_button() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
         composeRule.onNodeWithTag("save-button").assertIsDisplayed()
     }
 
     @Test
     fun request_bar_shows_retry_and_curl_controls() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("retry-menu-button").assertIsDisplayed()
         composeRule.onNodeWithTag("copy-curl-button").assertIsDisplayed()
@@ -131,7 +134,7 @@ class DesktopShellUiTest {
 
     @Test
     fun sidebar_search_filters_collection_tree() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("sidebar-search-input").performTextInput("Auth")
         composeRule.waitForIdle()
@@ -154,25 +157,44 @@ class DesktopShellUiTest {
             metrics = ResponseMetrics(statusCode = 200, responseTimeMs = 10, responseSizeBytes = 12),
         )
 
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.onNodeWithTag("save-response-button").assertIsDisplayed()
     }
 
     @Test
     fun dirty_indicator_shows_and_clears_after_save_when_auto_save_off() {
         val state = AppState().apply { settings.autoSaveRequests = false }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithTag("url-input").performTextInput("https://example.com")
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Untitled ●").assertIsDisplayed()
+        composeRule.onNodeWithText("Untitled *").assertIsDisplayed()
 
         composeRule.onNodeWithTag("save-button").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Untitled ●").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText("Untitled *").fetchSemanticsNodes().isEmpty()
         }
 
-        composeRule.onAllNodesWithText("Untitled ●").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Untitled *").assertCountEquals(0)
+    }
+
+    @Test
+    fun dirty_indicator_clears_when_value_reverts_to_saved_snapshot() {
+        val state = AppState().apply { settings.autoSaveRequests = false }
+        state.activeTab?.url = "https://example.com"
+        state.activeTab?.markSaved()
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("url-input").performTextClearance()
+        composeRule.onNodeWithTag("url-input").performTextInput("https://example.com/v2")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Untitled *").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("url-input").performTextClearance()
+        composeRule.onNodeWithTag("url-input").performTextInput("https://example.com")
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithText("Untitled *").assertCountEquals(0)
     }
 }

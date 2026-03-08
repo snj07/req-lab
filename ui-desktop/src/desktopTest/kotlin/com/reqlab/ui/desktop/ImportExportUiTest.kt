@@ -1,5 +1,7 @@
 package com.reqlab.ui.desktop
 
+import com.reqlab.ui.shared.MainScreen
+
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,32 +17,34 @@ class ImportExportUiTest {
 
     @Test
     fun collections_section_has_import_button() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
         composeRule.onNodeWithTag("collection-import-button", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
     fun environments_section_has_import_button() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
         composeRule.onNodeWithTag("environment-import-button", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
-    fun collection_actions_menu_shows_export_duplicate_rename_delete() {
-        composeRule.setContent { DesktopShell() }
+    fun collection_actions_menu_shows_folder_actions_and_collection_actions() {
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("collection-actions-c1", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
+        composeRule.onNodeWithText("Add Folder").assertIsDisplayed()
+        composeRule.onNodeWithText("Add Request").assertIsDisplayed()
         composeRule.onNodeWithText("Export Collection").assertIsDisplayed()
         composeRule.onNodeWithText("Duplicate Collection").assertIsDisplayed()
-        composeRule.onNodeWithText("Rename Collection").assertIsDisplayed()
-        composeRule.onNodeWithText("Delete Collection").assertIsDisplayed()
+        composeRule.onNodeWithText("Rename").assertIsDisplayed()
+        composeRule.onNodeWithText("Delete").assertIsDisplayed()
     }
 
     @Test
     fun environment_actions_menu_shows_export_duplicate_delete() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("env-actions-Development", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
@@ -52,7 +56,7 @@ class ImportExportUiTest {
 
     @Test
     fun settings_data_section_shows_workspace_backup_actions() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
 
         composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()

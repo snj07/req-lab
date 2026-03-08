@@ -1,7 +1,12 @@
 package com.reqlab.ui.desktop
 
+import com.reqlab.ui.shared.MainScreen
+
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -11,7 +16,7 @@ import androidx.compose.ui.test.performTextInput
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
-import com.reqlab.ui.desktop.state.AppState
+import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertTrue
@@ -28,7 +33,7 @@ class NewFeaturesUiTest {
         val state = AppState().apply {
             activeTab?.response = sampleResponse()
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithText("Timing").assertIsDisplayed()
     }
@@ -38,7 +43,7 @@ class NewFeaturesUiTest {
         val state = AppState().apply {
             activeTab?.response = sampleResponse(serverMs = 80, downloadMs = 20)
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         // Navigate to Timing tab
         composeRule.onNodeWithText("Timing").performClick()
@@ -54,7 +59,7 @@ class NewFeaturesUiTest {
         val state = AppState().apply {
             activeTab?.response = sampleResponse()
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithText("Timing").performClick()
         composeRule.waitForIdle()
@@ -69,7 +74,7 @@ class NewFeaturesUiTest {
     @Test
     fun add_button_exists_for_each_collection() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         // Each collection should have an add button with testTag
         val firstCollectionId = state.collections.first().id
@@ -81,7 +86,7 @@ class NewFeaturesUiTest {
     @Test
     fun collection_context_menu_shows_actions() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         // Click the "..." button for the first collection
         val firstCollectionId = state.collections.first().id
@@ -89,11 +94,76 @@ class NewFeaturesUiTest {
         composeRule.waitForIdle()
 
         // Verify menu items appear with icons
+        composeRule.onNodeWithText("Add Folder").assertIsDisplayed()
         composeRule.onNodeWithText("Add Request").assertIsDisplayed()
         composeRule.onNodeWithText("Export Collection").assertIsDisplayed()
         composeRule.onNodeWithText("Duplicate Collection").assertIsDisplayed()
-        composeRule.onNodeWithText("Rename Collection").assertIsDisplayed()
-        composeRule.onNodeWithText("Delete Collection").assertIsDisplayed()
+        composeRule.onNodeWithText("Rename").assertIsDisplayed()
+        composeRule.onNodeWithText("Delete").assertIsDisplayed()
+    }
+
+    @Test
+    fun add_subfolder_from_context_menu_adds_node_to_tree() {
+        val state = AppState().apply { settings.confirmBeforeDelete = false }
+        val rootId = state.collections.first().id
+        val before = state.collections.first().children.count { it.isFolder }
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-$rootId", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Add Folder", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("rename-dialog-save", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        val created = state.collections.first().children.last { it.isFolder }
+        assertTrue(state.collections.first().children.count { it.isFolder } == before + 1)
+        composeRule.onNodeWithTag("collection-node-${created.id}", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun delete_subfolder_from_context_menu_removes_node_from_tree() {
+        val state = AppState().apply { settings.confirmBeforeDelete = false }
+        val root = state.collections.first()
+        val folder = com.reqlab.ui.shared.components.addSubfolderInCollections(state.collections, root.id, "Temp Folder")
+            ?: error("Folder creation failed")
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-${folder.id}", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Delete", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(state.collections.first().children.none { it.id == folder.id })
+        composeRule.onAllNodesWithTag("collection-node-${folder.id}", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun subfolder_icon_is_distinct_from_root_collection_icon() {
+        val state = AppState()
+        val root = state.collections.first()
+        val sub = com.reqlab.ui.shared.components.addSubfolderInCollections(state.collections, root.id, "Nested")
+            ?: error("Folder creation failed")
+
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-root-icon-${root.id}", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("collection-subfolder-icon-${sub.id}", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun environment_row_does_not_resize_when_actions_become_visible() {
+        val state = AppState()
+        val envName = state.environments.first().name
+        composeRule.setContent { MainScreen(state) }
+
+        val row = composeRule.onNodeWithTag("env-row-$envName", useUnmergedTree = true)
+        val before = row.getUnclippedBoundsInRoot()
+
+        // Clicking marks as active, which reveals the actions icon.
+        row.performClick()
+        composeRule.waitForIdle()
+
+        val after = row.getUnclippedBoundsInRoot()
+        assertTrue((before.right - before.left) == (after.right - after.left))
+        assertTrue((before.bottom - before.top) == (after.bottom - after.top))
     }
 
     // ── Request tabs bar shows tab count ──
@@ -103,7 +173,7 @@ class NewFeaturesUiTest {
         val state = AppState()
         val tabsBefore = state.openTabs.size
 
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         // Click the "+" button for the first collection
         val firstCollectionId = state.collections.first().id
@@ -118,7 +188,7 @@ class NewFeaturesUiTest {
     fun duplicate_request_updates_ui_immediately() {
         val state = AppState().apply { settings.confirmBeforeDelete = false }
         val before = state.collections.first().children.size
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithTag("collection-actions-r1", useUnmergedTree = true).performClick()
         composeRule.onNodeWithText("Duplicate Request", useUnmergedTree = true).performClick()
@@ -135,7 +205,7 @@ class NewFeaturesUiTest {
     fun delete_request_updates_ui_immediately() {
         val state = AppState().apply { settings.confirmBeforeDelete = false }
         val before = state.collections.first().children.size
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         // r1 should be visible before delete
         composeRule.onNodeWithTag("collection-node-r1", useUnmergedTree = true).assertIsDisplayed()
@@ -155,7 +225,7 @@ class NewFeaturesUiTest {
         val state = AppState().apply { settings.confirmBeforeDelete = false }
         val before = state.collections.first().children.size
         val firstCollectionId = state.collections.first().id
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithTag("collection-add-$firstCollectionId", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
@@ -170,7 +240,7 @@ class NewFeaturesUiTest {
     @Test
     fun open_request_shows_selected_indicator() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithText("Get all users").performClick()
         composeRule.waitForIdle()
@@ -184,7 +254,7 @@ class NewFeaturesUiTest {
             settings.autoSaveRequests = false
             addTab(name = "Temp")
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithTag("url-input").performTextInput("https://example.com")
         composeRule.waitForIdle()

@@ -1,20 +1,30 @@
 package com.reqlab.ui.desktop
 
+import com.reqlab.ui.shared.MainScreen
+import com.reqlab.ui.shared.components.VariableEditorPopup
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import com.reqlab.ui.desktop.state.AppState
-import com.reqlab.ui.desktop.state.EnvState
-import com.reqlab.ui.desktop.state.MutableKeyValue
+import androidx.compose.ui.unit.IntOffset
+import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.EnvState
+import com.reqlab.ui.shared.state.MutableKeyValue
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Tests for the inline variable editor popup (Issues 1–7).
@@ -43,7 +53,7 @@ class VariablePopupTest {
             // Give the URL a variable token — popup must still not auto-open.
             activeTab?.url = "{{baseUrl}}/users"
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // The popup node must not exist at startup (Issue 1).
@@ -59,7 +69,7 @@ class VariablePopupTest {
     @Test
     fun typing_in_url_field_does_not_open_variable_popup() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // Type characters (including a partial variable token) into the URL field.
@@ -80,26 +90,81 @@ class VariablePopupTest {
      */
     @Test
     fun variable_popup_has_close_button() {
-        // Render only the popup composable directly (white-box test) to verify
-        // the close button is present and the popup content renders correctly.
         val state = AppState().apply {
             environments.clear()
             environments.add(EnvState("Test Env").also { env ->
                 env.variables.add(MutableKeyValue(key = "baseUrl", value = "https://api.example.com"))
             })
         }
+
         composeRule.setContent {
-            // Render the app shell — the popup is part of the composable tree
-            // when popupVariable is set. We can't directly set it from outside,
-            // but we can at least confirm the popup infrastructure is correct
-            // by checking the app renders cleanly.
-            DesktopShell(state)
+            var isOpen by remember { mutableStateOf(true) }
+            if (isOpen) {
+                VariableEditorPopup(
+                    variableName = "baseUrl",
+                    state = state,
+                    onDismiss = { isOpen = false },
+                )
+            }
         }
         composeRule.waitForIdle()
 
-        // Verify the popup is not shown initially — the close button tag
-        // should not exist until a variable is clicked.
-        composeRule.onAllNodesWithTag("variable-popup-close").assertCountEquals(0)
+        composeRule.onNodeWithTag("variable-popup-close").assertIsDisplayed()
+        composeRule.onNodeWithText("{{baseUrl}}", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun variable_popup_closes_on_backdrop_click() {
+        val state = AppState()
+        composeRule.setContent {
+            var isOpen by remember { mutableStateOf(true) }
+            if (isOpen) {
+                VariableEditorPopup(
+                    variableName = "baseUrl",
+                    state = state,
+                    onDismiss = { isOpen = false },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("variable-editor-popup").assertIsDisplayed()
+        composeRule.onNodeWithTag("variable-popup-backdrop").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("variable-editor-popup").assertCountEquals(0)
+    }
+
+    @Test
+    fun variable_popup_has_visible_title_bar_drag_handle() {
+        val state = AppState()
+
+        composeRule.setContent {
+            VariableEditorPopup(
+                variableName = "baseUrl",
+                state = state,
+                onDismiss = {},
+                initialOffset = IntOffset(40, 32),
+            )
+        }
+
+        composeRule.onNodeWithTag("variable-popup-title-bar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("variable-editor-popup").assertIsDisplayed()
+    }
+
+    @Test
+    fun variable_popup_normalizes_extra_braces_in_title() {
+        val state = AppState()
+
+        composeRule.setContent {
+            VariableEditorPopup(
+                variableName = "{{baseUrl}}}",
+                state = state,
+                onDismiss = {},
+            )
+        }
+
+        composeRule.onNodeWithText("{{baseUrl}}", useUnmergedTree = true).assertIsDisplayed()
     }
 
     /**
@@ -108,7 +173,7 @@ class VariablePopupTest {
      */
     @Test
     fun url_input_is_rendered_and_accessible() {
-        composeRule.setContent { DesktopShell() }
+        composeRule.setContent { MainScreen() }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("url-input").assertIsDisplayed()

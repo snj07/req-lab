@@ -1,30 +1,37 @@
-package com.reqlab.ui.desktop.persistence
+package com.reqlab.ui.shared.persistence
 
-import com.reqlab.ui.desktop.state.AppSettings
-import com.reqlab.ui.desktop.state.AppTheme
+import com.reqlab.ui.shared.platform.PlatformStorage
+import com.reqlab.ui.shared.state.AppSettings
+import com.reqlab.ui.shared.state.AppTheme
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import java.util.prefs.Preferences
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SettingsRepositoryTest {
 
-    // Access the same Preferences node the repository uses.
-    private val prefs: Preferences = Preferences.userNodeForPackage(SettingsRepository::class.java)
+    private val settingsKeys = listOf(
+        "settings.autoSaveRequests",
+        "settings.confirmBeforeDelete",
+        "settings.defaultTimeoutSec",
+        "settings.theme",
+        "settings.requestTimeoutSec",
+        "settings.followRedirects",
+        "settings.proxyEnabled",
+        "settings.httpProxy",
+        "settings.httpsProxy",
+    )
 
     @Before
     fun setUp() {
-        prefs.clear()
-        prefs.flush()
+        settingsKeys.forEach { PlatformStorage.remove(it) }
     }
 
     @After
     fun tearDown() {
-        prefs.clear()
-        prefs.flush()
+        settingsKeys.forEach { PlatformStorage.remove(it) }
     }
 
     // ── Defaults ────────────────────────────────────────────────────────────
@@ -92,8 +99,7 @@ class SettingsRepositoryTest {
 
     @Test
     fun invalid_theme_value_falls_back_to_default_dark() {
-        prefs.put("theme", "NOT_A_VALID_THEME")
-        prefs.flush()
+        PlatformStorage.putString("settings.theme", "NOT_A_VALID_THEME")
 
         // Default field value is DARK
         val settings = AppSettings()

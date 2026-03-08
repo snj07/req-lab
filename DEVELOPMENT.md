@@ -24,8 +24,9 @@ req-lab/
 ├── core-storage/        # Persistence contracts and JSON file adapter
 ├── core-scripting/      # Script engine contracts (pre-request / test scripts)
 ├── feature-requests/    # Request use-cases wiring core-model + core-network
-├── ui-desktop/          # Compose Desktop application (main deliverable)
-├── ui-web/              # Compose Web shell (early stage)
+├── ui-shared/           # Shared Compose UI code (jvm + wasmJs) — 95% of all UI
+├── ui-desktop/          # Thin Compose Desktop launcher (~44 lines)
+├── ui-web/              # Thin Compose/Wasm browser launcher (CanvasBasedWindow)
 ├── test-support/        # Embedded Ktor test server used by integration tests
 ├── qa-tests/            # JVM integration + end-to-end tests
 ├── sample-server/       # Standalone Ktor server for manual/exploratory testing
@@ -55,10 +56,10 @@ Build all modules:
 ./gradlew build
 ```
 
-Compile only the desktop module (fast check during development):
+Compile only the shared UI module (fast check during development):
 
 ```bash
-./gradlew :ui-desktop:compileKotlinDesktop
+./gradlew :ui-shared:compileKotlinDesktop
 ```
 
 ---
@@ -68,7 +69,7 @@ Compile only the desktop module (fast check during development):
 ### Desktop application
 
 ```bash
-./gradlew :ui-desktop:desktopRun
+./gradlew :ui-desktop:run
 ```
 
 To run in the background (returns the prompt immediately):
@@ -112,10 +113,16 @@ Query string simulation modes:
 - `?mode=error` — returns a 500 error
 - `?large=true` — returns a large payload
 
-### Web (experimental)
+### Web (Compose/Wasm — canvas-based)
 
 ```bash
-./gradlew :ui-web:jsBrowserDevelopmentRun
+./gradlew :ui-web:wasmJsBrowserDevelopmentRun
+```
+
+Production bundle:
+
+```bash
+./gradlew :ui-web:wasmJsBrowserProductionWebpack
 ```
 
 ---
@@ -173,39 +180,63 @@ GitHub Actions runs on every push and pull request. See [`.github/workflows/`](.
 
 See [`docs/architecture.md`](docs/architecture.md) for a full write-up. Key rules:
 
-- **UI modules** depend on **feature modules** only.
+- **UI launchers** (`ui-desktop`, `ui-web`) depend on **ui-shared** only.
+- **ui-shared** depends on **feature modules** and **core modules**.
 - **Feature modules** depend on **core modules** only.
 - **Core modules** do not depend on feature or UI modules.
-- All business logic lives in `commonMain` sources.
+- All business logic and UI composables live in `commonMain` sources.
+- Platform-specific code uses `expect`/`actual` declarations in `ui-shared`.
 
-### `ui-desktop` component map
+### `ui-shared` component map
 
-The desktop UI is split into focused, single-responsibility files under
-`ui-desktop/src/desktopMain/kotlin/com/reqlab/ui/desktop/`:
+All shared UI code lives in
+`ui-shared/src/commonMain/kotlin/com/reqlab/ui/shared/`:
 
 ```
+MainScreen.kt              — root composable (toolbar, sidebar, editors, dialogs)
 components/
-├── RequestBar.kt        — method dropdown, URL field, Send/Save/Retry/cURL buttons
-├── KeyValueEditor.kt    — reusable key-value table (Params, Headers)
-├── BodyEditor.kt        — body type selector + content editor
-├── AuthEditor.kt        — auth type selector + credential fields
-├── ScriptEditor.kt      — code editor for Pre-request and Test scripts
-├── RequestTabsBar.kt    — horizontal tab bar with scroll, context menu, indicators
-├── RequestExecutor.kt   — sendRequest, saveRequest, buildAuthConfig, buildCurlCommand
-├── RequestEditor.kt     — top-level editor composable, delegates to above components
-├── ResponseViewer.kt    — pretty/raw response body, headers, metrics
-├── Sidebar.kt           — collections tree
-├── TopToolbar.kt        — environment picker, theme toggle, settings button
-├── BottomPanel.kt       — network log panel
-└── ...dialogs and utilities
+├── RequestBar.kt          — method dropdown, URL field, Send/Save/Retry/cURL buttons
+├── KeyValueEditor.kt      — reusable key-value table (Params, Headers)
+├── BodyEditor.kt          — body type selector + content editor
+├── AuthEditor.kt          — auth type selector + credential fields
+├── ScriptEditor.kt        — code editor for Pre-request and Test scripts
+├── RequestTabsBar.kt      — horizontal tab bar with scroll, context menu, indicators
+├── RequestExecutor.kt     — sendRequest, saveRequest, buildAuthConfig, buildCurlCommand
+├── RequestEditor.kt       — top-level editor composable, delegates to above
+├── ResponseViewer.kt      — pretty/raw response body, headers, metrics
+├── Sidebar.kt             — collections tree, environments, history
+├── TopToolbar.kt          — environment picker, theme toggle, settings button
+├── BottomPanel.kt         — network log panel
+├── SettingsDialog.kt      — settings + workspace import/export
+└── …dialogs and utilities
 state/
-├── AppState.kt          — root observable state (tabs, environments, collections, settings)
-├── RequestTabState.kt   — per-tab mutable state
-└── ...
+├── AppState.kt            — root observable state (tabs, environments, collections, settings)
+├── RequestTabState.kt     — per-tab mutable state
+└── …
+persistence/
+├── ImportExportRepository.kt — JSON serialization for import/export (string-based)
+├── SettingsRepository.kt  — settings persistence via PlatformStorage
+├── TabsRepository.kt      — tab state persistence via PlatformStorage
+└── WorkspaceRepository.kt — workspace persistence via PlatformStorage
+network/
+└── NetworkClientFactory.kt — expect/actual Ktor HttpClient factory
+platform/
+└── PlatformApi.kt         — expect/actual for UUID, clipboard, storage, file I/O, cursors
 theme/
-└── ReqLabTheme.kt       — Material 3 colour tokens, typography, code font
-Main.kt                  — application entry point + DesktopShell composable
+└── ReqLabTheme.kt         — Material 3 colour tokens, typography, code font
 ```
+
+Platform-specific actuals are in `desktopMain/` (JVM) and `wasmJsMain/` (browser).
+
+### `ui-desktop` (thin launcher)
+
+`ui-desktop/src/desktopMain/kotlin/com/reqlab/ui/desktop/Main.kt` — ~44 lines.
+Opens a Compose `Window`, loads settings/tabs/workspace, and renders `MainScreen`.
+
+### `ui-web` (thin launcher)
+
+`ui-web/src/wasmJsMain/kotlin/com/reqlab/ui/web/Main.kt` — ~15 lines.
+Uses `CanvasBasedWindow` to render `MainScreen` in an HTML `<canvas>` element.
 
 ---
 
@@ -220,4 +251,19 @@ Main.kt                  — application entry point + DesktopShell composable
 
 # Build and show a dependency report for a module
 ./gradlew :ui-desktop:dependencies
+
+# Compile shared UI for desktop
+./gradlew :ui-shared:compileKotlinDesktop
+
+# Compile shared UI for wasmJs
+./gradlew :ui-shared:compileKotlinWasmJs
+
+# Build web production bundle
+./gradlew :ui-web:wasmJsBrowserProductionWebpack
+
+# Run desktop
+./gradlew :ui-desktop:desktopRun
+
+# Run web dev server
+./gradlew :ui-web:wasmJsBrowserDevelopmentRun
 ```

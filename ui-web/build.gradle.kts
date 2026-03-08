@@ -5,16 +5,29 @@ plugins {
 }
 
 kotlin {
-    js(IR) {
-        browser()
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser {
+            commonWebpackConfig {
+                outputFileName = "reqlab-web.js"
+            }
+        }
         binaries.executable()
     }
 
     sourceSets {
-        jsMain.dependencies {
-            implementation(compose.html.core)
-            implementation(compose.runtime)
-            implementation(project(":feature-requests"))
+        val wasmJsMain by getting {
+            dependencies {
+                implementation(project(":ui-shared"))
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+            }
+        }
+        val wasmJsTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+            }
         }
     }
 }

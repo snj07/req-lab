@@ -15,6 +15,11 @@ kotlin {
         binaries.library()
     }
 
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.serialization.json)

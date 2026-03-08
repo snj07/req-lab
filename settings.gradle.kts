@@ -24,6 +24,7 @@ include(
     ":test-support",
     ":qa-tests",
     ":feature-requests",
+    ":ui-shared",
     ":ui-desktop",
     ":ui-web",
     ":sample-server"

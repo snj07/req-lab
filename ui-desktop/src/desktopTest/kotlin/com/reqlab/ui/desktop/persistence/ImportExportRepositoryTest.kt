@@ -1,8 +1,7 @@
-package com.reqlab.ui.desktop.persistence
+package com.reqlab.ui.shared.persistence
 
-import com.reqlab.ui.desktop.state.AppState
+import com.reqlab.ui.shared.state.AppState
 import org.junit.Test
-import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -25,12 +24,9 @@ class ImportExportRepositoryTest {
     @Test
     fun exportWorkspace_writesExpectedSchemaEnvelope() {
         val state = AppState()
-        val file = File.createTempFile("reqlab-workspace", ".json")
-        file.deleteOnExit()
 
-        ImportExportRepository.exportWorkspaceToFile(state, file)
+        val json = ImportExportRepository.exportWorkspaceToString(state)
 
-        val json = file.readText()
         assertTrue(json.contains("\"type\": \"reqLabWorkspace\""))
         assertTrue(json.contains("\"version\": \"1.0\""))
         assertTrue(json.contains("\"collections\""))
@@ -40,16 +36,14 @@ class ImportExportRepositoryTest {
     @Test
     fun exportWorkspace_then_importWorkspace_restoresCollectionsAndEnvironments() {
         val source = AppState()
-        val file = File.createTempFile("reqlab-workspace-roundtrip", ".json")
-        file.deleteOnExit()
 
-        ImportExportRepository.exportWorkspaceToFile(source, file)
+        val json = ImportExportRepository.exportWorkspaceToString(source)
 
         val target = AppState().also {
             it.collections.clear()
             it.environments.clear()
         }
-        val result = ImportExportRepository.importWorkspaceFromFile(target, file)
+        val result = ImportExportRepository.importWorkspaceFromString(target, json)
 
         assertEquals(source.collections.size, result.importedCollections)
         assertEquals(source.environments.size, result.importedEnvironments)
@@ -60,16 +54,14 @@ class ImportExportRepositoryTest {
     @Test
     fun importWorkspace_renamesDuplicateCollectionsAndEnvironments() {
         val source = AppState()
-        val file = File.createTempFile("reqlab-workspace-dup", ".json")
-        file.deleteOnExit()
 
-        ImportExportRepository.exportWorkspaceToFile(source, file)
+        val json = ImportExportRepository.exportWorkspaceToString(source)
 
         val target = AppState()
         val beforeCollections = target.collections.map { it.name }.toSet()
         val beforeEnvironments = target.environments.map { it.name }.toSet()
 
-        val result = ImportExportRepository.importWorkspaceFromFile(target, file)
+        val result = ImportExportRepository.importWorkspaceFromString(target, json)
 
         assertTrue(result.importedCollections > 0)
         assertTrue(result.importedEnvironments > 0)
@@ -85,17 +77,14 @@ class ImportExportRepositoryTest {
     fun exportAndImportSingleCollection_roundTripsWithCollectionSchema() {
         val source = AppState()
         val collection = source.collections.first()
-        val file = File.createTempFile("reqlab-collection", ".json")
-        file.deleteOnExit()
 
-        ImportExportRepository.exportCollectionToFile(collection, file)
-        val content = file.readText()
+        val content = ImportExportRepository.exportCollectionToString(collection)
         assertTrue(content.contains("\"type\": \"reqLabCollection\""))
         assertTrue(content.contains("\"folders\""))
         assertTrue(content.contains("\"requests\""))
 
         val target = AppState().also { it.collections.clear() }
-        val importedName = ImportExportRepository.importCollectionFromFile(target, file)
+        val importedName = ImportExportRepository.importCollectionFromString(target, content)
 
         assertEquals(collection.name, importedName)
         assertEquals(1, target.collections.size)
@@ -105,16 +94,13 @@ class ImportExportRepositoryTest {
     fun exportAndImportEnvironment_roundTripsWithEnvironmentSchema() {
         val source = AppState()
         val environment = source.environments.first()
-        val file = File.createTempFile("reqlab-env", ".json")
-        file.deleteOnExit()
 
-        ImportExportRepository.exportEnvironmentToFile(environment, file)
-        val content = file.readText()
+        val content = ImportExportRepository.exportEnvironmentToString(environment)
         assertTrue(content.contains("\"type\": \"reqLabEnvironment\""))
         assertTrue(content.contains("\"variables\""))
 
         val target = AppState().also { it.environments.clear() }
-        val importedName = ImportExportRepository.importEnvironmentFromFile(target, file)
+        val importedName = ImportExportRepository.importEnvironmentFromString(target, content)
 
         assertEquals(environment.name, importedName)
         assertEquals(1, target.environments.size)
@@ -123,30 +109,28 @@ class ImportExportRepositoryTest {
 
     @Test(expected = ImportExportException::class)
     fun importWorkspace_invalidSchema_throws() {
-        val file = File.createTempFile("reqlab-invalid", ".json")
-        file.deleteOnExit()
-        file.writeText("""
+        val json = """
             {
               "type": "notWorkspace",
               "version": "1.0",
               "collections": [],
               "environments": []
             }
-        """.trimIndent())
+        """.trimIndent()
 
-        ImportExportRepository.importWorkspaceFromFile(AppState(), file)
+        ImportExportRepository.importWorkspaceFromString(AppState(), json)
     }
 
     @Test
     fun end_to_end_workspace_backup_restore_flow() {
         val app = AppState()
         app.collections.add(
-            com.reqlab.ui.desktop.state.CollectionNode(
+            com.reqlab.ui.shared.state.CollectionNode(
                 id = "custom-c1",
                 name = "Custom API",
                 isFolder = true,
                 children = androidx.compose.runtime.mutableStateListOf(
-                    com.reqlab.ui.desktop.state.CollectionNode(
+                    com.reqlab.ui.shared.state.CollectionNode(
                         id = "custom-r1",
                         name = "Ping",
                         isFolder = false,
@@ -157,23 +141,20 @@ class ImportExportRepositoryTest {
             )
         )
         app.environments.add(
-            com.reqlab.ui.desktop.state.EnvState(
+            com.reqlab.ui.shared.state.EnvState(
                 "CI",
-                variables = listOf(com.reqlab.ui.desktop.state.MutableKeyValue("baseUrl", "https://example.com")),
+                variables = listOf(com.reqlab.ui.shared.state.MutableKeyValue("baseUrl", "https://example.com")),
             )
         )
 
-        val file = File.createTempFile("reqlab-e2e-workspace", ".json")
-        file.deleteOnExit()
-
-        ImportExportRepository.exportWorkspaceToFile(app, file)
+        val json = ImportExportRepository.exportWorkspaceToString(app)
 
         app.collections.clear()
         app.environments.clear()
         assertEquals(0, app.collections.size)
         assertEquals(0, app.environments.size)
 
-        val result = ImportExportRepository.importWorkspaceFromFile(app, file)
+        val result = ImportExportRepository.importWorkspaceFromString(app, json)
         assertTrue(result.importedCollections > 0)
         assertTrue(result.importedEnvironments > 0)
         assertTrue(app.collections.any { it.name == "Custom API" })

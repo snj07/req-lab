@@ -14,13 +14,23 @@ kotlin {
         binaries.library()
     }
 
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core-model"))
             implementation(libs.coroutines.core)
-            implementation(libs.sqldelight.runtime)
-            implementation(libs.sqldelight.coroutines)
             implementation(libs.koin.core)
+        }
+        // SQLDelight only for targets that support it (not wasmJs)
+        val desktopMain by getting {
+            dependencies {
+                implementation(libs.sqldelight.runtime)
+                implementation(libs.sqldelight.coroutines)
+            }
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

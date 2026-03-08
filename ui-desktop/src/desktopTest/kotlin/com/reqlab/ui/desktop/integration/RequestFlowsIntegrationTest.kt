@@ -1,11 +1,13 @@
 package com.reqlab.ui.desktop.integration
 
-import com.reqlab.ui.desktop.components.deleteRequestFromCollections
-import com.reqlab.ui.desktop.components.duplicateRequestInCollections
-import com.reqlab.ui.desktop.components.moveRequestAfterRequest
-import com.reqlab.ui.desktop.components.moveRequestBeforeRequest
-import com.reqlab.ui.desktop.persistence.TabsRepository
-import com.reqlab.ui.desktop.state.AppState
+import com.reqlab.ui.shared.MainScreen
+
+import com.reqlab.ui.shared.components.deleteRequestFromCollections
+import com.reqlab.ui.shared.components.duplicateRequestInCollections
+import com.reqlab.ui.shared.components.moveRequestAfterRequest
+import com.reqlab.ui.shared.components.moveRequestBeforeRequest
+import com.reqlab.ui.shared.persistence.TabsRepository
+import com.reqlab.ui.shared.state.AppState
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -171,6 +173,7 @@ class RequestFlowsIntegrationTest {
     @Test
     fun dirty_tab_flag_cleared_after_markSaved() {
         val state = AppState()
+        state.activeTab!!.url = "https://changed.example.com"
         state.activeTab!!.markDirty()
         assertTrue(state.activeTab!!.isDirty)
 

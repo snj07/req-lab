@@ -1,4 +1,4 @@
-package com.reqlab.ui.desktop.components
+package com.reqlab.ui.shared.components
 
 import org.junit.Test
 import kotlin.test.assertEquals

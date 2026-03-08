@@ -1,11 +1,11 @@
-package com.reqlab.ui.desktop.persistence
+package com.reqlab.ui.shared.persistence
 
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
-import com.reqlab.ui.desktop.state.AppState
-import com.reqlab.ui.desktop.state.HeaderKind
-import com.reqlab.ui.desktop.state.MutableKeyValue
+import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.HeaderKind
+import com.reqlab.ui.shared.state.MutableKeyValue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -56,8 +56,12 @@ class TabsRepositoryTest {
         tab.testScript = "pm.test('ok', () => true)"
         tab.retryCount = 3
         tab.retryDelayMs = 500L
+
+        tab.markSaved()
+        tab.url = "https://api.example.com/users?changed=1"
+        tab.markDirty()
+
         tab.lastSavedTimestamp = 123456789L
-        tab.isDirty = true
 
         TabsRepository.save(source)
 
@@ -67,7 +71,7 @@ class TabsRepositoryTest {
 
         assertEquals("Get Users", loaded.name)
         assertEquals(HttpMethodType.POST, loaded.method)
-        assertEquals("https://api.example.com/users", loaded.url)
+        assertEquals("https://api.example.com/users?changed=1", loaded.url)
         assertEquals(BodyType.JSON, loaded.bodyType)
         assertEquals("{\"name\":\"Alice\"}", loaded.bodyContent)
         assertTrue(loaded.params.any { it.key == "q" && it.value == "abc" })

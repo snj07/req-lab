@@ -1,5 +1,7 @@
 package com.reqlab.ui.desktop
 
+import com.reqlab.ui.shared.MainScreen
+
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -7,7 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.reqlab.core.model.HttpMethodType
-import com.reqlab.ui.desktop.state.AppState
+import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -33,7 +35,7 @@ class TabManagementUiTest {
     @Test
     fun active_tab_has_primary_indicator_node() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         val activeId = state.activeTab!!.id
@@ -48,7 +50,7 @@ class TabManagementUiTest {
         val state = AppState().apply {
             addTab(name = "Tab Two", method = HttpMethodType.POST)
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         val firstId  = state.openTabs[0].id
@@ -70,7 +72,7 @@ class TabManagementUiTest {
     @Test
     fun tab_bar_container_exists_and_is_displayed() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("request-tabs-bar").assertIsDisplayed()
@@ -82,7 +84,7 @@ class TabManagementUiTest {
             addTab(name = "Second", method = HttpMethodType.POST)
             addTab(name = "Third",  method = HttpMethodType.PUT)
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // All three chips exist in the tree
@@ -98,7 +100,7 @@ class TabManagementUiTest {
         val state = AppState().apply {
             addTab(name = "Extra", method = HttpMethodType.DELETE)
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // The active tab (last added) should show its close button since size > 1
@@ -114,7 +116,7 @@ class TabManagementUiTest {
         val closedId = state.activeTab!!.id
         val beforeCount = state.openTabs.size
 
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("tab-close-$closedId").performClick()
@@ -134,7 +136,7 @@ class TabManagementUiTest {
         val state = AppState().apply {
             addTab(name = "Second")
         }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // The tab chip node must be present for a right-click to be possible
@@ -152,7 +154,7 @@ class TabManagementUiTest {
         // Mark the newly added tab dirty
         state.activeTab!!.markDirty()
 
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // The dialog isn't open yet
@@ -164,10 +166,11 @@ class TabManagementUiTest {
         val state = AppState().apply {
             addTab(name = "DirtyTab")
         }
+        state.activeTab!!.url = "https://dirty.example.com"
         state.activeTab!!.markDirty()
         val dirtyId = state.activeTab!!.id
 
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         // Click close on the dirty tab
@@ -185,7 +188,7 @@ class TabManagementUiTest {
     @Test
     fun sidebar_resize_divider_is_present_when_sidebar_expanded() {
         val state = AppState().apply { sidebarExpanded = true }
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("sidebar-resize-divider").assertIsDisplayed()
@@ -194,7 +197,7 @@ class TabManagementUiTest {
     @Test
     fun sidebar_width_starts_at_default_value() {
         val state = AppState()
-        composeRule.setContent { DesktopShell(state) }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
         assertEquals(260, state.sidebarWidth)
