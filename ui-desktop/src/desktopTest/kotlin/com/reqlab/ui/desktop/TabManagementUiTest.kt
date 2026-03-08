@@ -288,4 +288,75 @@ class TabManagementUiTest {
 
         composeRule.onNodeWithTag("request-name-tooltip-r1", useUnmergedTree = true).assertIsDisplayed()
     }
+
+    // ── Issue 1: Closing last tab shows empty view ─────────────────
+
+    /**
+     * After our fix, closing the only remaining tab must reveal the
+     * empty workspace view ("No request selected") instead of keeping
+     * the last tab permanently open.
+     */
+    @Test
+    fun closing_last_tab_shows_empty_workspace_view() {
+        // Start with exactly one tab
+        val state = AppState()
+        assertEquals(1, state.openTabs.size)
+        val onlyTabId = state.openTabs.first().id
+
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        // Close the single tab via its close button
+        composeRule.onNodeWithTag("tab-close-$onlyTabId", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        // Tabs list must be empty, activeTab must be null
+        assertTrue(state.openTabs.isEmpty())
+        assertEquals(-1, state.activeTabIndex)
+
+        // The empty state view must appear
+        composeRule.onNodeWithTag("empty-workspace-view").assertIsDisplayed()
+        composeRule.onNodeWithText("No request selected").assertIsDisplayed()
+    }
+
+    /**
+     * Before the fix the close button was hidden when only one tab was open.
+     * Now it must always be visible (active or hovered).
+     */
+    @Test
+    fun single_tab_shows_close_button_visible() {
+        val state = AppState()
+        assertEquals(1, state.openTabs.size)
+        val onlyTabId = state.activeTab!!.id
+
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        // The active tab always shows its close button
+        composeRule.onNodeWithTag("tab-close-$onlyTabId", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /**
+     * Closing a dirty last tab must still show the confirm dialog
+     * (not silently discard changes).
+     */
+    @Test
+    fun closing_dirty_last_tab_shows_dirty_dialog() {
+        val state = AppState()
+        assertEquals(1, state.openTabs.size)
+        val onlyTab = state.activeTab!!
+        onlyTab.url = "https://changed.example.com"
+        onlyTab.markDirty()
+
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("tab-close-${onlyTab.id}", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        // Must show the single-tab dirty dialog
+        composeRule.onNodeWithTag("dirty-close-dialog").assertIsDisplayed()
+        // Tab must still be open while dialog is visible
+        assertEquals(1, state.openTabs.size)
+    }
 }

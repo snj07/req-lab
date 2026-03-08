@@ -15,17 +15,26 @@ class VariablePopupContractsWebTest {
 
     @Test
     fun clamp_popup_offset_keeps_popup_inside_viewport_on_web() {
+        // MIN_VISIBLE_PX = 100, margin = 8
+        // minX = 8+100-420 = -312, maxX = 1365-8-100 = 1257
+        // minY = 8+100-280 = -172, maxY = 768-8-100 = 660
+        // candidate.x = -250 → within [-312, 1257] → -250
+        // candidate.y = 9000 → clamped to 660
         val result = clampPopupOffsetToViewport(
             candidate = IntOffset(-250, 9000),
             popupSize = IntSize(420, 280),
             viewportSize = IntSize(1365, 768),
         )
 
-        assertEquals(IntOffset(8, 480), result)
+        assertEquals(IntOffset(-250, 660), result)
     }
 
     @Test
     fun apply_drag_delta_moves_and_clamps_popup_on_web() {
+        // candidate = (80+5000, 60-5000) = (5080, -4940)
+        // minX = 8+100-360 = -252, maxX = 1280-8-100 = 1172
+        // minY = 8+100-260 = -152, maxY = 720-8-100 = 612
+        // x → 1172 (clamped), y → -152 (clamped)
         val result = applyPopupDragDelta(
             currentOffset = IntOffset(80, 60),
             dragDx = 5000f,
@@ -34,7 +43,7 @@ class VariablePopupContractsWebTest {
             viewportSize = IntSize(1280, 720),
         )
 
-        assertEquals(IntOffset(912, 8), result)
+        assertEquals(IntOffset(1172, -152), result)
     }
 
     @Test
@@ -47,6 +56,8 @@ class VariablePopupContractsWebTest {
     @Test
     fun clamp_dialog_offset_from_center_contract_on_web() {
         // Dragging far to the right should be clamped to viewport edge.
+        // MIN_VISIBLE_PX=100, margin=8: maxAbsX=1400-8-100=1292, maxAbsY=900-8-100=792
+        // The card left edge is clamped — at least 100px of the card must remain visible.
         val (cx, cy) = clampDialogOffsetFromCenter(
             offsetX = 9999f,
             offsetY = 9999f,
@@ -55,7 +66,9 @@ class VariablePopupContractsWebTest {
         )
         val absX = (1400 - 700) / 2f + cx
         val absY = (900 - 500) / 2f + cy
-        assertTrue(absX + 700 <= 1400 - 8, "Card right edge off-screen: absX=$absX")
-        assertTrue(absY + 500 <= 900 - 8, "Card bottom edge off-screen: absY=$absY")
+        // absX <= viewportWidth - margin - MIN_VISIBLE_PX = 1292
+        assertTrue(absX <= 1400 - 8 - 100, "Card dragged too far right: absX=$absX")
+        // absY <= viewportHeight - margin - MIN_VISIBLE_PX = 792
+        assertTrue(absY <= 900 - 8 - 100, "Card dragged too far down: absY=$absY")
     }
 }

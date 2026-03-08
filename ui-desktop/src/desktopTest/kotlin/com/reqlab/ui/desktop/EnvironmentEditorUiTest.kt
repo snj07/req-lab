@@ -110,7 +110,75 @@ class EnvironmentEditorUiTest {
         composeRule.waitForIdle()
 
         val after = dialog.getUnclippedBoundsInRoot()
-        assertTrue(after.left >= 0.dp, "Dialog left edge went off-screen: ${after.left}")
-        assertTrue(after.top >= 0.dp, "Dialog top edge went off-screen: ${after.top}")
+        // With MIN_VISIBLE_PX clamping the dialog can go partially off-screen,
+        // but at least some portion must remain visible (not fully off-screen).
+        val dialogWidth = after.right - after.left
+        val dialogHeight = after.bottom - after.top
+        assertTrue(
+            after.right > 0.dp && after.bottom > 0.dp,
+            "Dialog is fully off-screen: $after",
+        )
+    }
+
+    /**
+     * Horizontal drag: dragging only along the X-axis must move the dialog
+     * horizontally.  Previously blocked when the card was as wide as the
+     * viewport (clamped to zero movement).
+     */
+    @Test
+    fun environment_dialog_title_bar_drag_moves_dialog_horizontally() {
+        val state = AppState().apply { openEnvEdit(0) }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        val dialog = composeRule.onNodeWithTag("env-edit-dialog", useUnmergedTree = true)
+        val before = dialog.getUnclippedBoundsInRoot()
+
+        composeRule.onNodeWithTag("env-dialog-title-bar", useUnmergedTree = true)
+            .performTouchInput {
+                down(center)
+                moveBy(Offset(200f, 0f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        val after = dialog.getUnclippedBoundsInRoot()
+        assertTrue(
+            after.left > before.left + 20.dp,
+            "Dialog did not move horizontally — before.left=${before.left}, after.left=${after.left}",
+        )
+    }
+
+    /**
+     * Smooth drag: many small incremental moves must accumulate correctly
+     * without losing sub-pixel precision (zero-slop drag fix).
+     */
+    @Test
+    fun environment_dialog_smooth_drag_with_small_increments() {
+        val state = AppState().apply { openEnvEdit(0) }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        val dialog = composeRule.onNodeWithTag("env-edit-dialog", useUnmergedTree = true)
+        val before = dialog.getUnclippedBoundsInRoot()
+
+        composeRule.onNodeWithTag("env-dialog-title-bar", useUnmergedTree = true)
+            .performTouchInput {
+                down(center)
+                // 20 small incremental moves of 5px each = 100px total
+                repeat(20) {
+                    moveBy(Offset(5f, 3f))
+                }
+                up()
+            }
+        composeRule.waitForIdle()
+
+        val after = dialog.getUnclippedBoundsInRoot()
+        // With zero-slop drag, the full accumulated movement should be reflected.
+        // Allow some tolerance but expect significant movement (at least 50dp of the 100px).
+        assertTrue(
+            after.left > before.left + 30.dp || after.top > before.top + 15.dp,
+            "Small incremental drags did not accumulate — before=$before, after=$after",
+        )
     }
 }

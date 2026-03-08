@@ -3,7 +3,6 @@ package com.reqlab.ui.shared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -291,14 +290,15 @@ fun VariableEditorPopup(
         // Accumulate in Float — never truncate to Int until layout time.
         val rawX = popupOffsetX + dx
         val rawY = popupOffsetY + dy
-        val clamped = clampPopupOffsetToViewport(
-            candidate = IntOffset(rawX.roundToInt(), rawY.roundToInt()),
+        val (cx, cy) = clampPopupOffsetToViewportF(
+            x = rawX,
+            y = rawY,
             popupSize = popupSize,
             viewportSize = viewportSize,
         )
-        popupOffsetX = clamped.x.toFloat()
-        popupOffsetY = clamped.y.toFloat()
-        onPositionChanged(clamped)
+        popupOffsetX = cx
+        popupOffsetY = cy
+        onPositionChanged(IntOffset(cx.roundToInt(), cy.roundToInt()))
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -308,13 +308,12 @@ fun VariableEditorPopup(
                 .background(Color.Transparent)
                 .onSizeChanged { size ->
                     viewportSize = size
-                    val clamped = clampPopupOffsetToViewport(
-                        candidate = IntOffset(popupOffsetX.roundToInt(), popupOffsetY.roundToInt()),
-                        popupSize = popupSize,
-                        viewportSize = viewportSize,
+                    val (cx, cy) = clampPopupOffsetToViewportF(
+                        x = popupOffsetX, y = popupOffsetY,
+                        popupSize = popupSize, viewportSize = size,
                     )
-                    popupOffsetX = clamped.x.toFloat()
-                    popupOffsetY = clamped.y.toFloat()
+                    popupOffsetX = cx
+                    popupOffsetY = cy
                 }
                 // Use detectTapGestures instead of clickable so that drag
                 // gestures initiated on the popup card do not prematurely
@@ -332,13 +331,12 @@ fun VariableEditorPopup(
                     .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
                     .onSizeChanged { size ->
                         popupSize = size
-                        val clamped = clampPopupOffsetToViewport(
-                            candidate = IntOffset(popupOffsetX.roundToInt(), popupOffsetY.roundToInt()),
-                            popupSize = popupSize,
-                            viewportSize = viewportSize,
+                        val (cx, cy) = clampPopupOffsetToViewportF(
+                            x = popupOffsetX, y = popupOffsetY,
+                            popupSize = size, viewportSize = viewportSize,
                         )
-                        popupOffsetX = clamped.x.toFloat()
-                        popupOffsetY = clamped.y.toFloat()
+                        popupOffsetX = cx
+                        popupOffsetY = cy
                     }
                     // Consume every Main-pass event that was not already consumed
                     // by a child (the drag gesture on the title bar runs before
@@ -367,11 +365,8 @@ fun VariableEditorPopup(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .background(ReqLabColors.SurfaceContainer)
-                            .pointerInput(cleanName) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    movePopupBy(dragAmount.x, dragAmount.y)
-                                }
+                            .draggableNoSlop(key = cleanName) { dx, dy ->
+                                movePopupBy(dx, dy)
                             }
                             .padding(horizontal = 10.dp, vertical = 8.dp)
                             .testTag("variable-popup-title-bar"),
@@ -413,11 +408,8 @@ fun VariableEditorPopup(
                             .background(ReqLabColors.SurfaceVariant)
                             .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
                             // Safe drag region inside popup body (non-input)
-                            .pointerInput(cleanName) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    movePopupBy(dragAmount.x, dragAmount.y)
-                                }
+                            .draggableNoSlop(key = cleanName) { dx, dy ->
+                                movePopupBy(dx, dy)
                             }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),

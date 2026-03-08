@@ -207,8 +207,83 @@ class VariablePopupTest {
         composeRule.waitForIdle()
 
         val after = popup.getUnclippedBoundsInRoot()
-        assertTrue(after.left >= 0.dp)
-        assertTrue(after.top >= 0.dp)
+        // With MIN_VISIBLE_PX clamping the popup can go partially off-screen,
+        // but at least some portion must remain visible (not fully off-screen).
+        assertTrue(after.right > 0.dp && after.bottom > 0.dp, "Popup is fully off-screen: $after")
+    }
+
+    /**
+     * Horizontal drag: dragging only along the X-axis must move the popup
+     * horizontally.  Previously blocked when the popup was as wide as the
+     * Dialog viewport (clamped to zero movement).
+     */
+    @Test
+    fun variable_popup_drag_from_title_bar_moves_popup_horizontally() {
+        val state = AppState()
+        composeRule.setContent {
+            VariableEditorPopup(
+                variableName = "baseUrl",
+                state = state,
+                onDismiss = {},
+                initialOffset = IntOffset(40, 32),
+            )
+        }
+        composeRule.waitForIdle()
+
+        val popup = composeRule.onNodeWithTag("variable-editor-popup", useUnmergedTree = true)
+        val before = popup.getUnclippedBoundsInRoot()
+
+        composeRule.onNodeWithTag("variable-popup-title-bar", useUnmergedTree = true)
+            .performTouchInput {
+                down(center)
+                moveBy(Offset(200f, 0f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        val after = popup.getUnclippedBoundsInRoot()
+        assertTrue(
+            after.left > before.left + 20.dp,
+            "Popup did not move horizontally — before.left=${before.left}, after.left=${after.left}",
+        )
+    }
+
+    /**
+     * Smooth drag: many small incremental moves must accumulate correctly
+     * without sub-pixel loss (zero-slop drag + float-precision fix).
+     */
+    @Test
+    fun variable_popup_smooth_drag_with_small_increments() {
+        val state = AppState()
+        composeRule.setContent {
+            VariableEditorPopup(
+                variableName = "baseUrl",
+                state = state,
+                onDismiss = {},
+                initialOffset = IntOffset(100, 100),
+            )
+        }
+        composeRule.waitForIdle()
+
+        val popup = composeRule.onNodeWithTag("variable-editor-popup", useUnmergedTree = true)
+        val before = popup.getUnclippedBoundsInRoot()
+
+        composeRule.onNodeWithTag("variable-popup-title-bar", useUnmergedTree = true)
+            .performTouchInput {
+                down(center)
+                // 25 small incremental moves of 4px each = 100px total
+                repeat(25) {
+                    moveBy(Offset(4f, 3f))
+                }
+                up()
+            }
+        composeRule.waitForIdle()
+
+        val after = popup.getUnclippedBoundsInRoot()
+        assertTrue(
+            after.left > before.left + 30.dp || after.top > before.top + 20.dp,
+            "Small incremental drags did not accumulate — before=$before, after=$after",
+        )
     }
 
     /**

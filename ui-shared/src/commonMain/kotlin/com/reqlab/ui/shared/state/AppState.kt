@@ -432,7 +432,6 @@ class AppState(openDefaultTab: Boolean = true) {
 
     fun closeTab(index: Int) {
         if (index !in openTabs.indices) return
-        if (openTabs.size <= 1) return
         openTabs.removeAt(index)
         if (openTabs.isEmpty()) {
             activeTabIndex = -1
@@ -526,10 +525,13 @@ class AppState(openDefaultTab: Boolean = true) {
     }
 
     fun revealRequestInSidebar(requestId: String) {
-        if (!expandAncestorsForRequest(collections, requestId)) return
+        // Always select the request in the sidebar, even if it isn't
+        // currently visible inside a collection (Issue 2 fix).
         selectedRequestId = requestId
-        sidebarScrollToRequestId = requestId
-        notifyCollectionsChanged()
+        if (expandAncestorsForRequest(collections, requestId)) {
+            sidebarScrollToRequestId = requestId
+            notifyCollectionsChanged()
+        }
     }
 
     private fun renameRequestNodeById(nodes: MutableList<CollectionNode>, requestId: String, newName: String): Boolean {

@@ -79,7 +79,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         ids
             .mapNotNull { id -> state.openTabs.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
             .sortedDescending()
-            .forEach { idx -> if (state.openTabs.size > 1) state.closeTab(idx) }
+            .forEach { idx -> state.closeTab(idx) }
     }
     val closeManyTabs: (List<String>) -> Unit = { ids ->
         val hasDirty = ids.any { id -> state.openTabs.any { it.id == id && it.isDirty } }
@@ -88,7 +88,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
 
     val requestCloseTab: (Int) -> Unit = { index ->
         val tab = state.openTabs.getOrNull(index)
-        if (tab == null || state.openTabs.size <= 1) {
+        if (tab == null) {
             Unit
         } else if (tab.isDirty) {
             dirtyCloseTabIndex = index

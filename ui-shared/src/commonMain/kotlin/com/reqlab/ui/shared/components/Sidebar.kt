@@ -690,6 +690,9 @@ private fun SectionHeader(
             style = MaterialTheme.typography.labelLarge,
             color = ReqLabColors.OnSurface,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.weight(1f))
         trailing?.invoke()
@@ -786,7 +789,7 @@ private fun CollectionTreeNode(
     var showRequestTooltip by remember(node.id) { mutableStateOf(false) }
 
     LaunchedEffect(isHovered, isRequest, node.name) {
-        if (isHovered && isRequest && node.name.length > 16) {
+        if (isHovered && isRequest) {
             delay(350)
             showRequestTooltip = true
         } else {
@@ -1127,6 +1130,16 @@ private fun EnvironmentRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     var showMenu by remember { mutableStateOf(false) }
+    var showEnvTooltip by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isHovered, envName) {
+        if (isHovered) {
+            delay(350)
+            showEnvTooltip = true
+        } else {
+            showEnvTooltip = false
+        }
+    }
 
     val rowBackground by animateColorAsState(
         targetValue = when {
@@ -1161,8 +1174,34 @@ private fun EnvironmentRow(
             text = envName,
             style = MaterialTheme.typography.bodySmall,
             color = if (active) ReqLabColors.OnSurface else ReqLabColors.OnSurfaceVariant,
-            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).testTag("env-name-text-$envName"),
         )
+        // Tooltip — appears after hover delay, shows full name.
+        if (showEnvTooltip) {
+            Popup(
+                alignment = Alignment.BottomStart,
+                offset = IntOffset(0, 28),
+                properties = PopupProperties(focusable = false),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ReqLabColors.SurfaceHigh)
+                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .testTag("env-name-tooltip-$envName"),
+                ) {
+                    Text(
+                        text = envName,
+                        color = ReqLabColors.OnSurface,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
         Box(modifier = Modifier.width(24.dp)) {
             IconButton(
                 onClick = { showMenu = true },

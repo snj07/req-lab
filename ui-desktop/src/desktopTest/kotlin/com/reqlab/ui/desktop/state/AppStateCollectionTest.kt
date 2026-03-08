@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.state
 import com.reqlab.core.model.HttpMethodType
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -199,5 +200,84 @@ class AppStateCollectionTest {
 
         assertTrue(state.openTabs.any { it.id == requestId && it.name == "Get all users v2" })
         assertTrue(state.collections.flatMap { it.children }.any { it.id == requestId && it.name == "Get all users v2" })
+    }
+
+    // ── Issue 1: Closing last tab ────────────────────────────────────
+
+    @Test
+    fun closeTab_closing_last_tab_sets_active_index_to_minus_one() {
+        val state = AppState()
+        assertEquals(1, state.openTabs.size)
+
+        state.closeTab(0)
+
+        assertTrue(state.openTabs.isEmpty())
+        assertEquals(-1, state.activeTabIndex)
+        assertEquals(null, state.activeTab)
+    }
+
+    @Test
+    fun closeTab_closing_last_tab_clears_selectedRequestId() {
+        val state = AppState()
+        state.selectedRequestId = state.openTabs.first().id
+
+        state.closeTab(0)
+
+        assertEquals(null, state.selectedRequestId)
+    }
+
+    @Test
+    fun closeTab_no_longer_blocks_closing_single_tab() {
+        val state = AppState()
+        val singleTabId = state.openTabs.first().id
+
+        state.closeTab(0)
+
+        // Previously this returned early when size <= 1; now it must close.
+        assertFalse(state.openTabs.any { it.id == singleTabId })
+    }
+
+    // ── Issue 2: revealRequestInSidebar always selects ──────────────
+
+    @Test
+    fun revealRequestInSidebar_sets_selectedRequestId_for_collection_request() {
+        val state = AppState()
+        state.selectedRequestId = null
+
+        state.revealRequestInSidebar("r1")
+
+        assertEquals("r1", state.selectedRequestId)
+    }
+
+    @Test
+    fun revealRequestInSidebar_expands_ancestor_folder_for_collection_request() {
+        val state = AppState()
+        // Collapse the parent collection "c1" first
+        state.collectionExpandedState["c1"] = false
+
+        state.revealRequestInSidebar("r1")
+
+        // Ancestor must be expanded so the node becomes visible
+        assertTrue(state.collectionExpandedState["c1"] == true)
+    }
+
+    @Test
+    fun revealRequestInSidebar_sets_selectedRequestId_even_for_orphan_request() {
+        val state = AppState()
+        // "orphan-999" is NOT in any collection; revealRequestInSidebar must
+        // still record it as selected (it won't expand anything, but it
+        // correctly tracks which request should be highlighted).
+        state.revealRequestInSidebar("orphan-999")
+
+        assertEquals("orphan-999", state.selectedRequestId)
+    }
+
+    @Test
+    fun revealRequestInSidebar_sets_scroll_target_for_collection_request() {
+        val state = AppState()
+
+        state.revealRequestInSidebar("r2")
+
+        assertEquals("r2", state.sidebarScrollToRequestId)
     }
 }

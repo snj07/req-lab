@@ -132,14 +132,16 @@ class RequestFlowsIntegrationTest {
     }
 
     @Test
-    fun close_tab_cannot_close_last_remaining_tab() {
+    fun close_tab_closing_last_remaining_tab_results_in_empty_workspace() {
         val state = AppState()
         assertEquals(1, state.openTabs.size)
 
         state.closeTab(0)
 
-        // Still 1 tab - cannot drop below 1
-        assertEquals(1, state.openTabs.size)
+        // Closing the last tab empties the workspace — empty view is shown instead
+        assertTrue(state.openTabs.isEmpty())
+        assertEquals(-1, state.activeTabIndex)
+        assertEquals(null, state.activeTab)
     }
 
     @Test

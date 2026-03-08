@@ -128,7 +128,7 @@ fun RequestTabsBar(
                             onCloseToLeft = { onCloseToLeft(index) },
                             onCloseToRight = { onCloseToRight(index) },
                             onCloseAll = onCloseAll,
-                            showClose = state.openTabs.size > 1,
+                            showClose = true,
                         )
                     }
                 }

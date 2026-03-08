@@ -3,7 +3,6 @@ package com.reqlab.ui.shared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -128,11 +127,9 @@ fun EnvironmentEditDialog(state: AppState) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                val rawX = envOffsetX + dragAmount.x
-                                val rawY = envOffsetY + dragAmount.y
+                        .draggableNoSlop {  dx, dy ->
+                                val rawX = envOffsetX + dx
+                                val rawY = envOffsetY + dy
                                 val (cx, cy) = clampDialogOffsetFromCenter(
                                     offsetX = rawX,
                                     offsetY = rawY,
@@ -141,7 +138,6 @@ fun EnvironmentEditDialog(state: AppState) {
                                 )
                                 envOffsetX = cx
                                 envOffsetY = cy
-                            }
                         }
                         .padding(bottom = 16.dp)
                         .testTag("env-dialog-title-bar"),
