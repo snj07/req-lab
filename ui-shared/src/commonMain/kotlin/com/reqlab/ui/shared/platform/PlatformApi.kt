@@ -1,5 +1,6 @@
 package com.reqlab.ui.shared.platform
 
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
 import kotlinx.coroutines.CoroutineDispatcher
 
@@ -38,6 +39,14 @@ expect val horizontalResizeCursor: PointerIcon
 
 /** Vertical resize (row-resize) cursor. */
 expect val verticalResizeCursor: PointerIcon
+
+/**
+ * H-5 fix: Platform-specific modifier that applies the correct CSS resize cursor
+ * on web (wasmJs) where PointerIcon.Default cannot be replaced with a CSS cursor type.
+ * On desktop this is a no-op because [horizontalResizeCursor]/[verticalResizeCursor]
+ * already map to the correct AWT cursor via [pointerHoverIcon].
+ */
+expect fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier
 
 // ── File I/O ────────────────────────────────────────────────────
 

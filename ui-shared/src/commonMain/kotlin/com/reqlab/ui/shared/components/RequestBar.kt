@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -59,6 +60,8 @@ fun RequestBar(
     onUrlChanged: (String) -> Unit,
     isLoading: Boolean,
     onSend: () -> Unit,
+    /** Called when the user clicks the Stop button while a request is in-flight (H-2). */
+    onCancel: () -> Unit = {},
     onSave: () -> Unit,
     /** Each pair is a label (e.g. "cURL (resolved)") and the action to copy that format. */
     copyFormats: List<Pair<String, () -> Unit>> = emptyList(),
@@ -102,7 +105,7 @@ fun RequestBar(
             )
         }
 
-        SendButton(isLoading, onSend)
+        SendButton(isLoading, onSend, onCancel)
         SaveButton(isLoading = isLoading, onClick = onSave)
         RetryControlsButton(
             retryCount = retryCount,
@@ -152,28 +155,56 @@ private fun MethodDropdown(method: HttpMethodType, onMethodChanged: (HttpMethodT
 // ── Action buttons ──────────────────────────────────────────────
 
 @Composable
-private fun SendButton(isLoading: Boolean, onClick: () -> Unit) {
+private fun SendButton(isLoading: Boolean, onClick: () -> Unit, onCancel: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
-    Box(
-        modifier = Modifier
-            .widthIn(min = 80.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.9f) else ReqLabColors.Primary)
-            .hoverable(interactionSource)
-            .clickable(enabled = !isLoading, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .testTag("send-button"),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                color = ReqLabColors.OnPrimary,
-                strokeWidth = 2.dp,
-            )
-        } else {
+    if (isLoading) {
+        // H-2: When a request is in-flight, show a Stop / Cancel button so the user
+        // can abort it immediately without having to close the tab.
+        Box(
+            modifier = Modifier
+                .widthIn(min = 80.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (isHovered) androidx.compose.ui.graphics.Color(0xFFD32F2F)
+                    else androidx.compose.ui.graphics.Color(0xFFC62828)
+                )
+                .hoverable(interactionSource)
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag("stop-button"),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(
+                    Icons.Default.Stop,
+                    contentDescription = "Stop request",
+                    tint = ReqLabColors.OnPrimary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = "Stop",
+                    color = ReqLabColors.OnPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
+            }
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .widthIn(min = 80.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.9f) else ReqLabColors.Primary)
+                .hoverable(interactionSource)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag("send-button"),
+            contentAlignment = Alignment.Center,
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = "Send",

@@ -3,8 +3,10 @@ package com.reqlab.ui.shared.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,8 +56,8 @@ import com.reqlab.ui.shared.platform.copyToClipboard
 import com.reqlab.ui.shared.platform.formatTimestamp
 import com.reqlab.ui.shared.platform.verticalResizeCursor
 
-private const val MIN_BOTTOM_PANEL_HEIGHT = 120
-private const val MAX_BOTTOM_PANEL_HEIGHT = 560
+private const val MIN_BOTTOM_PANEL_HEIGHT = 120f
+private const val MAX_BOTTOM_PANEL_HEIGHT = 560f
 
 @Composable
 fun BottomPanel(state: AppState) {
@@ -105,9 +107,21 @@ fun BottomPanel(state: AppState) {
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim,
                             )
+                            // Show count badge on CONSOLE and LOGS tabs
                             if (tab == BottomTab.CONSOLE && state.consoleLogs.isNotEmpty()) {
                                 Text(
                                     "${state.consoleLogs.size}",
+                                    fontSize = 9.sp,
+                                    color = ReqLabColors.OnSurfaceDim,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(ReqLabColors.SurfaceHigh)
+                                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                                )
+                            }
+                            if (tab == BottomTab.LOGS && state.networkEventLogs.isNotEmpty()) {
+                                Text(
+                                    "${state.networkEventLogs.size}",
                                     fontSize = 9.sp,
                                     color = ReqLabColors.OnSurfaceDim,
                                     modifier = Modifier
@@ -128,7 +142,8 @@ fun BottomPanel(state: AppState) {
                         copyToClipboard(
                             when (state.selectedBottomTab) {
                                 BottomTab.CONSOLE -> state.consoleLogs.asConsoleTextDump()
-                                BottomTab.LOGS -> state.consoleLogs.asConsoleTextDump()
+                                // M-3: Logs tab copies network event logs, not console logs
+                                BottomTab.LOGS -> state.networkEventLogs.asConsoleTextDump()
                                 BottomTab.TEST_RESULTS -> state.testResults.asTestResultsTextDump()
                             }
                         )
@@ -147,7 +162,8 @@ fun BottomPanel(state: AppState) {
                     when (state.selectedBottomTab) {
                         BottomTab.CONSOLE      -> state.consoleLogs.clear()
                         BottomTab.TEST_RESULTS -> state.testResults.clear()
-                        BottomTab.LOGS         -> state.consoleLogs.clear()
+                        // M-3: Clear only network event logs for the Logs tab
+                        BottomTab.LOGS         -> state.networkEventLogs.clear()
                     }
                 }, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Clear", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
@@ -164,18 +180,22 @@ fun BottomPanel(state: AppState) {
             exit = shrinkVertically(),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
+                // Modifier.draggable reports delta in pixels; state is in dp.
+                // Divide by density so 1px cursor movement = 1/density dp = 1px on screen.
+                val density = LocalDensity.current.density
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
                         .pointerHoverIcon(verticalResizeCursor)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures { _, dragAmount ->
-                                val nextHeight = (state.bottomPanelHeight - dragAmount.toInt())
+                        .draggable(
+                            orientation = Orientation.Vertical,
+                            startDragImmediately = true,
+                            state = rememberDraggableState { delta ->
+                                state.bottomPanelHeight = (state.bottomPanelHeight - delta / density)
                                     .coerceIn(MIN_BOTTOM_PANEL_HEIGHT, MAX_BOTTOM_PANEL_HEIGHT)
-                                state.bottomPanelHeight = nextHeight
-                            }
-                        }
+                            },
+                        )
                         .background(ReqLabColors.Border)
                         .testTag("bottom-panel-resize-handle"),
                 )
@@ -188,7 +208,9 @@ fun BottomPanel(state: AppState) {
                 when (state.selectedBottomTab) {
                     BottomTab.CONSOLE      -> ConsoleView(state.consoleLogs)
                     BottomTab.TEST_RESULTS -> TestResultsView(state.testResults)
-                    BottomTab.LOGS         -> ConsoleView(state.consoleLogs) // shared view
+                    // M-3: LOGS shows only network-level events (HTTP start/retry/done),
+                    // keeping it distinct from the general-purpose Console tab.
+                    BottomTab.LOGS         -> ConsoleView(state.networkEventLogs)
                 }
             }
             }

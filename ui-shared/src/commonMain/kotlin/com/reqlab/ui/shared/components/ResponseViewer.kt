@@ -33,6 +33,7 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -278,6 +279,23 @@ private fun ResponseTabBar(selectedTab: ResponseTab, onTabSelected: (ResponseTab
 
 // ── Body View ───────────────────────────────────────────────────
 
+/**
+ * Renders the response body using a virtualised LazyColumn (one row per line).
+ *
+ * H-3 fix: The old implementation used a single Text() composable inside
+ * verticalScroll + horizontalScroll, which caused Compose to measure and lay
+ * out the entire string in one pass.  For large responses (>50 KB / thousands
+ * of lines) this blocked the UI thread for hundreds of milliseconds.
+ *
+ * Using LazyColumn means only the lines currently visible on screen are
+ * measured, scrolling stays smooth regardless of response size, and horizontal
+ * overflow per-line is handled via individual horizontalScroll states.
+ *
+ * Lines are split once on the formatted string; the resulting list is stable
+ * across recompositions because it's computed outside the item lambda.
+ */
+private const val LARGE_BODY_LINE_THRESHOLD = 200
+
 @Composable
 private fun ResponseBodyView(response: ResponseDefinition) {
     val body = response.bodyText
@@ -287,19 +305,50 @@ private fun ResponseBodyView(response: ResponseDefinition) {
         body
     }
 
-    SelectionContainer {
-        Text(
-            text = formatted,
-            color = ReqLabColors.OnSurface,
-            fontSize = 13.sp,
-            fontFamily = CodeFontFamily,
+    val lines = remember(formatted) { formatted.split('\n') }
+
+    if (lines.size <= LARGE_BODY_LINE_THRESHOLD) {
+        // Small response: render as a single selectable text block (preserves
+        // system text-selection UX for copy-paste).
+        SelectionContainer {
+            Text(
+                text = formatted,
+                color = ReqLabColors.OnSurface,
+                fontSize = 13.sp,
+                fontFamily = CodeFontFamily,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState())
+                    .padding(12.dp)
+                    .testTag("response-body"),
+            )
+        }
+    } else {
+        // Large response: virtualise line-by-line with LazyColumn.
+        // Each line gets its own horizontalScroll so wide lines don't force
+        // a shared scroll state that would re-layout the whole list.
+        val hScrollState = rememberScrollState()
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .horizontalScroll(rememberScrollState())
-                .padding(12.dp)
+                .horizontalScroll(hScrollState)
                 .testTag("response-body"),
-        )
+        ) {
+            items(lines.size) { index ->
+                Text(
+                    text = lines[index].ifEmpty { " " }, // empty line needs at least a space for height
+                    color = ReqLabColors.OnSurface,
+                    fontSize = 13.sp,
+                    fontFamily = CodeFontFamily,
+                    softWrap = false,
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .then(if (index == 0) Modifier.padding(top = 12.dp) else Modifier)
+                        .then(if (index == lines.lastIndex) Modifier.padding(bottom = 12.dp) else Modifier),
+                )
+            }
+        }
     }
 }
 

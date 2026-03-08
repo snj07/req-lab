@@ -83,6 +83,8 @@ class MutableKeyValue(
     secret: Boolean = false,
     kind: HeaderKind = HeaderKind.USER,
     keyLocked: Boolean = false,
+    /** Stable unique identifier used as LazyColumn item key (fixes M-7 index-key bug). */
+    val uid: String = generateUuid(),
 ) {
     var key     by mutableStateOf(key)
     var value   by mutableStateOf(value)
@@ -192,6 +194,19 @@ class RequestTabState(
     var retryCount by mutableStateOf(1)
     var retryDelayMs by mutableStateOf(250L)
 
+    /**
+     * Tracks the set of variable keys injected by the pre-request script.
+     * Cleared and repopulated on every send so stale script-set variables
+     * are removed before the script re-executes (fixes M-8).
+     */
+    val scriptInjectedVarKeys: MutableSet<String> = mutableSetOf()
+
+    /**
+     * The coroutine Job for the currently in-flight HTTP request.
+     * Cancelling this job aborts the request (fixes H-1 race condition).
+     */
+    @Volatile var currentJob: Job? = null
+
     // response associated with this tab
     var response    by mutableStateOf<ResponseDefinition?>(null)
     var responseTab by mutableStateOf(ResponseTab.BODY)
@@ -287,7 +302,7 @@ class RequestTabState(
 class AppState(openDefaultTab: Boolean = true) {
     // ── sidebar ────────
     var sidebarExpanded      by mutableStateOf(true)
-    var sidebarWidth         by mutableStateOf(260)
+    var sidebarWidth         by mutableStateOf(260f)
     var historyExpanded      by mutableStateOf(true)
     var collectionsExpanded  by mutableStateOf(true)
     var environmentsExpanded by mutableStateOf(true)
@@ -314,8 +329,10 @@ class AppState(openDefaultTab: Boolean = true) {
     // ── bottom panel ──
     var selectedBottomTab    by mutableStateOf(BottomTab.CONSOLE)
     var bottomPanelExpanded  by mutableStateOf(true)
-    var bottomPanelHeight    by mutableStateOf(200)
+    var bottomPanelHeight    by mutableStateOf(200f)
     val consoleLogs  = mutableStateListOf<ConsoleEntry>()
+    /** Structured network-event log shown in the Logs tab (fixes M-3). */
+    val networkEventLogs = mutableStateListOf<ConsoleEntry>()
     val testResults  = mutableStateListOf<TestResultEntry>()
 
     // ── dialogs / overlays ──
@@ -530,6 +547,16 @@ class AppState(openDefaultTab: Boolean = true) {
 
     fun log(message: String, level: LogLevel = LogLevel.INFO) {
         consoleLogs.add(0, ConsoleEntry(message, level))
+    }
+
+    /**
+     * Appends a network-level event to the structured Logs tab.
+     * Also echoes to the Console for unified visibility (fixes M-3).
+     */
+    fun logNetworkEvent(message: String, level: LogLevel = LogLevel.INFO) {
+        val entry = ConsoleEntry(message, level)
+        networkEventLogs.add(0, entry)
+        consoleLogs.add(0, entry)
     }
 
     fun notifyCollectionsChanged() {

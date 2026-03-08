@@ -152,7 +152,15 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                 val isMeta = event.isMetaPressed || event.isCtrlPressed
                 when {
                     isMeta && event.key == Key.Enter -> {
-                        state.activeTab?.let { sendRequest(scope, state, it) }
+                        val activeTab = state.activeTab
+                        if (activeTab != null) {
+                            if (activeTab.isLoading) {
+                                activeTab.currentJob?.cancel()
+                                activeTab.isLoading = false
+                            } else {
+                                sendRequest(scope, state, activeTab)
+                            }
+                        }
                         true
                     }
                     isMeta && event.key == Key.LeftBracket && event.isShiftPressed -> {
@@ -306,6 +314,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                                     tab = tab,
                                     state = state,
                                     onSend = { sendRequest(scope, state, tab) },
+                                    onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
                                     onSave = { saveRequest(scope, state, tab) },
                                 )
                             },
@@ -323,6 +332,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                                     tab = tab,
                                     state = state,
                                     onSend = { sendRequest(scope, state, tab) },
+                                    onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
                                     onSave = { saveRequest(scope, state, tab) },
                                 )
                             },

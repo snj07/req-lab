@@ -37,7 +37,11 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
         return
     }
 
-    scope.launch {
+    // H-1: Cancel any existing in-flight request before starting a new one.
+    // This prevents concurrent requests racing to update the same tab state.
+    tab.currentJob?.cancel()
+
+    val job = scope.launch {
         tab.isLoading = true
         tab.response  = null
         tab.lastError = null
@@ -52,6 +56,13 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                 method    = tab.method.name,
                 variables = flatVars,
             )
+            // M-8: Clean up variables injected by the previous run of this script
+            // so stale keys don't accumulate across re-sends.
+            if (tab.scriptInjectedVarKeys.isNotEmpty()) {
+                val env = state.selectedEnvironment
+                env.variables.removeAll { it.key in tab.scriptInjectedVarKeys && it.kind == com.reqlab.ui.shared.state.HeaderKind.USER }
+                tab.scriptInjectedVarKeys.clear()
+            }
             val preResult = scriptEngine.executePreRequestScript(tab.preRequestScript, preCtx)
             preResult.logs.forEach { state.log(it) }
             if (preResult.error != null) {
@@ -59,11 +70,13 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
             }
             // Merge new variables from the script into the active environment
             if (preResult.newVariables.isNotEmpty()) {
+                // M-8: Track which keys were added by this script run
+                tab.scriptInjectedVarKeys.addAll(preResult.newVariables.keys)
                 state.mergeScriptVariables(preResult.newVariables)
             }
         }
 
-        state.log("→ ${tab.method} ${tab.url}")
+        state.logNetworkEvent("→ ${tab.method} ${tab.url}")
 
         try {
             val request = RequestDefinition(
@@ -101,10 +114,10 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
             client.execute(request, state.activeVariableLayers()).collect { event ->
                 when (event) {
                     is NetworkEvent.Started -> {
-                        state.log("Request started", LogLevel.INFO)
+                        state.logNetworkEvent("Request started", LogLevel.INFO)
                     }
                     is NetworkEvent.RetryScheduled -> {
-                        state.log(
+                        state.logNetworkEvent(
                             "Retry #${event.attempt} in ${event.delayMs}ms – ${event.reason}",
                             LogLevel.WARNING,
                         )
@@ -112,7 +125,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                     is NetworkEvent.Success -> {
                         tab.response  = event.response
                         tab.lastError = null
-                        state.log(
+                        state.logNetworkEvent(
                             "← ${event.response.statusCode} ${event.response.statusText}" +
                                 "  (${event.response.metrics.responseTimeMs}ms," +
                                 " ${event.response.metrics.responseSizeBytes}B)",
@@ -146,23 +159,33 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                                 )
                             }
                             if (testResult.newVariables.isNotEmpty()) {
+                                // M-8: Track test-script injected keys alongside pre-request keys
+                                tab.scriptInjectedVarKeys.addAll(testResult.newVariables.keys)
                                 state.mergeScriptVariables(testResult.newVariables)
                             }
                         }
                     }
                     is NetworkEvent.Failure -> {
                         tab.lastError = event.error.message ?: "Unknown error"
-                        state.log("✗ ${event.error.message}", LogLevel.ERROR)
+                        state.logNetworkEvent("✗ ${event.error.message}", LogLevel.ERROR)
                     }
                 }
             }
         } catch (e: Exception) {
-            tab.lastError = e.message ?: "Unknown error"
-            state.log("✗ ${e.message ?: "Unknown error"}", LogLevel.ERROR)
+            if (e is kotlinx.coroutines.CancellationException) {
+                // Request was cancelled by the user – reset loading state cleanly.
+                state.log("Request cancelled", LogLevel.WARNING)
+            } else {
+                tab.lastError = e.message ?: "Unknown error"
+                state.log("✗ ${e.message ?: "Unknown error"}", LogLevel.ERROR)
+            }
         } finally {
             tab.isLoading = false
+            tab.currentJob = null
         }
     }
+    // H-1: Store the job so it can be cancelled if Send is clicked again.
+    tab.currentJob = job
 }
 
 /**

@@ -2,7 +2,9 @@ package com.reqlab.ui.shared.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -40,14 +42,19 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -218,6 +225,24 @@ private fun RequestTabChip(
                     modifier = Modifier
                         .background(ReqLabColors.SurfaceContainer, RoundedCornerShape(4.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
+                        // M-5: Confirm rename with Enter, cancel with Escape
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.type == KeyEventType.KeyDown) {
+                                when (keyEvent.key) {
+                                    Key.Enter -> {
+                                        val newName = renameText.text.trim()
+                                        if (newName.isNotEmpty()) onRename(newName)
+                                        renameMode = false
+                                        true
+                                    }
+                                    Key.Escape -> {
+                                        renameMode = false
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            } else false
+                        }
                         .testTag("tab-rename-input-${tab.id}"),
                 )
                 Text(
@@ -325,6 +350,9 @@ private fun RequestTabChip(
 fun SidebarResizeDivider(state: AppState) {
     val interaction = remember { MutableInteractionSource() }
     val isHovered by interaction.collectIsHoveredAsState()
+    // Modifier.draggable reports delta in pixels; sidebarWidth is in dp.
+    // Divide by density so 1px cursor movement = 1/density dp = 1px on screen.
+    val density = LocalDensity.current.density
 
     Box(
         modifier = Modifier
@@ -333,13 +361,17 @@ fun SidebarResizeDivider(state: AppState) {
             .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.6f) else ReqLabColors.Border)
             .hoverable(interaction)
             .pointerHoverIcon(horizontalResizeCursor)
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    state.sidebarWidth = (state.sidebarWidth + dragAmount.x.toInt())
-                        .coerceIn(150, 500)
-                }
-            }
+            // M-9 / smooth drag: Modifier.draggable with startDragImmediately=true
+            // fires on the first pixel and uses a stable coordinate frame,
+            // so the divider never runs ahead of the cursor.
+            .draggable(
+                orientation = Orientation.Horizontal,
+                startDragImmediately = true,
+                state = rememberDraggableState { delta ->
+                    state.sidebarWidth = (state.sidebarWidth + delta / density)
+                        .coerceIn(150f, 500f)
+                },
+            )
             .testTag("sidebar-resize-divider"),
     )
 }

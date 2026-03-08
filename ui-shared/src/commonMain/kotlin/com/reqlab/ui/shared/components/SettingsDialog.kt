@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,12 +53,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlin.math.roundToInt
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppState
@@ -85,14 +92,43 @@ fun SettingsDialog(state: AppState) {
     var selectedSection by remember { mutableStateOf(SettingsSection.GENERAL) }
     val settings = state.settings
 
+    // M-1: Make the dialog draggable (same pattern as EnvironmentEditDialog).
+    var settingsOffsetX by remember { mutableStateOf(0f) }
+    var settingsOffsetY by remember { mutableStateOf(0f) }
+    var settingsViewportSize by remember { mutableStateOf(IntSize.Zero) }
+    var settingsCardSize by remember { mutableStateOf(IntSize.Zero) }
+
     Dialog(onDismissRequest = { state.showSettingsDialog = false }) {
+        // Full-screen invisible backdrop — captures taps outside the card to dismiss.
         Box(
             modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { settingsViewportSize = it }
+                .pointerInput(Unit) {
+                    detectTapGestures { state.showSettingsDialog = false }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(settingsOffsetX.roundToInt(), settingsOffsetY.roundToInt()) }
                 .widthIn(min = 680.dp, max = 860.dp)
                 .height(520.dp)
+                .onSizeChanged { settingsCardSize = it }
                 .clip(RoundedCornerShape(12.dp))
                 .background(ReqLabColors.Surface)
                 .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
+                .draggableNoSlop { dx, dy ->
+                    val (cx, cy) = clampDialogOffsetFromCenter(
+                        offsetX = settingsOffsetX + dx,
+                        offsetY = settingsOffsetY + dy,
+                        cardSize = settingsCardSize,
+                        viewportSize = settingsViewportSize,
+                    )
+                    settingsOffsetX = cx
+                    settingsOffsetY = cy
+                }
+                .pointerInput(Unit) { detectTapGestures { } }
                 .testTag("settings-dialog"),
         ) {
             Row(modifier = Modifier.fillMaxSize()) {
@@ -182,7 +218,8 @@ fun SettingsDialog(state: AppState) {
             ) {
                 Text("Done", color = ReqLabColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
-        }
+        }  // closes settings card Box
+        }  // closes full-screen backdrop Box
     }
 }
 
@@ -430,6 +467,12 @@ private fun SettingToggle(
 
 @Composable
 private fun SettingNumberField(label: String, value: Int, onValueChange: (Int) -> Unit) {
+    // M-10: Maintain local text state so mid-edit values (e.g. empty string
+    // while the user is deleting digits) are never silently discarded.
+    // A red border signals that the current text cannot be parsed as a number.
+    var localText by remember(value) { mutableStateOf(value.toString()) }
+    val isValid = localText.toIntOrNull() != null
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -437,8 +480,12 @@ private fun SettingNumberField(label: String, value: Int, onValueChange: (Int) -
     ) {
         Text(label, fontSize = 13.sp, color = ReqLabColors.OnSurface, modifier = Modifier.weight(1f))
         BasicTextField(
-            value = value.toString(),
-            onValueChange = { it.toIntOrNull()?.let(onValueChange) },
+            value = localText,
+            onValueChange = { newText ->
+                // Allow any text while typing; only commit valid integers.
+                localText = newText
+                newText.toIntOrNull()?.let(onValueChange)
+            },
             singleLine = true,
             textStyle = TextStyle(color = ReqLabColors.OnSurface, fontSize = 13.sp, fontFamily = CodeFontFamily),
             cursorBrush = SolidColor(ReqLabColors.Primary),
@@ -446,7 +493,12 @@ private fun SettingNumberField(label: String, value: Int, onValueChange: (Int) -
                 .width(80.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(ReqLabColors.SurfaceContainer)
-                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                // Red border for invalid input so the user gets immediate feedback.
+                .border(
+                    1.dp,
+                    if (isValid) ReqLabColors.Border else ReqLabColors.Error,
+                    RoundedCornerShape(4.dp),
+                )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         )
     }

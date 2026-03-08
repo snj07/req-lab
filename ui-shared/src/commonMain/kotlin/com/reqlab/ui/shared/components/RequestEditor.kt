@@ -51,6 +51,8 @@ fun RequestEditor(
     state: AppState,
     onSend: () -> Unit,
     onSave: () -> Unit,
+    /** Cancels the in-flight request when the Stop button is pressed (H-2). */
+    onCancel: () -> Unit = {},
 ) {
     val markDirty = { tab.markDirty() }
 
@@ -71,6 +73,7 @@ fun RequestEditor(
             },
             isLoading = tab.isLoading,
             onSend = onSend,
+            onCancel = onCancel,
             onSave = onSave,
             copyFormats = buildCopyFormats(tab, state),
             retryCount = tab.retryCount,

@@ -1,7 +1,9 @@
 package com.reqlab.ui.shared.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -21,12 +23,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.platform.horizontalResizeCursor
+import com.reqlab.ui.shared.platform.platformResizeCursorStyle
 import com.reqlab.ui.shared.platform.verticalResizeCursor
 
 /**
@@ -68,16 +70,20 @@ fun HorizontalSplitPane(
                 .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.6f) else ReqLabColors.Border)
                 .hoverable(dividerInteraction)
                 .pointerHoverIcon(horizontalResizeCursor)
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
+                .platformResizeCursorStyle(isHorizontal = true)
+                // M-9 / smooth drag: Modifier.draggable with startDragImmediately=true
+                // fires on the first pixel and tracks drag in a stable coordinate frame,
+                // so the divider never runs ahead of the cursor.
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    startDragImmediately = true,
+                    state = rememberDraggableState { delta ->
                         val w = containerWidth
                         if (w > 0) {
-                            val delta = dragAmount.x / w.toFloat()
-                            currentCallback((currentSplit + delta).coerceIn(minFraction, maxFraction))
+                            currentCallback((currentSplit + delta / w.toFloat()).coerceIn(minFraction, maxFraction))
                         }
-                    }
-                }
+                    },
+                )
                 .testTag(dividerTag),
         )
 
@@ -124,16 +130,17 @@ fun VerticalSplitPane(
                 .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.6f) else ReqLabColors.Border)
                 .hoverable(dividerInteraction)
                 .pointerHoverIcon(verticalResizeCursor)
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
+                .platformResizeCursorStyle(isHorizontal = false)
+                .draggable(
+                    orientation = Orientation.Vertical,
+                    startDragImmediately = true,
+                    state = rememberDraggableState { delta ->
                         val h = containerHeight
                         if (h > 0) {
-                            val delta = dragAmount.y / h.toFloat()
-                            currentCallback((currentSplit + delta).coerceIn(minFraction, maxFraction))
+                            currentCallback((currentSplit + delta / h.toFloat()).coerceIn(minFraction, maxFraction))
                         }
-                    }
-                }
+                    },
+                )
                 .testTag(dividerTag),
         )
 

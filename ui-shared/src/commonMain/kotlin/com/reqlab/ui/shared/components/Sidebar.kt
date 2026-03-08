@@ -103,6 +103,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import com.reqlab.ui.shared.platform.formatTimestamp
 import com.reqlab.ui.shared.platform.ioDispatcher
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -199,7 +200,18 @@ fun Sidebar(state: AppState) {
                 )
             }
             if (state.historyExpanded) {
-                items(state.historyItems, key = { it.id }) { item ->
+                // M-4: Filter history items by the sidebar search query so the search
+                // bar works consistently across both Collections and History sections.
+                val historyQuery = state.sidebarSearchQuery.trim()
+                val visibleHistory = if (historyQuery.isBlank()) {
+                    state.historyItems
+                } else {
+                    state.historyItems.filter { item ->
+                        item.name.contains(historyQuery, ignoreCase = true) ||
+                            item.url.contains(historyQuery, ignoreCase = true)
+                    }
+                }
+                items(visibleHistory, key = { it.id }) { item ->
                     HistoryRow(item, onClick = {
                         state.openRequest(name = item.name, method = item.method, url = item.url)
                     })
@@ -461,6 +473,10 @@ fun Sidebar(state: AppState) {
                                     val names = state.environments.map { it.name }.toSet()
                                     val name = ImportExportNaming.generateUniqueEnvironmentName("New Environment", names)
                                     state.environments.add(EnvState(name))
+                                    // M-12: Immediately open the rename dialog so the user can
+                                    // give the environment a meaningful name right away.
+                                    renameEnvironmentIndex = state.environments.lastIndex
+                                    renameEnvironmentValue = name
                                 },
                                 modifier = Modifier.size(24.dp),
                             ) {
@@ -733,6 +749,13 @@ private fun HistoryRow(item: HistoryItem, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
+        )
+        // M-6: Show the request timestamp so users can identify when each call was made.
+        Text(
+            text = formatTimestamp(item.timestamp),
+            style = MaterialTheme.typography.bodySmall,
+            color = ReqLabColors.OnSurfaceDim,
+            fontSize = 10.sp,
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.reqlab.ui.shared.platform
 
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,12 @@ actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 actual val horizontalResizeCursor: PointerIcon = PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR))
 
 actual val verticalResizeCursor: PointerIcon = PointerIcon(Cursor(Cursor.S_RESIZE_CURSOR))
+
+/**
+ * H-5: Desktop already applies the correct cursor via `pointerHoverIcon(horizontalResizeCursor)`.
+ * This modifier is a no-op on desktop.
+ */
+actual fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier = this
 
 actual fun pickFileForImport(onResult: (String) -> Unit) {
     val chooser = JFileChooser()

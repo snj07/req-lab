@@ -204,7 +204,7 @@ class TabManagementUiTest {
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
-        assertEquals(260, state.sidebarWidth)
+        assertEquals(260f, state.sidebarWidth)
     }
 
     @Test

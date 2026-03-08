@@ -182,7 +182,9 @@ fun EnvironmentEditDialog(state: AppState) {
                         .border(1.dp, ReqLabColors.Border, RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
                         .testTag("env-variables-list"),
                 ) {
-                    itemsIndexed(workingVars, key = { idx, _ -> idx }) { idx, kv ->
+                    // M-7: Key by stable uid instead of index so Compose correctly
+                    // animates insertions/deletions without recomposing unaffected rows.
+                    itemsIndexed(workingVars, key = { _, kv -> kv.uid }) { idx, kv ->
                         EnvVariableRow(
                             kv = kv,
                             index = idx,
