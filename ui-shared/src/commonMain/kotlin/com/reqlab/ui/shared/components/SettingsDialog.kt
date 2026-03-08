@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.reqlab.ui.shared.state.AppSettings
+import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.AppTheme
 import com.reqlab.ui.shared.persistence.ImportExportRepository
@@ -209,6 +210,15 @@ private fun GeneralSettings(s: AppSettings) {
         value = s.defaultTimeoutSec,
         onValueChange = { s.defaultTimeoutSec = it },
     )
+    SettingsDivider()
+    SettingChoice(
+        label = "Response layout",
+        description = "Choose where response panel appears",
+        options = listOf(ResponseLayout.RIGHT to "Right side", ResponseLayout.BOTTOM to "Bottom panel"),
+        selected = s.responseLayout,
+        onSelected = { s.responseLayout = it },
+        tagPrefix = "response-layout",
+    )
 }
 
 @Composable
@@ -318,9 +328,16 @@ private fun DataSettings(state: AppState) {
         "Remove all request history entries",
         actionLabel = "Clear",
         actionColor = ReqLabColors.Error,
+        tag = "clear-history",
     ) {
-        state.historyItems.clear()
-        state.log("History cleared", LogLevel.INFO)
+        state.showConfirm(
+            title = "Clear history?",
+            message = "Are you sure you want to clear request history?",
+            action = {
+                state.historyItems.clear()
+                state.log("History cleared", LogLevel.INFO)
+            },
+        )
     }
     SettingsDivider()
     SettingAction(
@@ -328,8 +345,51 @@ private fun DataSettings(state: AppState) {
         "Remove all console log entries",
         actionLabel = "Clear",
         actionColor = ReqLabColors.Error,
+        tag = "clear-console",
     ) {
         state.consoleLogs.clear()
+    }
+}
+
+@Composable
+private fun <T> SettingChoice(
+    label: String,
+    description: String,
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelected: (T) -> Unit,
+    tagPrefix: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, fontSize = 13.sp, color = ReqLabColors.OnSurface)
+        if (description.isNotEmpty()) {
+            Text(description, fontSize = 11.sp, color = ReqLabColors.OnSurfaceDim)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { (value, text) ->
+                val active = value == selected
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (active) ReqLabColors.SelectedItem else ReqLabColors.SurfaceContainer)
+                        .border(
+                            width = if (active) 2.dp else 1.dp,
+                            color = if (active) ReqLabColors.Primary else ReqLabColors.Border,
+                            shape = RoundedCornerShape(6.dp),
+                        )
+                        .clickable { onSelected(value) }
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .testTag("$tagPrefix-${text.lowercase().replace(" ", "-")}"),
+                ) {
+                    Text(
+                        text = text,
+                        color = if (active) ReqLabColors.OnSurface else ReqLabColors.OnSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -422,6 +482,7 @@ private fun SettingAction(
     description: String = "",
     actionLabel: String = "Run",
     actionColor: Color = ReqLabColors.Primary,
+    tag: String = "",
     onAction: () -> Unit,
 ) {
     Row(
@@ -441,7 +502,8 @@ private fun SettingAction(
                 .background(actionColor.copy(alpha = 0.12f))
                 .border(1.dp, actionColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
                 .clickable(onClick = onAction)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .then(if (tag.isNotEmpty()) Modifier.testTag("$tag-action") else Modifier),
         ) {
             Text(actionLabel, color = actionColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }

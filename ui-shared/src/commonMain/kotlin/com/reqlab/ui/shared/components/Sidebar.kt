@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.text.BasicTextField
@@ -45,6 +47,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -52,6 +56,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,8 +81,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.persistence.ImportExportException
 import com.reqlab.ui.shared.persistence.ImportExportNaming
@@ -97,6 +105,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.reqlab.ui.shared.platform.ioDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import com.reqlab.ui.shared.platform.pickFileForImport
 import com.reqlab.ui.shared.platform.saveFileForExport
 import com.reqlab.ui.shared.platform.generateUuid
@@ -773,6 +782,24 @@ private fun CollectionTreeNode(
     val showInsertionBelow = isDropTarget && dropInsertAfter
 
     var showMenu by remember { mutableStateOf(false) }
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    var showRequestTooltip by remember(node.id) { mutableStateOf(false) }
+
+    LaunchedEffect(isHovered, isRequest, node.name) {
+        if (isHovered && isRequest && node.name.length > 16) {
+            delay(350)
+            showRequestTooltip = true
+        } else {
+            showRequestTooltip = false
+        }
+    }
+
+    LaunchedEffect(state.sidebarScrollToRequestId, node.id) {
+        if (state.sidebarScrollToRequestId == node.id) {
+            bringIntoViewRequester.bringIntoView()
+            state.sidebarScrollToRequestId = null
+        }
+    }
 
     Column {
         // Insertion line ABOVE the row (Postman-style drop indicator)
@@ -792,6 +819,7 @@ private fun CollectionTreeNode(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(6.dp))
                 .alpha(if (isDragSource) 0.4f else 1f)
+                .bringIntoViewRequester(bringIntoViewRequester)
                 .background(
                     when {
                         isSelectedRequest -> ReqLabColors.SelectedItem
@@ -878,6 +906,29 @@ private fun CollectionTreeNode(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            if (showRequestTooltip && isRequest) {
+                Popup(
+                    alignment = Alignment.BottomStart,
+                    offset = IntOffset(0, 28),
+                    properties = PopupProperties(focusable = false),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(ReqLabColors.SurfaceHigh)
+                            .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .testTag("request-name-tooltip-${node.id}"),
+                    ) {
+                        Text(
+                            text = node.name,
+                            color = ReqLabColors.OnSurface,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
             if (isSelectedRequest) {
                 Box(
                     modifier = Modifier
@@ -920,6 +971,38 @@ private fun CollectionTreeNode(
                             text = { Text("Add Folder") },
                             leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onAddFolder(node) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Expand") },
+                            leadingIcon = { Icon(Icons.Default.UnfoldMore, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = {
+                                showMenu = false
+                                state.collectionExpandedState[node.id] = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Collapse") },
+                            leadingIcon = { Icon(Icons.Default.UnfoldLess, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = {
+                                showMenu = false
+                                state.collectionExpandedState[node.id] = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Expand All") },
+                            leadingIcon = { Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = {
+                                showMenu = false
+                                state.expandAllCollections()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Collapse All") },
+                            leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = {
+                                showMenu = false
+                                state.collapseAllCollections()
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("Add Request") },
@@ -1096,23 +1179,38 @@ private fun EnvironmentRow(
                 )
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                DropdownMenuItem(text = { Text("Edit Environment") }, onClick = {
+                DropdownMenuItem(
+                    text = { Text("Edit Environment") },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
                     showMenu = false
                     onEdit()
                 })
-                DropdownMenuItem(text = { Text("Export Environment") }, onClick = {
+                DropdownMenuItem(
+                    text = { Text("Export Environment") },
+                    leadingIcon = { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
                     showMenu = false
                     onExport()
                 })
-                DropdownMenuItem(text = { Text("Duplicate Environment") }, onClick = {
+                DropdownMenuItem(
+                    text = { Text("Duplicate Environment") },
+                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
                     showMenu = false
                     onDuplicate()
                 })
-                DropdownMenuItem(text = { Text("Rename Environment") }, onClick = {
+                DropdownMenuItem(
+                    text = { Text("Rename Environment") },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
                     showMenu = false
                     onRename()
                 })
-                DropdownMenuItem(text = { Text("Delete Environment") }, onClick = {
+                DropdownMenuItem(
+                    text = { Text("Delete Environment") },
+                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    onClick = {
                     showMenu = false
                     onDelete()
                 })

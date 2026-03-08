@@ -180,4 +180,38 @@ class RequestFlowsIntegrationTest {
         state.activeTab!!.markSaved()
         assertFalse(state.activeTab!!.isDirty)
     }
+
+    @Test
+    fun revealRequestInSidebar_selects_request_and_sets_scroll_target() {
+        val state = AppState()
+
+        state.revealRequestInSidebar("r3")
+
+        assertEquals("r3", state.selectedRequestId)
+        assertEquals("r3", state.sidebarScrollToRequestId)
+    }
+
+    @Test
+    fun renameRequestEverywhere_updates_collections_and_open_tabs() {
+        val state = AppState()
+        state.openRequest(requestId = "r2", name = "Create user", method = com.reqlab.core.model.HttpMethodType.POST, url = "{{baseUrl}}/users")
+
+        state.renameRequestEverywhere("r2", "Create user renamed")
+
+        assertTrue(state.collections.flatMap { it.children }.any { it.id == "r2" && it.name == "Create user renamed" })
+        assertTrue(state.openTabs.any { it.id == "r2" && it.name == "Create user renamed" })
+    }
+
+    @Test
+    fun clear_history_via_confirm_action_empties_history_items() {
+        val state = AppState()
+        assertTrue(state.historyItems.isNotEmpty())
+
+        state.showConfirm("Clear history?", "Are you sure you want to clear request history?") {
+            state.historyItems.clear()
+        }
+        state.resolveConfirm(true)
+
+        assertTrue(state.historyItems.isEmpty())
+    }
 }

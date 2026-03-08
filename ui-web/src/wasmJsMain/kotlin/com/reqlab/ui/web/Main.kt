@@ -14,7 +14,7 @@ import com.reqlab.ui.shared.theme.ReqLabTheme
 fun main() {
     CanvasBasedWindow(canvasElementId = "ComposeTarget", title = "ReqLab") {
         val state = remember {
-            AppState().also {
+            AppState(openDefaultTab = false).also {
                 SettingsRepository.load(it.settings)
                 TabsRepository.load(it)
                 WorkspaceRepository.load(it)

@@ -75,7 +75,7 @@ Compile only the shared UI module (fast check during development):
 To run in the background (returns the prompt immediately):
 
 ```bash
-./gradlew :ui-desktop:desktopRun &
+./gradlew :ui-desktop:run &
 ```
 
 ### Sample server (for manual testing)
@@ -262,7 +262,7 @@ Uses `CanvasBasedWindow` to render `MainScreen` in an HTML `<canvas>` element.
 ./gradlew :ui-web:wasmJsBrowserProductionWebpack
 
 # Run desktop
-./gradlew :ui-desktop:desktopRun
+./gradlew :ui-desktop:run
 
 # Run web dev server
 ./gradlew :ui-web:wasmJsBrowserDevelopmentRun

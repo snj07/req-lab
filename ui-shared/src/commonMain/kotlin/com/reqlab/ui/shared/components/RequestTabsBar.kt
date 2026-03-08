@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -49,12 +50,16 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.SolidColor
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestTabState
 import com.reqlab.ui.shared.theme.ReqLabColors
+import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.platform.horizontalResizeCursor
 
 /**
@@ -66,6 +71,8 @@ import com.reqlab.ui.shared.platform.horizontalResizeCursor
 fun RequestTabsBar(
     state: AppState,
     onRequestClose: (Int) -> Unit,
+    onRenameTab: (requestId: String, newName: String) -> Unit,
+    onShowInSidebar: (requestId: String) -> Unit,
     onCloseOthers: (Int) -> Unit,
     onCloseToLeft: (Int) -> Unit,
     onCloseToRight: (Int) -> Unit,
@@ -115,6 +122,8 @@ fun RequestTabsBar(
                                 state.selectedRequestId = tab.id
                             },
                             onClose = { onRequestClose(index) },
+                            onRename = { newName -> onRenameTab(tab.id, newName) },
+                            onShowInSidebar = { onShowInSidebar(tab.id) },
                             onCloseOthers = { onCloseOthers(index) },
                             onCloseToLeft = { onCloseToLeft(index) },
                             onCloseToRight = { onCloseToRight(index) },
@@ -153,6 +162,8 @@ private fun RequestTabChip(
     isActive: Boolean,
     onClick: () -> Unit,
     onClose: () -> Unit,
+    onRename: (String) -> Unit,
+    onShowInSidebar: () -> Unit,
     onCloseOthers: () -> Unit,
     onCloseToLeft: () -> Unit,
     onCloseToRight: () -> Unit,
@@ -162,6 +173,8 @@ private fun RequestTabChip(
     val interaction = remember { MutableInteractionSource() }
     val isHovered by interaction.collectIsHoveredAsState()
     var showContextMenu by remember { mutableStateOf(false) }
+    var renameMode by remember(tab.id) { mutableStateOf(false) }
+    var renameText by remember(tab.id) { mutableStateOf(TextFieldValue(tab.name)) }
 
     // Outer Box fills the 36dp row height so the indicator can anchor at the bottom
     Box(
@@ -191,14 +204,44 @@ private fun RequestTabChip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             MethodBadge(tab.method, compact = true)
-            Text(
-                text = tab.name + if (tab.isDirty) " *" else "",
-                color = if (isActive) ReqLabColors.OnSurface else ReqLabColors.OnSurfaceVariant,
-                fontSize = 12.sp,
-                fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (renameMode) {
+                BasicTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = ReqLabColors.OnSurface,
+                        fontSize = 12.sp,
+                        fontFamily = CodeFontFamily,
+                    ),
+                    cursorBrush = SolidColor(ReqLabColors.Primary),
+                    modifier = Modifier
+                        .background(ReqLabColors.SurfaceContainer, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .testTag("tab-rename-input-${tab.id}"),
+                )
+                Text(
+                    text = "Save",
+                    color = ReqLabColors.Primary,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .clickable {
+                            val newName = renameText.text.trim()
+                            if (newName.isNotEmpty()) onRename(newName)
+                            renameMode = false
+                        }
+                        .testTag("tab-rename-save-${tab.id}"),
+                )
+            } else {
+                Text(
+                    text = tab.name + if (tab.isDirty) " *" else "",
+                    color = if (isActive) ReqLabColors.OnSurface else ReqLabColors.OnSurfaceVariant,
+                    fontSize = 12.sp,
+                    fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (showClose && (isActive || isHovered)) {
                 Icon(
                     Icons.Default.Close,
@@ -233,6 +276,20 @@ private fun RequestTabChip(
                 text = { Text("Close") },
                 onClick = { showContextMenu = false; onClose() },
                 modifier = Modifier.testTag("tab-ctx-close"),
+            )
+            DropdownMenuItem(
+                text = { Text("Rename") },
+                onClick = {
+                    showContextMenu = false
+                    renameText = TextFieldValue(tab.name)
+                    renameMode = true
+                },
+                modifier = Modifier.testTag("tab-ctx-rename"),
+            )
+            DropdownMenuItem(
+                text = { Text("Show in Sidebar") },
+                onClick = { showContextMenu = false; onShowInSidebar() },
+                modifier = Modifier.testTag("tab-ctx-show-sidebar"),
             )
             DropdownMenuItem(
                 text = { Text("Close Others") },

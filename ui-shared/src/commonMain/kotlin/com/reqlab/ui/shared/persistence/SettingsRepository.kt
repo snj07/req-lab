@@ -2,6 +2,7 @@ package com.reqlab.ui.shared.persistence
 
 import com.reqlab.ui.shared.platform.PlatformStorage
 import com.reqlab.ui.shared.state.AppSettings
+import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppTheme
 
 /**
@@ -19,6 +20,10 @@ object SettingsRepository {
         settings.autoSaveRequests    = getBool("autoSaveRequests", settings.autoSaveRequests)
         settings.confirmBeforeDelete = getBool("confirmBeforeDelete", settings.confirmBeforeDelete)
         settings.defaultTimeoutSec   = getInt("defaultTimeoutSec", settings.defaultTimeoutSec)
+        settings.responseLayout      = safeEnumOf(
+            PlatformStorage.getString(PREFIX + "responseLayout") ?: settings.responseLayout.name,
+            settings.responseLayout,
+        )
 
         settings.theme = safeEnumOf(
             PlatformStorage.getString(PREFIX + "theme") ?: settings.theme.name,
@@ -40,6 +45,7 @@ object SettingsRepository {
         putBool("autoSaveRequests", settings.autoSaveRequests)
         putBool("confirmBeforeDelete", settings.confirmBeforeDelete)
         putInt("defaultTimeoutSec", settings.defaultTimeoutSec)
+        PlatformStorage.putString(PREFIX + "responseLayout", settings.responseLayout.name)
         PlatformStorage.putString(PREFIX + "theme", settings.theme.name)
         putInt("requestTimeoutSec", settings.requestTimeoutSec)
         putBool("followRedirects", settings.followRedirects)

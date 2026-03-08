@@ -3,6 +3,11 @@ package com.reqlab.ui.shared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,11 +45,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -52,6 +64,7 @@ import com.reqlab.ui.shared.state.EnvState
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
+import kotlin.math.roundToInt
 
 @Composable
 fun EnvironmentEditDialog(state: AppState) {
@@ -70,23 +83,78 @@ fun EnvironmentEditDialog(state: AppState) {
     }
 
     Dialog(onDismissRequest = { state.showEnvEditDialog = false }) {
+        // Drag state — Float accumulation prevents sub-pixel truncation.
+        var envOffsetX by remember { mutableStateOf(0f) }
+        var envOffsetY by remember { mutableStateOf(0f) }
+        var envViewportSize by remember { mutableStateOf(IntSize.Zero) }
+        var envCardSize by remember { mutableStateOf(IntSize.Zero) }
+
+        // Full-screen transparent backdrop: centres the card and dismisses on
+        // tap outside the card boundary.
         Box(
             modifier = Modifier
-                .widthIn(min = 600.dp, max = 900.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(ReqLabColors.Surface)
-                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
-                .testTag("env-edit-dialog"),
+                .fillMaxSize()
+                .onSizeChanged { envViewportSize = it }
+                .pointerInput(Unit) {
+                    detectTapGestures { state.showEnvEditDialog = false }
+                },
+            contentAlignment = Alignment.Center,
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                // ── Title ────────────────────────────────────
-                Text(
-                    "Edit Environment",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = ReqLabColors.OnSurface,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(16.dp))
+            // The Column doubles as the styled card so we avoid an extra layer
+            // of nesting yet keep identical indentation for all content below.
+            Column(
+                modifier = Modifier
+                    // Offset must come first so shadow/clip follow the moved position.
+                    .offset { IntOffset(envOffsetX.roundToInt(), envOffsetY.roundToInt()) }
+                    .widthIn(min = 600.dp, max = 900.dp)
+                    .onSizeChanged { envCardSize = it }
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(ReqLabColors.Surface)
+                    .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
+                    // Block the backdrop tap-detector from seeing events inside the card.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Main)
+                                    .changes
+                                    .forEach { if (!it.isConsumed) it.consume() }
+                            }
+                        }
+                    }
+                    .padding(24.dp)
+                    .testTag("env-edit-dialog"),
+            ) {
+                // ── Title with drag handle ────────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val rawX = envOffsetX + dragAmount.x
+                                val rawY = envOffsetY + dragAmount.y
+                                val (cx, cy) = clampDialogOffsetFromCenter(
+                                    offsetX = rawX,
+                                    offsetY = rawY,
+                                    cardSize = envCardSize,
+                                    viewportSize = envViewportSize,
+                                )
+                                envOffsetX = cx
+                                envOffsetY = cy
+                            }
+                        }
+                        .padding(bottom = 16.dp)
+                        .testTag("env-dialog-title-bar"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Edit Environment",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = ReqLabColors.OnSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
                 // ── Environment Name ─────────────────────────
                 Text("Name", style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant)
@@ -122,11 +190,16 @@ fun EnvironmentEditDialog(state: AppState) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(260.dp)
+                        .background(ReqLabColors.Surface)
                         .border(1.dp, ReqLabColors.Border, RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
                         .testTag("env-variables-list"),
                 ) {
                     itemsIndexed(workingVars, key = { idx, _ -> idx }) { idx, kv ->
-                        EnvVariableRow(kv, onDelete = { workingVars.removeAt(idx) })
+                        EnvVariableRow(
+                            kv = kv,
+                            index = idx,
+                            onDelete = { workingVars.removeAt(idx) },
+                        )
                         Box(Modifier.fillMaxWidth().height(1.dp).background(ReqLabColors.Border))
                     }
                 }
@@ -210,14 +283,24 @@ private fun TableHeader(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EnvVariableRow(kv: MutableKeyValue, onDelete: () -> Unit) {
+private fun EnvVariableRow(kv: MutableKeyValue, index: Int, onDelete: () -> Unit) {
     var showValue by remember { mutableStateOf(!kv.secret) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val baseRowColor = when (environmentRowTone(index, isHovered)) {
+        EnvironmentRowTone.EVEN -> ReqLabColors.SurfaceVariant
+        EnvironmentRowTone.ODD -> ReqLabColors.Surface
+        EnvironmentRowTone.HOVERED -> ReqLabColors.Primary.copy(alpha = 0.08f)
+    }
+    val rowColor = baseRowColor
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ReqLabColors.SurfaceVariant)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .background(rowColor)
+            .hoverable(interactionSource)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .testTag("env-var-row-$index"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -237,6 +320,7 @@ private fun EnvVariableRow(kv: MutableKeyValue, onDelete: () -> Unit) {
             value = kv.key,
             onValueChange = { kv.key = it },
             placeholder = "variable_name",
+            tag = "env-var-key-$index",
             modifier = Modifier.weight(1f),
         )
 
@@ -246,6 +330,7 @@ private fun EnvVariableRow(kv: MutableKeyValue, onDelete: () -> Unit) {
             onValueChange = { kv.value = it },
             placeholder = if (kv.secret) "••••••••" else "value",
             masked = kv.secret && !showValue,
+            tag = "env-var-value-$index",
             modifier = Modifier.weight(1f),
         )
 
@@ -288,6 +373,17 @@ private fun EnvVariableRow(kv: MutableKeyValue, onDelete: () -> Unit) {
     }
 }
 
+enum class EnvironmentRowTone {
+    EVEN,
+    ODD,
+    HOVERED,
+}
+
+fun environmentRowTone(index: Int, isHovered: Boolean): EnvironmentRowTone {
+    if (isHovered) return EnvironmentRowTone.HOVERED
+    return if (index % 2 == 0) EnvironmentRowTone.EVEN else EnvironmentRowTone.ODD
+}
+
 @Composable
 private fun EnvTextField(
     value: String,
@@ -298,6 +394,7 @@ private fun EnvTextField(
     modifier: Modifier = Modifier,
 ) {
     val displayValue = if (masked) "•".repeat(value.length.coerceAtMost(20)) else value
+    var isFocused by remember { mutableStateOf(false) }
     BasicTextField(
         value = if (masked) displayValue else value,
         onValueChange = if (masked) ({}) else onValueChange,
@@ -307,15 +404,26 @@ private fun EnvTextField(
         cursorBrush = SolidColor(ReqLabColors.Primary),
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(ReqLabColors.SurfaceContainer)
-            .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+            .background(if (isFocused) ReqLabColors.Surface else ReqLabColors.SurfaceContainer)
+            .border(1.dp, if (isFocused) ReqLabColors.Primary else ReqLabColors.Border, RoundedCornerShape(4.dp))
+            .onFocusChanged { focusState -> isFocused = focusState.isFocused }
             .padding(horizontal = 8.dp, vertical = 6.dp)
             .then(if (tag.isNotEmpty()) Modifier.testTag(tag) else Modifier),
         decorationBox = { inner ->
-            if (value.isEmpty() && !masked) {
-                Text(placeholder, color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (value.isEmpty() && !masked) {
+                    Text(placeholder, color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+                }
+                inner()
+                if (isFocused && tag.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(1.dp)
+                            .align(Alignment.TopStart)
+                            .testTag("$tag-focused"),
+                    )
+                }
             }
-            inner()
         },
     )
 }

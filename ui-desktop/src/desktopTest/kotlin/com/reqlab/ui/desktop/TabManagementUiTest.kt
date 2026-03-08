@@ -4,12 +4,16 @@ import com.reqlab.ui.shared.MainScreen
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.rightClick
+import androidx.compose.ui.geometry.Offset
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.ResponseLayout
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -201,5 +205,87 @@ class TabManagementUiTest {
         composeRule.waitForIdle()
 
         assertEquals(260, state.sidebarWidth)
+    }
+
+    @Test
+    fun empty_workspace_view_is_shown_when_no_default_tab() {
+        val state = AppState(openDefaultTab = false)
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("empty-workspace-view").assertIsDisplayed()
+        composeRule.onNodeWithText("No request selected").assertIsDisplayed()
+    }
+
+    @Test
+    fun response_layout_toggle_switches_to_bottom_layout() {
+        val state = AppState()
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("response-layout-toggle").performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(ResponseLayout.BOTTOM, state.settings.responseLayout)
+        composeRule.onNodeWithTag("response-layout-bottom").assertIsDisplayed()
+    }
+
+    @Test
+    fun right_click_tab_shows_rename_and_show_in_sidebar_actions() {
+        val state = AppState()
+        val tabId = state.openTabs.first().id
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("tab-chip-$tabId").performMouseInput { rightClick() }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("tab-ctx-rename", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("tab-ctx-show-sidebar", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun rename_request_updates_sidebar_name_and_open_tab_state() {
+        val state = AppState()
+        state.openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.runOnUiThread {
+            state.renameRequestEverywhere("r1", "Get all users v2")
+        }
+        composeRule.waitForIdle()
+
+        assertTrue(state.openTabs.any { it.id == "r1" && it.name == "Get all users v2" })
+        assertTrue(state.collections.flatMap { it.children }.any { it.id == "r1" && it.name == "Get all users v2" })
+    }
+
+    @Test
+    fun show_in_sidebar_action_selects_request_indicator() {
+        val state = AppState()
+        state.openRequest(requestId = "r2", name = "Create user", method = HttpMethodType.POST, url = "{{baseUrl}}/users")
+        val tabId = "r2"
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("tab-chip-$tabId").performMouseInput { rightClick() }
+        composeRule.onNodeWithTag("tab-ctx-show-sidebar", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("selected-request-indicator-r2", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun hovering_long_request_name_shows_tooltip() {
+        val state = AppState()
+        state.renameRequestEverywhere("r1", "Get User By ID and Validate Permissions")
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("collection-node-r1", useUnmergedTree = true).performMouseInput { moveTo(Offset(10f, 10f)) }
+        composeRule.mainClock.advanceTimeBy(500)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("request-name-tooltip-r1", useUnmergedTree = true).assertIsDisplayed()
     }
 }

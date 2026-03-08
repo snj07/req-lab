@@ -149,6 +149,38 @@ class NewFeaturesUiTest {
     }
 
     @Test
+    fun collection_menu_shows_expand_and_collapse_actions() {
+        val state = AppState()
+        val rootId = state.collections.first().id
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-$rootId", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Expand", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Collapse", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Expand All", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Collapse All", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun collapse_and_expand_from_collection_menu_hides_and_restores_children() {
+        val state = AppState()
+        val rootId = state.collections.first().id
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-node-r1", useUnmergedTree = true).assertIsDisplayed()
+
+        composeRule.onNodeWithTag("collection-actions-$rootId", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Collapse", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("collection-node-r1", useUnmergedTree = true).assertCountEquals(0)
+
+        composeRule.onNodeWithTag("collection-actions-$rootId", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Expand", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("collection-node-r1", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
     fun environment_row_does_not_resize_when_actions_become_visible() {
         val state = AppState()
         val envName = state.environments.first().name

@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.theme.ReqLabColors
 
 @Composable
@@ -75,6 +78,27 @@ fun TopToolbar(state: AppState) {
         EnvironmentChip(state)
 
         Spacer(Modifier.width(8.dp))
+
+        IconButton(
+            onClick = {
+                state.settings.responseLayout =
+                    if (state.settings.responseLayout == ResponseLayout.RIGHT) ResponseLayout.BOTTOM
+                    else ResponseLayout.RIGHT
+            },
+            modifier = Modifier.testTag("response-layout-toggle"),
+        ) {
+            Icon(
+                imageVector = if (state.settings.responseLayout == ResponseLayout.RIGHT) {
+                    Icons.AutoMirrored.Filled.ViewSidebar
+                } else {
+                    Icons.Default.ViewWeek
+                },
+                contentDescription = "Toggle response layout",
+                tint = ReqLabColors.OnSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.width(4.dp))
 
         // Settings
         IconButton(onClick = { state.showSettingsDialog = true }) {

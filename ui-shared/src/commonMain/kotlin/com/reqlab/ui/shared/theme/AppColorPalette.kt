@@ -89,44 +89,50 @@ val DarkAppColors = AppColorPalette(
 )
 
 val LightAppColors = AppColorPalette(
-    background        = Color(0xFFF2F3F8),
-    surface           = Color(0xFFFFFFFF),
-    surfaceVariant    = Color(0xFFEEEFF5),
-    surfaceContainer  = Color(0xFFE5E6EE),
-    surfaceHigh       = Color(0xFFD8DAEB),
-    border            = Color(0xFFCCCEDF),
-    borderLight       = Color(0xFFBBBED5),
+    // Pure airy whites with the faintest blue-sky tint
+    background        = Color(0xFFF8FAFC),   // almost pure white, whisper of sky
+    surface           = Color(0xFFFFFFFF),   // pure white cards
+    surfaceVariant    = Color(0xFFF1F5F9),   // barely-there cool tint
+    surfaceContainer  = Color(0xFFE9EEF5),   // very light blue-gray
+    surfaceHigh       = Color(0xFFDDE4EE),   // soft cool divider
+    border            = Color(0xFFCED6E3),   // light, airy border
+    borderLight       = Color(0xFFE2E8F2),   // near-invisible separator
 
-    primary           = Color(0xFF4A5FDE),
-    primaryContainer  = Color(0xFFDDE2FF),
+    // Primary — vivid but not heavy, sky-leaning blue
+    primary           = Color(0xFF4B6BF5),   // bright periwinkle-blue
+    primaryContainer  = Color(0xFFEAEEFF),   // airy lavender tint
     onPrimary         = Color(0xFFFFFFFF),
 
-    secondary          = Color(0xFF1F9B84),
-    secondaryContainer = Color(0xFFCCF3EC),
-    tertiary           = Color(0xFF9A6E00),
+    // Secondary — fresh mint teal
+    secondary          = Color(0xFF0FA88E),   // bright, light teal
+    secondaryContainer = Color(0xFFDEF7F3),   // very light mint wash
 
-    error = Color(0xFFB5232D),
+    tertiary           = Color(0xFFB07D10),   // warm amber, lighter
+    error              = Color(0xFFCF3141),   // lighter, less harsh red
 
-    onBackground      = Color(0xFF1A1B2E),
-    onSurface         = Color(0xFF2C2D42),
-    onSurfaceVariant  = Color(0xFF5C5D74),
-    onSurfaceDim      = Color(0xFF8888A0),
+    // Text — deep but not black; feels lighter overall
+    onBackground      = Color(0xFF1A2030),   // deep navy-black
+    onSurface         = Color(0xFF1E2535),   // slightly lighter
+    onSurfaceVariant  = Color(0xFF5A657A),   // medium blue-gray
+    onSurfaceDim      = Color(0xFF96A0B4),   // light, airy hint text
 
-    methodGet     = Color(0xFF1F9B84),
-    methodPost    = Color(0xFF9A6E00),
-    methodPut     = Color(0xFF3050CC),
-    methodPatch   = Color(0xFF7B34B8),
-    methodDelete  = Color(0xFFB5232D),
-    methodOptions = Color(0xFF6B6B80),
-    methodHead    = Color(0xFF6B6B80),
+    // HTTP Methods — brighter, lighter variants
+    methodGet     = Color(0xFF0FA88E),       // fresh teal
+    methodPost    = Color(0xFFB07D10),       // warm amber
+    methodPut     = Color(0xFF4B6BF5),       // periwinkle
+    methodPatch   = Color(0xFF8B44CC),       // lighter purple
+    methodDelete  = Color(0xFFCF3141),       // lighter red
+    methodOptions = Color(0xFF6E7A91),       // cool slate
+    methodHead    = Color(0xFF6E7A91),
 
-    statusSuccess     = Color(0xFF1F9B84),
-    statusRedirect    = Color(0xFF9A6E00),
-    statusClientError = Color(0xFF9A6E00),
-    statusServerError = Color(0xFFB5232D),
+    // Status
+    statusSuccess     = Color(0xFF0FA88E),
+    statusRedirect    = Color(0xFFB07D10),
+    statusClientError = Color(0xFFB07D10),
+    statusServerError = Color(0xFFCF3141),
 
-    hoverOverlay = Color(0x0A000000),   // 4 % black
-    selectedItem = Color(0x1A4A5FDE),   // 10 % primary
+    hoverOverlay = Color(0x094B6BF5),        // 3.5% primary tint on hover
+    selectedItem = Color(0x154B6BF5),        // 8% primary for selection
 )
 
 /** Composition local providing the active [AppColorPalette]. Defaults to dark. */

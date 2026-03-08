@@ -65,7 +65,7 @@ ReqLab currently runs from source. See [DEVELOPMENT.md](DEVELOPMENT.md) for prer
 ```bash
 git clone https://github.com/snj07/req-lab.git
 cd req-lab
-./gradlew :ui-desktop:desktopRun
+./gradlew :ui-desktop:run
 ```
 
 > **Requirements:** JDK 17 or later (JDK 21 recommended).

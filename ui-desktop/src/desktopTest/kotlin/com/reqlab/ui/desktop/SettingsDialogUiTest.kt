@@ -2,9 +2,12 @@ package com.reqlab.ui.desktop
 
 import com.reqlab.ui.shared.MainScreen
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
@@ -97,5 +100,25 @@ class SettingsDialogUiTest {
 
         composeRule.onNodeWithTag("confirm-dialog", useUnmergedTree = true).assertDoesNotExist()
         assert(actionCalled) { "Confirm should invoke the pending action" }
+    }
+
+    @Test
+    fun clear_history_requires_confirmation_and_clears_entries() {
+        val state = AppState()
+        composeRule.setContent { MainScreen(state = state) }
+
+        composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Data", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("clear-history-action", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("confirm-dialog", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Are you sure you want to clear request history?", useUnmergedTree = true).assertIsDisplayed()
+
+        composeRule.onNodeWithTag("confirm-ok-button", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assert(state.historyItems.isEmpty()) { "History should be cleared after confirmation" }
+        composeRule.onAllNodesWithText("List users", useUnmergedTree = true).assertCountEquals(0)
     }
 }

@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.persistence
 import com.reqlab.ui.shared.platform.PlatformStorage
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.AppTheme
+import com.reqlab.ui.shared.state.ResponseLayout
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -16,6 +17,7 @@ class SettingsRepositoryTest {
         "settings.autoSaveRequests",
         "settings.confirmBeforeDelete",
         "settings.defaultTimeoutSec",
+        "settings.responseLayout",
         "settings.theme",
         "settings.requestTimeoutSec",
         "settings.followRedirects",
@@ -44,6 +46,7 @@ class SettingsRepositoryTest {
         assertTrue(settings.autoSaveRequests)
         assertTrue(settings.confirmBeforeDelete)
         assertEquals(30, settings.defaultTimeoutSec)
+        assertEquals(ResponseLayout.RIGHT, settings.responseLayout)
         assertEquals(AppTheme.DARK, settings.theme)
         assertEquals(30, settings.requestTimeoutSec)
         assertTrue(settings.followRedirects)
@@ -60,6 +63,7 @@ class SettingsRepositoryTest {
             autoSaveRequests    = false
             confirmBeforeDelete = false
             defaultTimeoutSec   = 60
+            responseLayout      = ResponseLayout.BOTTOM
             theme               = AppTheme.LIGHT
             requestTimeoutSec   = 45
             followRedirects     = false
@@ -76,6 +80,7 @@ class SettingsRepositoryTest {
         assertFalse(loaded.autoSaveRequests)
         assertFalse(loaded.confirmBeforeDelete)
         assertEquals(60, loaded.defaultTimeoutSec)
+        assertEquals(ResponseLayout.BOTTOM, loaded.responseLayout)
         assertEquals(AppTheme.LIGHT, loaded.theme)
         assertEquals(45, loaded.requestTimeoutSec)
         assertFalse(loaded.followRedirects)

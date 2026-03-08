@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,11 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -47,10 +50,12 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.reqlab.ui.shared.state.AppState
+import kotlin.math.roundToInt
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
@@ -275,100 +280,172 @@ fun VariableEditorPopup(
     val resolved = env.toVariableMap()[cleanName]
 
     var editValue by remember(cleanName) { mutableStateOf(TextFieldValue(envVar?.value ?: "")) }
-    var popupOffset by remember(cleanName) { mutableStateOf(initialOffset) }
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    var popupSize by remember { mutableStateOf(IntSize.Zero) }
+    // Use Float state to avoid the sub-pixel truncation bug where small drag
+    // deltas (e.g. 0.7f) become 0 after .toInt() and the popup never moves.
+    var popupOffsetX by remember(cleanName) { mutableStateOf(initialOffset.x.toFloat()) }
+    var popupOffsetY by remember(cleanName) { mutableStateOf(initialOffset.y.toFloat()) }
+
+    fun movePopupBy(dx: Float, dy: Float) {
+        // Accumulate in Float — never truncate to Int until layout time.
+        val rawX = popupOffsetX + dx
+        val rawY = popupOffsetY + dy
+        val clamped = clampPopupOffsetToViewport(
+            candidate = IntOffset(rawX.roundToInt(), rawY.roundToInt()),
+            popupSize = popupSize,
+            viewportSize = viewportSize,
+        )
+        popupOffsetX = clamped.x.toFloat()
+        popupOffsetY = clamped.y.toFloat()
+        onPositionChanged(clamped)
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Transparent)
-                .clickable(onClick = onDismiss)
+                .onSizeChanged { size ->
+                    viewportSize = size
+                    val clamped = clampPopupOffsetToViewport(
+                        candidate = IntOffset(popupOffsetX.roundToInt(), popupOffsetY.roundToInt()),
+                        popupSize = popupSize,
+                        viewportSize = viewportSize,
+                    )
+                    popupOffsetX = clamped.x.toFloat()
+                    popupOffsetY = clamped.y.toFloat()
+                }
+                // Use detectTapGestures instead of clickable so that drag
+                // gestures initiated on the popup card do not prematurely
+                // trigger a backdrop-dismiss before touch-slop is exceeded.
+                .pointerInput(Unit) { detectTapGestures { onDismiss() } }
                 .testTag("variable-popup-backdrop"),
         ) {
             Box(
                 modifier = Modifier
-                    .offset { popupOffset }
-                    .widthIn(min = 240.dp, max = 400.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .offset { IntOffset(popupOffsetX.roundToInt(), popupOffsetY.roundToInt()) }
+                    .widthIn(min = 340.dp, max = 520.dp)
+                    .shadow(16.dp, RoundedCornerShape(12.dp), clip = false)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(ReqLabColors.Surface)
-                    .border(1.dp, ReqLabColors.Border, RoundedCornerShape(10.dp))
-                    .padding(12.dp)
-                    .clickable(enabled = false) { }
+                    .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
+                    .onSizeChanged { size ->
+                        popupSize = size
+                        val clamped = clampPopupOffsetToViewport(
+                            candidate = IntOffset(popupOffsetX.roundToInt(), popupOffsetY.roundToInt()),
+                            popupSize = popupSize,
+                            viewportSize = viewportSize,
+                        )
+                        popupOffsetX = clamped.x.toFloat()
+                        popupOffsetY = clamped.y.toFloat()
+                    }
+                    // Consume every Main-pass event that was not already consumed
+                    // by a child (the drag gesture on the title bar runs before
+                    // this in Main-pass leaf-to-root order).  This prevents the
+                    // backdrop's tap detector from ever seeing events that fall
+                    // within the popup card's hit-test area.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Main)
+                                    .changes
+                                    .forEach { if (!it.isConsumed) it.consume() }
+                            }
+                        }
+                    }
+                    .padding(16.dp)
                     .testTag("variable-editor-popup"),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(ReqLabColors.SurfaceContainer)
                             .pointerInput(cleanName) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
-                                    popupOffset = IntOffset(
-                                        x = (popupOffset.x + dragAmount.x.toInt()).coerceAtLeast(0),
-                                        y = (popupOffset.y + dragAmount.y.toInt()).coerceAtLeast(0),
-                                    )
-                                    onPositionChanged(popupOffset)
+                                    movePopupBy(dragAmount.x, dragAmount.y)
                                 }
                             }
-                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
                             .testTag("variable-popup-title-bar"),
                     ) {
-                        Text(
-                            text = "{{${cleanName}}}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = VariableHighlightColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = env.name,
-                            fontSize = 10.sp,
-                            color = ReqLabColors.OnSurfaceDim,
-                            maxLines = 1,
-                        )
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Variable: $cleanName",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = VariableHighlightColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "Environment: ${env.name}",
+                                fontSize = 11.sp,
+                                color = ReqLabColors.OnSurfaceDim,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         IconButton(
                             onClick = onDismiss,
-                            modifier = Modifier.size(20.dp).testTag("variable-popup-close"),
+                            modifier = Modifier.size(24.dp).testTag("variable-popup-close"),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Close variable editor",
                                 tint = ReqLabColors.OnSurfaceDim,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(16.dp),
                             )
                         }
                     }
 
-                    if (resolved != null) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ReqLabColors.SurfaceVariant)
+                            .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
+                            // Safe drag region inside popup body (non-input)
+                            .pointerInput(cleanName) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    movePopupBy(dragAmount.x, dragAmount.y)
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Text(
-                            text = "Current: $resolved",
+                            text = "Current Value",
                             fontSize = 11.sp,
-                            color = ReqLabColors.OnSurfaceDim,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            color = ReqLabColors.OnSurfaceVariant,
+                            fontWeight = FontWeight.Medium,
                         )
-                    } else {
                         Text(
-                            text = "Not defined in \"${env.name}\"",
-                            fontSize = 11.sp,
-                            color = ReqLabColors.Error,
-                            maxLines = 1,
+                            text = resolved ?: "Not defined",
+                            fontSize = 12.sp,
+                            color = if (resolved == null) ReqLabColors.Error else ReqLabColors.OnSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("variable-popup-current-value"),
                         )
                     }
 
                     HorizontalDivider(color = ReqLabColors.Border)
 
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = "Value",
                             fontSize = 11.sp,
                             color = ReqLabColors.OnSurfaceVariant,
+                            fontWeight = FontWeight.Medium,
                         )
                         BasicTextField(
                             value = editValue,
@@ -382,10 +459,10 @@ fun VariableEditorPopup(
                             cursorBrush = SolidColor(ReqLabColors.Primary),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(ReqLabColors.SurfaceContainer)
-                                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .border(1.dp, ReqLabColors.BorderLight, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
                                 .testTag("variable-popup-value-input"),
                             decorationBox = { inner ->
                                 if (editValue.text.isEmpty()) {
@@ -399,25 +476,44 @@ fun VariableEditorPopup(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
                             text = "Open in Environments",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = ReqLabColors.Primary,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ReqLabColors.Primary.copy(alpha = 0.10f))
                                 .clickable {
                                     val idx = state.environments.indexOf(env)
                                     if (idx >= 0) state.openEnvEdit(idx)
                                     onDismiss()
                                 }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
                                 .testTag("variable-popup-open-env"),
                         )
                         Spacer(Modifier.weight(1f))
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(ReqLabColors.SurfaceContainer)
+                                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
+                                .clickable(onClick = onDismiss)
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                .testTag("variable-popup-cancel"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                fontSize = 12.sp,
+                                color = ReqLabColors.OnSurface,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(ReqLabColors.Primary)
                                 .clickable {
                                     if (envVar != null) {
@@ -427,7 +523,7 @@ fun VariableEditorPopup(
                                     }
                                     onDismiss()
                                 }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
                                 .testTag("variable-popup-save"),
                             contentAlignment = Alignment.Center,
                         ) {

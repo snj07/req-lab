@@ -32,6 +32,7 @@ enum class BottomTab(val label: String) {
 enum class LogLevel { INFO, SUCCESS, WARNING, ERROR }
 
 enum class AppTheme { DARK, LIGHT, SYSTEM }
+enum class ResponseLayout { RIGHT, BOTTOM }
 
 enum class HeaderKind { SYSTEM, USER }
 
@@ -120,6 +121,7 @@ class AppSettings {
     var autoSaveRequests     by mutableStateOf(true)
     var confirmBeforeDelete  by mutableStateOf(true)
     var defaultTimeoutSec    by mutableStateOf(30)
+    var responseLayout       by mutableStateOf(ResponseLayout.RIGHT)
 
     // Theme
     var theme by mutableStateOf(AppTheme.DARK)
@@ -268,7 +270,7 @@ class RequestTabState(
 
 // ── Global application state ────────────────────────────────────
 
-class AppState {
+class AppState(openDefaultTab: Boolean = true) {
     // ── sidebar ────────
     var sidebarExpanded      by mutableStateOf(true)
     var sidebarWidth         by mutableStateOf(260)
@@ -278,6 +280,7 @@ class AppState {
     var sidebarSearchQuery   by mutableStateOf("")
     var selectedCollectionId by mutableStateOf<String?>(null)
     var selectedRequestId    by mutableStateOf<String?>(null)
+    var sidebarScrollToRequestId by mutableStateOf<String?>(null)
     var collectionsRevision  by mutableStateOf(0)
 
     /** Per-folder expanded state. Absent key → expanded (true) by default. */
@@ -288,8 +291,10 @@ class AppState {
     var mainVerticalSplit    by mutableStateOf(0.73f)   // main area / bottom panel
 
     // ── tabs ───────────
-    val openTabs       = mutableStateListOf(RequestTabState())
-    var activeTabIndex by mutableStateOf(0)
+    val openTabs       = mutableStateListOf<RequestTabState>().also {
+        if (openDefaultTab) it.add(RequestTabState())
+    }
+    var activeTabIndex by mutableStateOf(if (openDefaultTab) 0 else -1)
     val activeTab: RequestTabState? get() = openTabs.getOrNull(activeTabIndex)
 
     // ── bottom panel ──
@@ -415,15 +420,25 @@ class AppState {
         method: HttpMethodType = HttpMethodType.GET,
         url: String = "",
     ) {
+        openTabs.indexOfFirst { it.id == requestId }.takeIf { it >= 0 }?.let { existingIdx ->
+            activeTabIndex = existingIdx
+            selectedRequestId = requestId
+            return
+        }
         openTabs.add(RequestTabState(id = requestId, name = name, method = method, url = url))
         activeTabIndex = openTabs.size - 1
         selectedRequestId = requestId
     }
 
     fun closeTab(index: Int) {
+        if (index !in openTabs.indices) return
         if (openTabs.size <= 1) return
         openTabs.removeAt(index)
-        if (activeTabIndex >= openTabs.size) activeTabIndex = openTabs.size - 1
+        if (openTabs.isEmpty()) {
+            activeTabIndex = -1
+        } else if (activeTabIndex >= openTabs.size) {
+            activeTabIndex = openTabs.size - 1
+        }
         selectedRequestId = activeTab?.id
     }
 
@@ -500,6 +515,48 @@ class AppState {
         } else {
             addTab()
         }
+    }
+
+    fun renameRequestEverywhere(requestId: String, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return
+        openTabs.filter { it.id == requestId }.forEach { it.name = trimmed }
+        renameRequestNodeById(collections, requestId, trimmed)
+        notifyCollectionsChanged()
+    }
+
+    fun revealRequestInSidebar(requestId: String) {
+        if (!expandAncestorsForRequest(collections, requestId)) return
+        selectedRequestId = requestId
+        sidebarScrollToRequestId = requestId
+        notifyCollectionsChanged()
+    }
+
+    private fun renameRequestNodeById(nodes: MutableList<CollectionNode>, requestId: String, newName: String): Boolean {
+        nodes.indices.forEach { index ->
+            val node = nodes[index]
+            if (!node.isFolder && node.id == requestId) {
+                nodes[index] = node.copy(name = newName)
+                return true
+            }
+            if (node.isFolder && node.children.isNotEmpty()) {
+                if (renameRequestNodeById(node.children, requestId, newName)) return true
+            }
+        }
+        return false
+    }
+
+    private fun expandAncestorsForRequest(nodes: List<CollectionNode>, requestId: String): Boolean {
+        for (node in nodes) {
+            if (!node.isFolder && node.id == requestId) return true
+            if (node.isFolder && node.children.isNotEmpty()) {
+                if (expandAncestorsForRequest(node.children, requestId)) {
+                    collectionExpandedState[node.id] = true
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun generateUniqueName(base: String, existingNames: Set<String>): String {

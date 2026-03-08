@@ -165,4 +165,39 @@ class AppStateCollectionTest {
         state.openRequest(requestId = "r99", name = "R", method = HttpMethodType.GET, url = "https://x")
         assertEquals("r99", state.selectedRequestId)
     }
+
+    @Test
+    fun addTab_does_not_duplicate_existing_request_id() {
+        val state = AppState()
+        val existingId = state.openTabs.first().id
+        val before = state.openTabs.size
+
+        state.addTab(requestId = existingId, name = "Duplicate", method = HttpMethodType.POST, url = "https://x")
+
+        assertEquals(before, state.openTabs.size)
+        assertEquals(existingId, state.activeTab?.id)
+    }
+
+    @Test
+    fun collapse_and_expand_all_collections_updates_folder_state_map() {
+        val state = AppState()
+
+        state.collapseAllCollections()
+        assertTrue(state.collectionExpandedState.values.all { expanded -> !expanded })
+
+        state.expandAllCollections()
+        assertTrue(state.collectionExpandedState.values.all { expanded -> expanded })
+    }
+
+    @Test
+    fun renameRequestEverywhere_updates_tab_and_sidebar_node_name() {
+        val state = AppState()
+        val requestId = "r1"
+
+        state.openRequest(requestId = requestId, name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+        state.renameRequestEverywhere(requestId, "Get all users v2")
+
+        assertTrue(state.openTabs.any { it.id == requestId && it.name == "Get all users v2" })
+        assertTrue(state.collections.flatMap { it.children }.any { it.id == requestId && it.name == "Get all users v2" })
+    }
 }

@@ -4,10 +4,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +30,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
 import com.reqlab.ui.shared.components.BottomPanel
 import com.reqlab.ui.shared.components.ConfirmDeleteDialog
 import com.reqlab.ui.shared.components.DirtyCloseDialog
@@ -41,6 +49,7 @@ import com.reqlab.ui.shared.components.SettingsDialog
 import com.reqlab.ui.shared.components.Sidebar
 import com.reqlab.ui.shared.components.SidebarResizeDivider
 import com.reqlab.ui.shared.components.TopToolbar
+import com.reqlab.ui.shared.components.VerticalSplitPane
 import com.reqlab.ui.shared.components.saveRequest
 import com.reqlab.ui.shared.components.sendRequest
 import com.reqlab.ui.shared.persistence.SettingsRepository
@@ -48,6 +57,7 @@ import com.reqlab.ui.shared.persistence.TabsRepository
 import com.reqlab.ui.shared.persistence.WorkspaceRepository
 import com.reqlab.ui.shared.platform.ioDispatcher
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -92,7 +102,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|$requestTimeoutSec|$followRedirects|$proxyEnabled|$httpProxy|$httpsProxy"
+                    "|${responseLayout.name}|$requestTimeoutSec|$followRedirects|$proxyEnabled|$httpProxy|$httpsProxy"
             }
         }.drop(1)
             .collect { withContext(ioDispatcher) { SettingsRepository.save(state.settings) } }
@@ -261,6 +271,12 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                 RequestTabsBar(
                     state = state,
                     onRequestClose = requestCloseTab,
+                    onRenameTab = { requestId, newName ->
+                        state.renameRequestEverywhere(requestId, newName)
+                    },
+                    onShowInSidebar = { requestId ->
+                        state.revealRequestInSidebar(requestId)
+                    },
                     onCloseOthers = { idx ->
                         val ids = state.openTabs.indices.filter { it != idx }.map { state.openTabs[it].id }
                         closeManyTabs(ids)
@@ -280,22 +296,68 @@ fun MainScreen(state: AppState = remember { AppState() }) {
 
                 val tab = state.activeTab
                 if (tab != null) {
-                    HorizontalSplitPane(
-                        modifier = Modifier.weight(1f),
-                        splitFraction = state.requestResponseSplit,
-                        onSplitChanged = { state.requestResponseSplit = it },
-                        first = {
-                            RequestEditor(
-                                tab = tab,
-                                state = state,
-                                onSend = { sendRequest(scope, state, tab) },
-                                onSave = { saveRequest(scope, state, tab) },
+                    if (state.settings.responseLayout == ResponseLayout.RIGHT) {
+                        HorizontalSplitPane(
+                            modifier = Modifier.weight(1f).testTag("response-layout-right"),
+                            splitFraction = state.requestResponseSplit,
+                            onSplitChanged = { state.requestResponseSplit = it },
+                            first = {
+                                RequestEditor(
+                                    tab = tab,
+                                    state = state,
+                                    onSend = { sendRequest(scope, state, tab) },
+                                    onSave = { saveRequest(scope, state, tab) },
+                                )
+                            },
+                            second = {
+                                ResponseViewer(tab)
+                            },
+                        )
+                    } else {
+                        VerticalSplitPane(
+                            modifier = Modifier.weight(1f).testTag("response-layout-bottom"),
+                            splitFraction = state.mainVerticalSplit,
+                            onSplitChanged = { state.mainVerticalSplit = it },
+                            first = {
+                                RequestEditor(
+                                    tab = tab,
+                                    state = state,
+                                    onSend = { sendRequest(scope, state, tab) },
+                                    onSave = { saveRequest(scope, state, tab) },
+                                )
+                            },
+                            second = {
+                                ResponseViewer(tab)
+                            },
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(ReqLabColors.Background)
+                            .testTag("empty-workspace-view"),
+                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp),
+                        ) {
+                            Text(
+                                text = "No request selected",
+                                color = ReqLabColors.OnSurface,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
                             )
-                        },
-                        second = {
-                            ResponseViewer(tab)
-                        },
-                    )
+                            Text(
+                                text = "Open a request from History or Collections to start.",
+                                color = ReqLabColors.OnSurfaceDim,
+                                fontSize = 13.sp,
+                            )
+                        }
+                    }
                 }
 
                 BottomPanel(state)
