@@ -81,13 +81,13 @@ fun EnvironmentEditDialog(state: AppState) {
         }
     }
 
-    Dialog(onDismissRequest = { state.showEnvEditDialog = false }) {
-        // Drag state — Float accumulation prevents sub-pixel truncation.
-        var envOffsetX by remember { mutableStateOf(0f) }
-        var envOffsetY by remember { mutableStateOf(0f) }
-        var envViewportSize by remember { mutableStateOf(IntSize.Zero) }
-        var envCardSize by remember { mutableStateOf(IntSize.Zero) }
+    // Drag state — Float accumulation prevents sub-pixel truncation.
+    var envOffsetX by remember { mutableStateOf(0f) }
+    var envOffsetY by remember { mutableStateOf(0f) }
+    var envViewportSize by remember { mutableStateOf(IntSize.Zero) }
+    var envCardSize by remember { mutableStateOf(IntSize.Zero) }
 
+    Dialog(onDismissRequest = { state.showEnvEditDialog = false }) {
         // Full-screen transparent backdrop: centres the card and dismisses on
         // tap outside the card boundary.
         Box(
@@ -110,16 +110,19 @@ fun EnvironmentEditDialog(state: AppState) {
                     .clip(RoundedCornerShape(12.dp))
                     .background(ReqLabColors.Surface)
                     .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
-                    // Block the backdrop tap-detector from seeing events inside the card.
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent(PointerEventPass.Main)
-                                    .changes
-                                    .forEach { if (!it.isConsumed) it.consume() }
-                            }
-                        }
+                    .draggableNoSlop { dx, dy ->
+                        val rawX = envOffsetX + dx
+                        val rawY = envOffsetY + dy
+                        val (cx, cy) = clampDialogOffsetFromCenter(
+                            offsetX = rawX,
+                            offsetY = rawY,
+                            cardSize = envCardSize,
+                            viewportSize = envViewportSize
+                        )
+                        envOffsetX = cx
+                        envOffsetY = cy
                     }
+                    .pointerInput(Unit) { detectTapGestures { } }
                     .padding(24.dp)
                     .testTag("env-edit-dialog"),
             ) {
@@ -127,18 +130,7 @@ fun EnvironmentEditDialog(state: AppState) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .draggableNoSlop {  dx, dy ->
-                                val rawX = envOffsetX + dx
-                                val rawY = envOffsetY + dy
-                                val (cx, cy) = clampDialogOffsetFromCenter(
-                                    offsetX = rawX,
-                                    offsetY = rawY,
-                                    cardSize = envCardSize,
-                                    viewportSize = envViewportSize,
-                                )
-                                envOffsetX = cx
-                                envOffsetY = cy
-                        }
+
                         .padding(bottom = 16.dp)
                         .testTag("env-dialog-title-bar"),
                     verticalAlignment = Alignment.CenterVertically,

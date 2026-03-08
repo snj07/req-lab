@@ -139,7 +139,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
     }
 
     LaunchedEffect(state.activeTabIndex, state.openTabs.size) {
-        state.selectedRequestId = state.activeTab?.id
+        state.syncSidebarToActiveTab()
     }
 
     Column(

@@ -339,19 +339,9 @@ fun VariableEditorPopup(
                         popupOffsetY = cy
                     }
                     // Consume every Main-pass event that was not already consumed
-                    // by a child (the drag gesture on the title bar runs before
-                    // this in Main-pass leaf-to-root order).  This prevents the
-                    // backdrop's tap detector from ever seeing events that fall
-                    // within the popup card's hit-test area.
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent(PointerEventPass.Main)
-                                    .changes
-                                    .forEach { if (!it.isConsumed) it.consume() }
-                            }
-                        }
-                    }
+                    // by a child to become a drag on the popup.
+                    .draggableNoSlop(key = cleanName) { dx, dy -> movePopupBy(dx, dy) }
+                    .pointerInput(Unit) { detectTapGestures { } }
                     .padding(16.dp)
                     .testTag("variable-editor-popup"),
             ) {
@@ -365,9 +355,6 @@ fun VariableEditorPopup(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .background(ReqLabColors.SurfaceContainer)
-                            .draggableNoSlop(key = cleanName) { dx, dy ->
-                                movePopupBy(dx, dy)
-                            }
                             .padding(horizontal = 10.dp, vertical = 8.dp)
                             .testTag("variable-popup-title-bar"),
                     ) {
@@ -407,10 +394,6 @@ fun VariableEditorPopup(
                             .clip(RoundedCornerShape(8.dp))
                             .background(ReqLabColors.SurfaceVariant)
                             .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
-                            // Safe drag region inside popup body (non-input)
-                            .draggableNoSlop(key = cleanName) { dx, dy ->
-                                movePopupBy(dx, dy)
-                            }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {

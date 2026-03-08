@@ -121,7 +121,6 @@ private data class TreeNodeHitArea(
 
 @Composable
 fun Sidebar(state: AppState) {
-    SharedTooltipCoordinator()
     val scope = rememberCoroutineScope()
     val collectionsRevision = state.collectionsRevision
     // Plain HashMap — never read inside composition, no state notifications needed.
@@ -177,10 +176,7 @@ fun Sidebar(state: AppState) {
             .width(state.sidebarWidth.dp)
             .fillMaxHeight()
             .background(ReqLabColors.SurfaceVariant)
-            .testTag("sidebar")
-            .onGloballyPositioned { coords ->
-                sharedSidebarTooltipState.containerRootY = coords.positionInRoot().y.toInt()
-            },
+            .testTag("sidebar"),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             SearchBar(
@@ -528,8 +524,6 @@ fun Sidebar(state: AppState) {
             }
             }
         }
-        // Single tooltip overlay — not a Popup, so no hover-exit flicker.
-        SidebarTooltipOverlay()
     }
 
     if (renameCollectionTarget != null) {
@@ -792,15 +786,20 @@ private fun CollectionTreeNode(
 
     var showMenu by remember { mutableStateOf(false) }
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val indentPx = with(density) { indent.roundToPx() }
+    var showRequestTooltip by remember(node.id) { mutableStateOf(false) }
 
-    // Tooltip: communicate hovered item + text to the shared overlay.
+    // Stable tooltip: appear after 300ms hover delay, hide on leave.
+    // Uses isHovered from the Row's hoverable interactionSource.
+    // The Popup is rendered with clippingEnabled=false and focusable=false
+    // to prevent it from stealing hover events.  A 150ms grace period on
+    // hover-off absorbs transient pointer-leave frames.
     LaunchedEffect(isHovered, isRequest) {
         if (isHovered && isRequest) {
-            sharedSidebarTooltipState.onHoverEnter(node.id, node.name)
+            delay(300)
+            showRequestTooltip = true
         } else {
-            sharedSidebarTooltipState.onHoverExit(node.id)
+            delay(150)
+            showRequestTooltip = false
         }
     }
 
@@ -851,14 +850,6 @@ private fun CollectionTreeNode(
                             label = node.name,
                         )
                     )
-                    // Keep tooltip position current (e.g. after scroll).
-                    if (sharedSidebarTooltipState.hoveredItemId == node.id) {
-                        sharedSidebarTooltipState.updateHoverPosition(
-                            rowRootY    = position.y.toInt(),
-                            rowHeightPx = coordinates.size.height,
-                            indentXPx   = indentPx,
-                        )
-                    }
                 }
                 .hoverable(interactionSource)
                 .onPointerEvent(PointerEventType.Press) {
@@ -1058,6 +1049,32 @@ private fun CollectionTreeNode(
         }
         } // end Row
 
+        // Tooltip rendered outside the Row to avoid stealing hover events,
+        // which previously caused a hover→show→unhover→hide flicker loop.
+        if (showRequestTooltip && isRequest) {
+            Popup(
+                alignment = Alignment.BottomStart,
+                offset = IntOffset(indent.value.toInt(), 0),
+                properties = PopupProperties(focusable = false),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ReqLabColors.SurfaceHigh)
+                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .testTag("request-name-tooltip-${node.id}"),
+                ) {
+                    Text(
+                        text = node.name,
+                        color = ReqLabColors.OnSurface,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+
         // Insertion line BELOW the row (Postman-style drop indicator)
         if (showInsertionBelow) {
             Box(
@@ -1122,22 +1139,15 @@ private fun EnvironmentRow(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     var showMenu by remember { mutableStateOf(false) }
-
-    var envRowRootY  by remember { mutableStateOf(0) }
-    var envRowHeight by remember { mutableStateOf(0) }
-    val envDensity   = androidx.compose.ui.platform.LocalDensity.current
-    val envIndentPx  = with(envDensity) { 28.dp.roundToPx() }
+    var showEnvTooltip by remember { mutableStateOf(false) }
 
     LaunchedEffect(isHovered) {
         if (isHovered) {
-            sharedSidebarTooltipState.onHoverEnter("env-$envName", envName)
-            sharedSidebarTooltipState.updateHoverPosition(
-                rowRootY    = envRowRootY,
-                rowHeightPx = envRowHeight,
-                indentXPx   = envIndentPx,
-            )
+            delay(200)
+            showEnvTooltip = true
         } else {
-            sharedSidebarTooltipState.onHoverExit("env-$envName")
+            delay(100)
+            showEnvTooltip = false
         }
     }
 
@@ -1160,20 +1170,7 @@ private fun EnvironmentRow(
             .onPointerEvent(PointerEventType.Press) { if (it.buttons.isSecondaryPressed) showMenu = true }
             .clickable(onClick = onClick)
             .padding(start = 28.dp, end = 4.dp, top = 5.dp, bottom = 5.dp)
-            .testTag("env-row-$envName")
-            .onGloballyPositioned { coords ->
-                val pos = coords.positionInRoot()
-                envRowRootY  = pos.y.toInt()
-                envRowHeight = coords.size.height
-                if (sharedSidebarTooltipState.hoveredItemId == "env-$envName") {
-                    sharedSidebarTooltipState.updateHoverPosition(
-                        rowRootY    = pos.y.toInt(),
-                        rowHeightPx = coords.size.height,
-                        indentXPx   = envIndentPx,
-                    )
-                }
-            },
-
+            .testTag("env-row-$envName"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1191,6 +1188,30 @@ private fun EnvironmentRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).testTag("env-name-text-$envName"),
         )
+        // Tooltip — appears after hover delay, shows full name.
+        if (showEnvTooltip) {
+            Popup(
+                alignment = Alignment.BottomStart,
+                offset = IntOffset(0, 28),
+                properties = PopupProperties(focusable = false),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ReqLabColors.SurfaceHigh)
+                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .testTag("env-name-tooltip-$envName"),
+                ) {
+                    Text(
+                        text = envName,
+                        color = ReqLabColors.OnSurface,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
         Box(modifier = Modifier.width(24.dp)) {
             IconButton(
                 onClick = { showMenu = true },

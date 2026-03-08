@@ -143,6 +143,8 @@ class RequestTabState(
     name: String = "Untitled",
     method: HttpMethodType = HttpMethodType.GET,
     url: String = "",
+    val collectionName: String? = null,
+    val folderPath: List<String> = emptyList(),
 ) {
     val requestId: String get() = id
 
@@ -425,9 +427,32 @@ class AppState(openDefaultTab: Boolean = true) {
             selectedRequestId = requestId
             return
         }
-        openTabs.add(RequestTabState(id = requestId, name = name, method = method, url = url))
+        var cName: String? = null
+        val fPath = mutableListOf<String>()
+        var found = false
+        for (c in collections) {
+            if (findPathRecursive(c, requestId, fPath)) {
+                cName = c.name
+                found = true
+                break
+            }
+        }
+        val pathWithoutNode = if (found && fPath.isNotEmpty()) fPath.dropLast(1) else emptyList()
+        openTabs.add(RequestTabState(id = requestId, name = name, method = method, url = url, collectionName = cName, folderPath = pathWithoutNode))
         activeTabIndex = openTabs.size - 1
         selectedRequestId = requestId
+    }
+
+    private fun findPathRecursive(node: CollectionNode, targetId: String, path: MutableList<String>): Boolean {
+        if (node.id == targetId) return true
+        if (node.isFolder) {
+            path.add(node.name)
+            for (child in node.children) {
+                if (findPathRecursive(child, targetId, path)) return true
+            }
+            path.removeAt(path.size - 1)
+        }
+        return false
     }
 
     fun closeTab(index: Int) {
@@ -528,9 +553,30 @@ class AppState(openDefaultTab: Boolean = true) {
         // Always select the request in the sidebar, even if it isn't
         // currently visible inside a collection (Issue 2 fix).
         selectedRequestId = requestId
+
+        // Also switch the active tab to this request so the sidebar
+        // selection stays in sync with the tab bar (the LaunchedEffect
+        // in MainScreen sets selectedRequestId = activeTab?.id).
+        val tabIdx = openTabs.indexOfFirst { it.id == requestId }
+        if (tabIdx >= 0) activeTabIndex = tabIdx
+
         if (expandAncestorsForRequest(collections, requestId)) {
             sidebarScrollToRequestId = requestId
             notifyCollectionsChanged()
+        }
+    }
+
+    /**
+     * Syncs the sidebar to the current active tab: sets [selectedRequestId],
+     * expands ancestor folders, and sets the scroll target.
+     * Called on startup after tab + workspace restoration, and whenever the
+     * active tab changes.
+     */
+    fun syncSidebarToActiveTab() {
+        val tab = activeTab ?: return
+        selectedRequestId = tab.id
+        if (expandAncestorsForRequest(collections, tab.id)) {
+            sidebarScrollToRequestId = tab.id
         }
     }
 

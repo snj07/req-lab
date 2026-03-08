@@ -44,6 +44,8 @@ object TabsRepository {
                         put("name",        tab.name)
                         put("method",      tab.method.name)
                         put("url",         tab.url)
+                        put("collectionName", tab.collectionName ?: "")
+                        put("folderPath", buildJsonArray { tab.folderPath.forEach { add(JsonPrimitive(it)) } })
                         put("bodyType",    tab.bodyType.name)
                         put("bodyContent", tab.bodyContent)
                         put("authType",    tab.authType.name)
@@ -86,11 +88,40 @@ object TabsRepository {
             state.openTabs.clear()
             tabsJson.forEach { el ->
                 val obj = el.jsonObject
+                
+                val savedId = obj["id"]?.jsonPrimitive?.content ?: return@forEach
+                val parsedCollectionName = obj["collectionName"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() }
+                val parsedFolderPath = obj["folderPath"]?.jsonArray?.mapNotNull { it.jsonPrimitive.content } ?: emptyList()
+                val reqName = obj["name"]?.jsonPrimitive?.content ?: "Untitled"
+                
+                // Find matching request node mapped to the newly generated UUIDs
+                var realId = savedId
+                if (parsedCollectionName != null) {
+                    val coll = state.collections.find { it.name == parsedCollectionName }
+                    if (coll != null) {
+                        var current: com.reqlab.ui.shared.state.CollectionNode = coll
+                        for (folder in parsedFolderPath) {
+                            val next = current.children.find { it.name == folder && it.isFolder }
+                            if (next != null) {
+                                current = next
+                            } else {
+                                break
+                            }
+                        }
+                        val matchingReq = current.children.find { !it.isFolder && it.name == reqName }
+                        if (matchingReq != null) {
+                            realId = matchingReq.id
+                        }
+                    }
+                }
+
                 val tab = RequestTabState(
-                    id     = obj["id"]?.jsonPrimitive?.content ?: return@forEach,
-                    name   = obj["name"]?.jsonPrimitive?.content   ?: "Untitled",
+                    id     = realId,
+                    name   = reqName,
                     method = safeEnum(obj["method"]?.jsonPrimitive?.content, HttpMethodType.GET),
                     url    = obj["url"]?.jsonPrimitive?.content    ?: "",
+                    collectionName = parsedCollectionName,
+                    folderPath = parsedFolderPath
                 )
                 tab.bodyType    = safeEnum(obj["bodyType"]?.jsonPrimitive?.content, BodyType.JSON)
                 tab.bodyContent = obj["bodyContent"]?.jsonPrimitive?.content ?: ""

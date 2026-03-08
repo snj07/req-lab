@@ -280,4 +280,86 @@ class AppStateCollectionTest {
 
         assertEquals("r2", state.sidebarScrollToRequestId)
     }
+
+    // ── Issue 1: Show in Sidebar switches active tab ──────────────
+
+    @Test
+    fun revealRequestInSidebar_switches_active_tab_to_matching_request() {
+        val state = AppState()
+        // Open two requests from collections as tabs
+        state.openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+        state.openRequest(requestId = "r4", name = "Login", method = HttpMethodType.POST, url = "{{baseUrl}}/auth/login")
+        // Active tab is now r4 (the last opened)
+        assertEquals("r4", state.activeTab?.id)
+
+        // Reveal r1 in sidebar — must also switch the active tab
+        state.revealRequestInSidebar("r1")
+
+        assertEquals("r1", state.selectedRequestId)
+        assertEquals("r1", state.activeTab?.id)
+    }
+
+    // ── Issue 3: syncSidebarToActiveTab after restoration ─────────
+
+    @Test
+    fun syncSidebarToActiveTab_sets_selectedRequestId_and_expands_ancestors() {
+        val state = AppState()
+        // Simulate restored state: tab open for r1, ancestors collapsed
+        state.openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+        state.collectionExpandedState["c1"] = false
+        state.selectedRequestId = null
+
+        state.syncSidebarToActiveTab()
+
+        assertEquals("r1", state.selectedRequestId)
+        assertTrue(state.collectionExpandedState["c1"] == true, "Parent folder should be expanded")
+    }
+
+    @Test
+    fun syncSidebarToActiveTab_does_nothing_when_no_tabs_open() {
+        val state = AppState(openDefaultTab = false)
+        state.selectedRequestId = null
+
+        state.syncSidebarToActiveTab()
+
+        assertNull(state.selectedRequestId)
+    }
+
+    @Test
+    fun tab_switch_syncs_sidebar_selection() {
+        val state = AppState(openDefaultTab = false)
+        state.openRequest(requestId = "r1", name = "A", method = HttpMethodType.GET, url = "u1")
+        state.openRequest(requestId = "r4", name = "B", method = HttpMethodType.POST, url = "u2")
+
+        // Switch to first tab (r1)
+        state.activeTabIndex = 0
+        state.syncSidebarToActiveTab()
+
+        assertEquals("r1", state.selectedRequestId)
+
+        // Switch to second tab (r4)
+        state.activeTabIndex = 1
+        state.syncSidebarToActiveTab()
+
+        assertEquals("r4", state.selectedRequestId)
+    }
+
+    // ── Workspace restoration: restored tab IDs match collection IDs ──
+
+    @Test
+    fun restored_tab_id_matches_collection_node_id() {
+        // Simulate: TabsRepository restores a tab with id "r1",
+        // WorkspaceRepository restores collections containing node id "r1".
+        // After syncSidebarToActiveTab, sidebar should highlight it.
+        val state = AppState(openDefaultTab = false)
+        // Manually add tab as TabsRepository.load would
+        state.openTabs.add(RequestTabState(id = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users"))
+        state.activeTabIndex = 0
+        // Collections already have r1 from the default AppState collections
+        // Now sync
+        state.syncSidebarToActiveTab()
+
+        assertEquals("r1", state.selectedRequestId)
+        assertEquals("r1", state.sidebarScrollToRequestId)
+    }
 }

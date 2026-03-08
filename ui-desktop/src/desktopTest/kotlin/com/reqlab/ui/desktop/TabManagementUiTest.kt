@@ -286,7 +286,7 @@ class TabManagementUiTest {
         composeRule.mainClock.advanceTimeBy(500)
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("request-name-tooltip-r1", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("sidebar-tooltip", useUnmergedTree = true).assertIsDisplayed()
     }
 
     // ── Issue 1: Closing last tab shows empty view ─────────────────
@@ -358,5 +358,74 @@ class TabManagementUiTest {
         composeRule.onNodeWithTag("dirty-close-dialog").assertIsDisplayed()
         // Tab must still be open while dialog is visible
         assertEquals(1, state.openTabs.size)
+    }
+
+    // ── Issue 1: Show in Sidebar selects request ─────────────────
+
+    @Test
+    fun show_in_sidebar_selects_request_and_switches_tab() {
+        val state = AppState().apply {
+            // Open two collection requests as tabs
+            openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+            openRequest(requestId = "r4", name = "Login", method = HttpMethodType.POST, url = "{{baseUrl}}/auth/login")
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        // Active tab should be r4 (last opened)
+        assertEquals("r4", state.activeTab?.id)
+
+        // Right-click the first tab to get context menu
+        val r1TabIdx = state.openTabs.indexOfFirst { it.id == "r1" }
+        composeRule.onNodeWithTag("tab-chip-r1", useUnmergedTree = true).performMouseInput { rightClick() }
+        composeRule.waitForIdle()
+
+        // Click "Show in Sidebar"
+        composeRule.onNodeWithText("Show in Sidebar").performClick()
+        composeRule.waitForIdle()
+
+        // After Show in Sidebar, both active tab and sidebar selection must point to r1
+        assertEquals("r1", state.selectedRequestId)
+        assertEquals("r1", state.activeTab?.id)
+    }
+
+    // ── Issue 1: Switching tabs updates sidebar selection ──────────
+
+    @Test
+    fun switching_tabs_updates_sidebar_selection() {
+        val state = AppState().apply {
+            openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "u1")
+            openRequest(requestId = "r4", name = "Login", method = HttpMethodType.POST, url = "u2")
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        // Click the first tab
+        composeRule.onNodeWithTag("tab-chip-r1", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertEquals("r1", state.selectedRequestId)
+
+        // Click the second tab
+        composeRule.onNodeWithTag("tab-chip-r4", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertEquals("r4", state.selectedRequestId)
+    }
+
+    // ── Issue 3: Sidebar highlights active tab on startup ─────────
+
+    @Test
+    fun sidebar_highlights_request_matching_active_tab() {
+        val state = AppState().apply {
+            openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+            // Simulate what startup does
+            syncSidebarToActiveTab()
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        // The selected indicator dot should be present for r1
+        composeRule.onNodeWithTag("selected-request-indicator-r1", useUnmergedTree = true).assertExists()
     }
 }

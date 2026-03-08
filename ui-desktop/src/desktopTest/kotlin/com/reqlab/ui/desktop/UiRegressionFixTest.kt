@@ -185,7 +185,7 @@ class UiRegressionFixTest {
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
-        composeRule.onAllNodesWithTag("request-name-tooltip-$requestId", useUnmergedTree = true)
+        composeRule.onAllNodesWithTag("sidebar-tooltip", useUnmergedTree = true)
             .assertCountEquals(0)
     }
 

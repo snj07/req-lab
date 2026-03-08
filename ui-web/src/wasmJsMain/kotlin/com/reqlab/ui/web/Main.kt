@@ -16,8 +16,9 @@ fun main() {
         val state = remember {
             AppState(openDefaultTab = false).also {
                 SettingsRepository.load(it.settings)
-                TabsRepository.load(it)
-                WorkspaceRepository.load(it)
+                WorkspaceRepository.load(it)   // collections first
+                TabsRepository.load(it)         // IDs resolved against loaded collections
+                it.syncSidebarToActiveTab()
             }
         }
         ReqLabTheme(appTheme = state.settings.theme) {

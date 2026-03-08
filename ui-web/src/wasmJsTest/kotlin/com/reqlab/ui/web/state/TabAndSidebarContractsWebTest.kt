@@ -1,6 +1,8 @@
 package com.reqlab.ui.web.state
 
+import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.RequestTabState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -91,5 +93,72 @@ class TabAndSidebarContractsWebTest {
         state.revealRequestInSidebar("r1")
 
         assertTrue(state.collectionExpandedState["c1"] == true)
+    }
+
+    // ── Issue 1 (new): Show in Sidebar switches active tab ──────────
+
+    @Test
+    fun revealRequestInSidebar_switches_active_tab_to_matching_request_on_web() {
+        val state = AppState()
+        state.openRequest(requestId = "r1", name = "A", method = HttpMethodType.GET, url = "u1")
+        state.openRequest(requestId = "r4", name = "B", method = HttpMethodType.POST, url = "u2")
+        assertEquals("r4", state.activeTab?.id)
+
+        state.revealRequestInSidebar("r1")
+
+        assertEquals("r1", state.selectedRequestId)
+        assertEquals("r1", state.activeTab?.id)
+    }
+
+    // ── Issue 3 (new): syncSidebarToActiveTab ───────────────────────
+
+    @Test
+    fun syncSidebarToActiveTab_sets_selectedRequestId_and_expands_ancestors_on_web() {
+        val state = AppState()
+        state.openRequest(requestId = "r1", name = "A", method = HttpMethodType.GET, url = "u1")
+        state.collectionExpandedState["c1"] = false
+        state.selectedRequestId = null
+
+        state.syncSidebarToActiveTab()
+
+        assertEquals("r1", state.selectedRequestId)
+        assertTrue(state.collectionExpandedState["c1"] == true)
+    }
+
+    @Test
+    fun syncSidebarToActiveTab_does_nothing_when_no_tabs_open_on_web() {
+        val state = AppState(openDefaultTab = false)
+        state.selectedRequestId = null
+
+        state.syncSidebarToActiveTab()
+
+        assertNull(state.selectedRequestId)
+    }
+
+    @Test
+    fun tab_switch_syncs_sidebar_selection_on_web() {
+        val state = AppState(openDefaultTab = false)
+        state.openRequest(requestId = "r1", name = "A", method = HttpMethodType.GET, url = "u1")
+        state.openRequest(requestId = "r4", name = "B", method = HttpMethodType.POST, url = "u2")
+
+        state.activeTabIndex = 0
+        state.syncSidebarToActiveTab()
+        assertEquals("r1", state.selectedRequestId)
+
+        state.activeTabIndex = 1
+        state.syncSidebarToActiveTab()
+        assertEquals("r4", state.selectedRequestId)
+    }
+
+    @Test
+    fun restored_tab_id_matches_collection_node_id_on_web() {
+        val state = AppState(openDefaultTab = false)
+        state.openTabs.add(RequestTabState(id = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users"))
+        state.activeTabIndex = 0
+
+        state.syncSidebarToActiveTab()
+
+        assertEquals("r1", state.selectedRequestId)
+        assertEquals("r1", state.sidebarScrollToRequestId)
     }
 }

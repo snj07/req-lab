@@ -159,12 +159,14 @@ fun Modifier.draggableNoSlop(
             val event = awaitPointerEvent()
             when (event.type) {
                 PointerEventType.Press -> {
-                    // Mark the start — no slop waiting.
-                    event.changes.forEach { it.consume() }
+                    // Do not aggressively consume Press, otherwise children
+                    // (like text fields or buttons) won't get clicks.
+                    // event.changes.forEach { it.consume() }
                 }
                 PointerEventType.Move -> {
                     event.changes.forEach { change ->
-                        if (change.pressed) {
+                        // Only drag if no child has consumed the event (e.g. scrolling or clicking)
+                        if (change.pressed && !change.isConsumed) {
                             val dx = change.position.x - change.previousPosition.x
                             val dy = change.position.y - change.previousPosition.y
                             if (dx != 0f || dy != 0f) {

@@ -27,6 +27,8 @@ kotlin {
         val wasmJsTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
+                @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+                implementation(compose.uiTest)
             }
         }
     }
