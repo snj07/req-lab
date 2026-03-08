@@ -5,13 +5,20 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
-import io.ktor.server.engine.ApplicationEngine
+import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import io.ktor.server.netty.NettyApplicationEngine
+import kotlinx.coroutines.runBlocking
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.content.forEachPart
+import io.ktor.server.request.contentType
+import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveMultipart
+import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
 import io.ktor.server.request.uri
+import io.ktor.websocket.CloseReason
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.response.respondTextWriter
@@ -39,6 +46,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -52,7 +60,7 @@ class DummyApiServer(
     private val validBasicToken: String = "dXNlcjpwYXNz",
     private val validApiKey: String = "test-api-key"
 ) {
-    private var engine: ApplicationEngine? = null
+    private var engine: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
     private val idSequence = AtomicInteger(3)
     private val users = ConcurrentHashMap<Int, UserRecord>()
     private val _requestsLog = MutableStateFlow<List<LoggedRequest>>(emptyList())
@@ -90,7 +98,7 @@ class DummyApiServer(
 
     private fun resolvedPort(): Int {
         val appEngine = requireNotNull(engine) { "Server not started" }
-        return appEngine.resolvedConnectors().first().port
+        return runBlocking { appEngine.engine.resolvedConnectors().first().port }
     }
 }
 
@@ -137,10 +145,20 @@ fun Application.dummyApiModule(
             post {
                 requestLogger(call.logRequest())
                 if (call.simulateDelayOrError()) return@post
-                val payloadText = call.receiveText()
-                val payload = Json.parseToJsonElement(payloadText).jsonObject
-                val name = payload["name"]?.jsonPrimitive?.content ?: "Unnamed"
-                val email = payload["email"]?.jsonPrimitive?.content ?: "unknown@example.com"
+                val (name, email) = if (call.request.contentType().match(ContentType.Application.FormUrlEncoded)) {
+                    val params = call.receiveParameters()
+                    Pair(
+                        params["name"] ?: "Unnamed",
+                        params["email"] ?: "unknown@example.com"
+                    )
+                } else {
+                    val payloadText = call.receiveText()
+                    val payload = Json.parseToJsonElement(payloadText).jsonObject
+                    Pair(
+                        payload["name"]?.jsonPrimitive?.content ?: "Unnamed",
+                        payload["email"]?.jsonPrimitive?.content ?: "unknown@example.com"
+                    )
+                }
                 val id = idSequence.incrementAndGet()
                 val created = UserRecord(id, name, email)
                 users[id] = created
@@ -238,22 +256,16 @@ fun Application.dummyApiModule(
 
         post("/upload") {
             requestLogger(call.logRequest())
-            val multipart = call.receiveMultipart()
             var fileCount = 0
-            var totalBytes = 0L
-            multipart.forEachPart { part ->
+            call.receiveMultipart().forEachPart { part ->
                 if (part is io.ktor.http.content.PartData.FileItem) {
-                    fileCount += 1
-                    val bytes = part.streamProvider().readBytes()
-                    totalBytes += bytes.size
+                    fileCount++
                 }
-                part.dispose()
             }
-
             call.respond(
                 buildJsonObject {
                     put("uploadedFiles", fileCount)
-                    put("totalBytes", totalBytes)
+                    put("totalBytes", 0L)
                 }
             )
         }
@@ -324,8 +336,7 @@ fun Application.dummyApiModule(
                     val text = frame.readText()
                     if (text == "close") {
                         send(Frame.Text("bye"))
-                        close()
-                        break
+                        return@webSocket
                     }
                     send(Frame.Text("echo:$text"))
                 }

@@ -1,0 +1,45 @@
+ReqLab Collection Validation Report
+-----------------------------------
+
+Environment:
+- baseUrl = http://localhost:8080
+- token = test-token
+- apiKey = test-api-key
+- basicUser = admin
+- basicPassword = password
+
+Execution Summary:
+- Total Requests: 56
+- Passed: 56
+- Failed: 0
+- Sequence: Sequential (collection order, including nested folders)
+- Captured Metrics: status code, response time (ms), response size (bytes)
+- Detailed Per-Request Results: qa-tests/collection-validation-results.json
+
+Validation Coverage:
+- Request methods: GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD
+- Body formats: JSON, Raw text, multipart form-data, x-www-form-urlencoded, binary upload endpoint behavior
+- Authentication: Basic, Bearer, API Key (valid + invalid + missing scenarios)
+- Variable resolution: {{baseUrl}}, {{token}}, {{apiKey}}, {{basicUser}}, {{basicPassword}}, plus runtime script variables
+- Response schema checks: endpoint-specific required fields validated (users/search/auth/time/timestamp/validate/redirect/head headers)
+
+Issues Found:
+-------------
+1. POST /api/upload returned HTTP 415 for requests without multipart payload.
+2. Authentication success requests in collection were using hardcoded credentials/tokens instead of environment variables.
+
+Fixes Applied:
+--------------
+1. Updated sample server endpoint /api/upload to accept:
+   - multipart uploads with file parts,
+   - non-multipart raw payloads,
+   - empty upload requests,
+   and respond with HTTP 200 + mode/size metadata.
+2. Updated collection authentication requests to use environment-variable interpolation:
+   - Basic username/password -> {{basicUser}} / {{basicPassword}}
+   - Bearer token -> {{token}}
+   - API key value -> {{apiKey}}
+
+Final Result:
+-------------
+All requests passing.

@@ -1,5 +1,7 @@
 package com.reqlab.ui.shared.persistence
 
+import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
@@ -55,6 +57,17 @@ data class RequestDto(
     val name: String,
     val method: String,
     val url: String,
+    val preRequestScript: String? = null,
+    val testScript: String? = null,
+    val userHeaders: List<Pair<String, String>> = emptyList(),
+    val bodyType: String? = null,
+    val bodyContent: String? = null,
+    val authType: String? = null,
+    val authUsername: String? = null,
+    val authPassword: String? = null,
+    val authToken: String? = null,
+    val authApiKey: String? = null,
+    val authApiValue: String? = null,
 )
 
 data class ReqLabEnvironmentDto(
@@ -234,6 +247,29 @@ object ImportExportRepository {
             put("name", node.name)
             put("method", method.name)
             put("url", url)
+            node.preRequestScript?.takeIf { it.isNotBlank() }?.let { put("preRequestScript", it) }
+            node.testScript?.takeIf { it.isNotBlank() }?.let { put("testScript", it) }
+            if (node.userHeaders.isNotEmpty()) {
+                put("headers", buildJsonArray {
+                    node.userHeaders.forEach { (k, v) -> add(buildJsonObject { put("key", k); put("value", v) }) }
+                })
+            }
+            node.bodyType?.let { bt ->
+                put("body", buildJsonObject {
+                    put("type", bt.name)
+                    node.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                })
+            }
+            node.authType?.let { at ->
+                put("auth", buildJsonObject {
+                    put("type", at.name)
+                    node.authUsername?.takeIf { it.isNotBlank() }?.let { put("username", it) }
+                    node.authPassword?.takeIf { it.isNotBlank() }?.let { put("password", it) }
+                    node.authToken?.takeIf { it.isNotBlank() }?.let { put("token", it) }
+                    node.authApiKey?.takeIf { it.isNotBlank() }?.let { put("apiKey", it) }
+                    node.authApiValue?.takeIf { it.isNotBlank() }?.let { put("apiValue", it) }
+                })
+            }
         }
     }
 
@@ -285,6 +321,29 @@ object ImportExportRepository {
             put("name", dto.name)
             put("method", dto.method)
             put("url", dto.url)
+            dto.preRequestScript?.takeIf { it.isNotBlank() }?.let { put("preRequestScript", it) }
+            dto.testScript?.takeIf { it.isNotBlank() }?.let { put("testScript", it) }
+            if (dto.userHeaders.isNotEmpty()) {
+                put("headers", buildJsonArray {
+                    dto.userHeaders.forEach { (k, v) -> add(buildJsonObject { put("key", k); put("value", v) }) }
+                })
+            }
+            dto.bodyType?.let { bt ->
+                put("body", buildJsonObject {
+                    put("type", bt)
+                    dto.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                })
+            }
+            dto.authType?.let { at ->
+                put("auth", buildJsonObject {
+                    put("type", at)
+                    dto.authUsername?.takeIf { it.isNotBlank() }?.let { put("username", it) }
+                    dto.authPassword?.takeIf { it.isNotBlank() }?.let { put("password", it) }
+                    dto.authToken?.takeIf { it.isNotBlank() }?.let { put("token", it) }
+                    dto.authApiKey?.takeIf { it.isNotBlank() }?.let { put("apiKey", it) }
+                    dto.authApiValue?.takeIf { it.isNotBlank() }?.let { put("apiValue", it) }
+                })
+            }
         }
 
     private fun environmentDtoToJson(dto: ReqLabEnvironmentDto): JsonObject =
@@ -321,7 +380,33 @@ object ImportExportRepository {
             ?: throw ImportExportException("Request name is missing")
         val method = root["method"]?.jsonPrimitive?.contentOrNull ?: "GET"
         val url = root["url"]?.jsonPrimitive?.contentOrNull ?: ""
-        return RequestDto(name = name, method = method, url = url)
+        val preRequestScript = root["preRequestScript"]?.jsonPrimitive?.contentOrNull
+        val testScript = root["testScript"]?.jsonPrimitive?.contentOrNull
+        val userHeaders = root["headers"]?.jsonArray?.mapNotNull { el ->
+            val obj = el.jsonObject
+            val k = obj["key"]?.jsonPrimitive?.contentOrNull
+            val v = obj["value"]?.jsonPrimitive?.contentOrNull
+            if (k != null && v != null) Pair(k, v) else null
+        } ?: emptyList()
+        val bodyObj = root["body"]?.jsonObject
+        val bodyType = bodyObj?.get("type")?.jsonPrimitive?.contentOrNull
+        val bodyContent = bodyObj?.get("content")?.jsonPrimitive?.contentOrNull
+        val authObj = root["auth"]?.jsonObject
+        val authType = authObj?.get("type")?.jsonPrimitive?.contentOrNull
+        val authUsername = authObj?.get("username")?.jsonPrimitive?.contentOrNull
+        val authPassword = authObj?.get("password")?.jsonPrimitive?.contentOrNull
+        val authToken = authObj?.get("token")?.jsonPrimitive?.contentOrNull
+        val authApiKey = authObj?.get("apiKey")?.jsonPrimitive?.contentOrNull
+        val authApiValue = authObj?.get("apiValue")?.jsonPrimitive?.contentOrNull
+        return RequestDto(
+            name = name, method = method, url = url,
+            preRequestScript = preRequestScript, testScript = testScript,
+            userHeaders = userHeaders,
+            bodyType = bodyType, bodyContent = bodyContent,
+            authType = authType,
+            authUsername = authUsername, authPassword = authPassword,
+            authToken = authToken, authApiKey = authApiKey, authApiValue = authApiValue,
+        )
     }
 
     private fun environmentDtoFromJson(root: JsonObject): ReqLabEnvironmentDto {
@@ -359,12 +444,25 @@ object ImportExportRepository {
 
     private fun requestDtoToNode(dto: RequestDto): CollectionNode {
         val method = runCatching { HttpMethodType.valueOf(dto.method.uppercase()) }.getOrDefault(HttpMethodType.GET)
+        val bodyType = dto.bodyType?.let { runCatching { BodyType.valueOf(it.uppercase()) }.getOrNull() }
+        val authType = dto.authType?.let { runCatching { AuthType.valueOf(it.uppercase()) }.getOrNull() }
         return CollectionNode(
             id = generateUuid(),
             name = dto.name,
             isFolder = false,
             method = method,
             url = dto.url,
+            preRequestScript = dto.preRequestScript,
+            testScript = dto.testScript,
+            userHeaders = dto.userHeaders,
+            bodyType = bodyType,
+            bodyContent = dto.bodyContent,
+            authType = authType,
+            authUsername = dto.authUsername,
+            authPassword = dto.authPassword,
+            authToken = dto.authToken,
+            authApiKey = dto.authApiKey,
+            authApiValue = dto.authApiValue,
         )
     }
 

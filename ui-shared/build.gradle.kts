@@ -23,6 +23,7 @@ kotlin {
             api(project(":core-model"))
             api(project(":core-network"))
             api(project(":feature-requests"))
+            implementation(project(":core-scripting"))
             implementation(libs.coroutines.core)
             implementation(libs.serialization.json)
             implementation(libs.kotlinx.datetime)

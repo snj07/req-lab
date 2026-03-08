@@ -60,7 +60,8 @@ fun RequestBar(
     isLoading: Boolean,
     onSend: () -> Unit,
     onSave: () -> Unit,
-    onCopyCurl: () -> Unit,
+    /** Each pair is a label (e.g. "cURL (resolved)") and the action to copy that format. */
+    copyFormats: List<Pair<String, () -> Unit>> = emptyList(),
     retryCount: Int,
     retryDelayMs: Long,
     onRetryCountChanged: (Int) -> Unit,
@@ -110,7 +111,7 @@ fun RequestBar(
             onRetryCountChanged = onRetryCountChanged,
             onRetryDelayChanged = onRetryDelayChanged,
         )
-        CopyCurlButton(isLoading = isLoading, onClick = onCopyCurl)
+        CopyCurlButton(isLoading = isLoading, copyFormats = copyFormats)
     }
 }
 
@@ -219,21 +220,39 @@ private fun SaveButton(isLoading: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CopyCurlButton(isLoading: Boolean, onClick: () -> Unit) {
+private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<Pair<String, () -> Unit>>) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    var expanded by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isHovered) ReqLabColors.SurfaceHigh else ReqLabColors.SurfaceContainer)
-            .hoverable(interactionSource)
-            .clickable(enabled = !isLoading, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp)
-            .testTag("copy-curl-button"),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Icons.Default.ContentCopy, contentDescription = "Copy cURL", tint = ReqLabColors.OnSurface, modifier = Modifier.size(15.dp))
+    Box {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isHovered) ReqLabColors.SurfaceHigh else ReqLabColors.SurfaceContainer)
+                .hoverable(interactionSource)
+                .clickable(enabled = !isLoading) {
+                    if (copyFormats.size == 1) copyFormats.first().second()
+                    else if (copyFormats.isNotEmpty()) expanded = true
+                    else expanded = true
+                }
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .testTag("copy-curl-button"),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.ContentCopy, contentDescription = "Copy as…", tint = ReqLabColors.OnSurface, modifier = Modifier.size(15.dp))
+        }
+
+        if (copyFormats.isNotEmpty()) {
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                copyFormats.forEach { (label, action) ->
+                    DropdownMenuItem(
+                        text = { Text(label, fontSize = 13.sp) },
+                        onClick = { action(); expanded = false },
+                    )
+                }
+            }
+        }
     }
 }
 

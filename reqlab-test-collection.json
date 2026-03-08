@@ -15,22 +15,34 @@
                 {
                     "name": "POST Create User",
                     "method": "POST",
-                    "url": "{{baseUrl}}/api/users"
+                    "url": "{{baseUrl}}/api/users",
+                    "body": {
+                        "type": "JSON",
+                        "content": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\"\n}"
+                    }
                 },
                 {
-                    "name": "PUT Update User",
+                    "name": "PUT Replace User 1",
                     "method": "PUT",
-                    "url": "{{baseUrl}}/api/users/1"
+                    "url": "{{baseUrl}}/api/users/1",
+                    "body": {
+                        "type": "JSON",
+                        "content": "{\n  \"name\": \"Alice Updated\",\n  \"email\": \"alice.updated@example.com\"\n}"
+                    }
                 },
                 {
-                    "name": "PATCH Patch User",
+                    "name": "PATCH Update User 2",
                     "method": "PATCH",
-                    "url": "{{baseUrl}}/api/users/1"
+                    "url": "{{baseUrl}}/api/users/2",
+                    "body": {
+                        "type": "JSON",
+                        "content": "{\n  \"name\": \"Bob Updated\"\n}"
+                    }
                 },
                 {
-                    "name": "DELETE Delete User",
+                    "name": "DELETE User 3",
                     "method": "DELETE",
-                    "url": "{{baseUrl}}/api/users/1"
+                    "url": "{{baseUrl}}/api/users/3"
                 },
                 {
                     "name": "OPTIONS Users",
@@ -38,7 +50,7 @@
                     "url": "{{baseUrl}}/api/users"
                 },
                 {
-                    "name": "HEAD Users",
+                    "name": "HEAD Users (check X-Total-Count header)",
                     "method": "HEAD",
                     "url": "{{baseUrl}}/api/users"
                 }
@@ -49,19 +61,29 @@
             "folders": [],
             "requests": [
                 {
-                    "name": "Search – q, page, limit",
+                    "name": "Search - q, page, limit",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/search?q=test&page=1&limit=10"
                 },
                 {
-                    "name": "Search – page 2",
+                    "name": "Search - page 2, larger limit",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/search?q=hello&page=2&limit=25"
                 },
                 {
-                    "name": "Search – no params",
+                    "name": "Search - no params (defaults)",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/search"
+                },
+                {
+                    "name": "Search - empty query string",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/search?q=&page=1&limit=5"
+                },
+                {
+                    "name": "Search - multiple custom params",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/search?q=kotlin&page=1&limit=3&sort=name&order=asc"
                 }
             ]
         },
@@ -73,6 +95,24 @@
                     "name": "Echo Request Headers",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/echo-headers"
+                },
+                {
+                    "name": "Echo Headers - with custom X-Client-Id",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/echo-headers",
+                    "headers": [
+                        {"key": "X-Client-Id", "value": "reqlab-client-001"}
+                    ]
+                },
+                {
+                    "name": "Echo Headers - with Accept and X-Request-Id",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/echo-headers",
+                    "headers": [
+                        {"key": "Accept", "value": "application/json"},
+                        {"key": "X-Request-Id", "value": "req-12345"},
+                        {"key": "X-Trace-Id", "value": "trace-abcdef"}
+                    ]
                 }
             ]
         },
@@ -86,7 +126,20 @@
                         {
                             "name": "POST JSON Body",
                             "method": "POST",
-                            "url": "{{baseUrl}}/api/json"
+                            "url": "{{baseUrl}}/api/json",
+                            "body": {
+                                "type": "JSON",
+                                "content": "{\n  \"message\": \"Hello from ReqLab\",\n  \"timestamp\": 1711234567\n}"
+                            }
+                        },
+                        {
+                            "name": "POST JSON Body - nested object",
+                            "method": "POST",
+                            "url": "{{baseUrl}}/api/json",
+                            "body": {
+                                "type": "JSON",
+                                "content": "{\n  \"user\": {\n    \"name\": \"Alice\",\n    \"age\": 30\n  },\n  \"tags\": [\"kotlin\", \"api\", \"reqlab\"]\n}"
+                            }
                         }
                     ]
                 },
@@ -97,7 +150,11 @@
                         {
                             "name": "POST Raw Text",
                             "method": "POST",
-                            "url": "{{baseUrl}}/api/raw"
+                            "url": "{{baseUrl}}/api/raw",
+                            "body": {
+                                "type": "RAW_TEXT",
+                                "content": "Hello from ReqLab – this is a plain text request body."
+                            }
                         }
                     ]
                 },
@@ -108,7 +165,11 @@
                         {
                             "name": "POST Form Data (multipart)",
                             "method": "POST",
-                            "url": "{{baseUrl}}/api/form-data"
+                            "url": "{{baseUrl}}/api/form-data",
+                            "body": {
+                                "type": "FORM_DATA",
+                                "content": "name=Alice&role=tester&department=engineering"
+                            }
                         }
                     ]
                 },
@@ -119,7 +180,11 @@
                         {
                             "name": "POST URL Encoded",
                             "method": "POST",
-                            "url": "{{baseUrl}}/api/urlencoded"
+                            "url": "{{baseUrl}}/api/urlencoded",
+                            "body": {
+                                "type": "X_WWW_FORM_URLENCODED",
+                                "content": "username=alice&password=secret123&remember=true"
+                            }
                         }
                     ]
                 },
@@ -130,7 +195,11 @@
                         {
                             "name": "POST Binary File Upload",
                             "method": "POST",
-                            "url": "{{baseUrl}}/api/upload"
+                            "url": "{{baseUrl}}/api/upload",
+                            "body": {
+                                "type": "BINARY",
+                                "content": "ReqLabBinarySamplePayload"
+                            }
                         }
                     ]
                 }
@@ -145,7 +214,27 @@
                     "folders": [],
                     "requests": [
                         {
-                            "name": "GET – Basic Auth (admin:password)",
+                            "name": "GET Basic Auth (admin:password) - success",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/basic",
+                            "auth": {
+                                "type": "BASIC",
+                                "username": "{{basicUser}}",
+                                "password": "{{basicPassword}}"
+                            }
+                        },
+                        {
+                            "name": "GET Basic Auth (wrong password) - 401",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/basic",
+                            "auth": {
+                                "type": "BASIC",
+                                "username": "{{basicUser}}",
+                                "password": "wrongpassword"
+                            }
+                        },
+                        {
+                            "name": "GET Basic Auth (no header) - 401",
                             "method": "GET",
                             "url": "{{baseUrl}}/api/auth/basic"
                         }
@@ -156,7 +245,25 @@
                     "folders": [],
                     "requests": [
                         {
-                            "name": "GET – Bearer Token",
+                            "name": "GET Bearer Token (valid {{token}}) - success",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/bearer",
+                            "auth": {
+                                "type": "BEARER",
+                                "token": "{{token}}"
+                            }
+                        },
+                        {
+                            "name": "GET Bearer Token (wrong token) - 401",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/bearer",
+                            "auth": {
+                                "type": "BEARER",
+                                "token": "wrong-token-value"
+                            }
+                        },
+                        {
+                            "name": "GET Bearer Token (no header) - 401",
                             "method": "GET",
                             "url": "{{baseUrl}}/api/auth/bearer"
                         }
@@ -167,7 +274,27 @@
                     "folders": [],
                     "requests": [
                         {
-                            "name": "GET – API Key Header",
+                            "name": "GET API Key Header (valid {{apiKey}}) - success",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/apikey",
+                            "auth": {
+                                "type": "API_KEY",
+                                "apiKey": "X-API-Key",
+                                "apiValue": "{{apiKey}}"
+                            }
+                        },
+                        {
+                            "name": "GET API Key Header (wrong key) - 401",
+                            "method": "GET",
+                            "url": "{{baseUrl}}/api/auth/apikey",
+                            "auth": {
+                                "type": "API_KEY",
+                                "apiKey": "X-API-Key",
+                                "apiValue": "wrong-key-value"
+                            }
+                        },
+                        {
+                            "name": "GET API Key Header (missing) - 401",
                             "method": "GET",
                             "url": "{{baseUrl}}/api/auth/apikey"
                         }
@@ -184,6 +311,14 @@
                     "name": "GET Cookies (set + echo)",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/cookies"
+                },
+                {
+                    "name": "GET Cookies - resend cookies (add Cookie header manually)",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/cookies",
+                    "headers": [
+                        {"key": "Cookie", "value": "session=abc123; user=reqlab-tester"}
+                    ]
                 }
             ]
         },
@@ -192,12 +327,12 @@
             "folders": [],
             "requests": [
                 {
-                    "name": "302 Redirect",
+                    "name": "302 Redirect to /api/final",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/redirect"
                 },
                 {
-                    "name": "Redirect Target (Final)",
+                    "name": "Redirect Target /api/final (direct)",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/final"
                 }
@@ -228,9 +363,34 @@
                     "url": "{{baseUrl}}/api/error/404"
                 },
                 {
+                    "name": "405 Method Not Allowed",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/405"
+                },
+                {
+                    "name": "422 Unprocessable Entity",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/422"
+                },
+                {
+                    "name": "429 Too Many Requests",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/429"
+                },
+                {
                     "name": "500 Internal Server Error",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/error/500"
+                },
+                {
+                    "name": "502 Bad Gateway",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/502"
+                },
+                {
+                    "name": "503 Service Unavailable",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/error/503"
                 }
             ]
         },
@@ -250,9 +410,82 @@
             "folders": [],
             "requests": [
                 {
-                    "name": "Slow Response – 3 second delay",
+                    "name": "Slow Response - default 3s delay",
                     "method": "GET",
                     "url": "{{baseUrl}}/api/slow"
+                },
+                {
+                    "name": "Slow Response - custom 1s delay",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/slow?ms=1000"
+                },
+                {
+                    "name": "Slow Response - near-instant 100ms",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/slow?ms=100"
+                }
+            ]
+        },
+        {
+            "name": "Scripts & Tests",
+            "folders": [],
+            "requests": [
+                {
+                    "name": "Timestamp \u2013 pre-request captures server time",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/timestamp",
+                    "preRequestScript": "console.log(\"Fetching server timestamp\u2026\")",
+                    "testScript": "pm.test(\"Status is 200\", function() {\n    pm.expect(pm.response.code).to.equal(200)\n})\npm.test(\"Response has unix timestamp\", function() {\n    pm.expect(pm.response.json().unix).to.be.above(0)\n})\npm.test(\"Response has iso field\", function() {\n    pm.expect(pm.response.text()).to.include(\"iso\")\n})\npm.environment.set(\"serverTimestamp\", pm.response.json().unix)"
+                },
+                {
+                    "name": "Token \u2013 pre-request fetches auth token",
+                    "method": "POST",
+                    "url": "{{baseUrl}}/api/token",
+                    "body": {
+                        "type": "JSON",
+                        "content": "{\n  \"user\": \"alice\",\n  \"role\": \"admin\"\n}"
+                    },
+                    "preRequestScript": "pm.environment.set(\"requestUser\", \"alice\")\npm.environment.set(\"requestRole\", \"admin\")\nconsole.log(\"Requesting token for\", pm.environment.get(\"requestUser\"))",
+                    "testScript": "pm.test(\"Status is 200\", function() {\n    pm.expect(pm.response.code).to.equal(200)\n})\npm.test(\"Token is present in response\", function() {\n    pm.expect(pm.response.json().token).to.include(\"rl.\")\n})\npm.test(\"User matches request\", function() {\n    pm.expect(pm.response.json().user).to.equal(\"alice\")\n})\npm.environment.set(\"scriptToken\", pm.response.json().token)\nconsole.log(\"Stored token:\", pm.environment.get(\"scriptToken\"))"
+                },
+                {
+                    "name": "Protected \u2013 validate access with stored token",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/protected",
+                    "headers": [
+                        {"key": "X-Token", "value": "{{scriptToken}}"}
+                    ],
+                    "preRequestScript": "pm.environment.set(\"X-Token\", pm.environment.get(\"scriptToken\"))\nconsole.log(\"X-Token set from scriptToken:\", pm.environment.get(\"scriptToken\"))",
+                    "testScript": "pm.test(\"Status is 200 or 401\", function() {\n    pm.expect(pm.response.code).to.be.oneOf([200, 401])\n})\npm.test(\"Response body is valid JSON\", function() {\n    pm.expect(pm.response.text()).to.include(\"{\")\n})"
+                },
+                {
+                    "name": "Validate JSON Body \u2013 assert schema",
+                    "method": "POST",
+                    "url": "{{baseUrl}}/api/validate",
+                    "body": {
+                        "type": "JSON",
+                        "content": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\",\n  \"age\": 30,\n  \"city\": \"Springfield\"\n}"
+                    },
+                    "preRequestScript": "console.log(\"Sending JSON body for schema validation\")",
+                    "testScript": "pm.test(\"Status is 200\", function() {\n    pm.expect(pm.response.code).to.equal(200)\n})\npm.test(\"Body is valid JSON\", function() {\n    pm.expect(pm.response.json().valid).to.equal(true)\n})\npm.test(\"Field count is above 0\", function() {\n    pm.expect(pm.response.json().fieldCount).to.be.above(0)\n})\nconsole.log(\"Validated\", pm.response.json().fieldCount, \"fields\")"
+                },
+                {
+                    "name": "Echo Full \u2013 verify pre-request header injection",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/echo-full",
+                    "headers": [
+                        {"key": "X-Request-Id", "value": "{{X-Request-Id}}"},
+                        {"key": "X-Client", "value": "{{X-Client}}"}
+                    ],
+                    "preRequestScript": "pm.environment.set(\"X-Request-Id\", \"req-scripted\")\npm.environment.set(\"X-Client\", \"ReqLab-ScriptEngine\")\nconsole.log(\"Injecting X-Request-Id and X-Client via pre-request script\")",
+                    "testScript": "pm.test(\"Status is 200\", function() {\n    pm.expect(pm.response.code).to.equal(200)\n})\npm.test(\"Method is GET\", function() {\n    pm.expect(pm.response.json().method).to.equal(\"GET\")\n})\npm.test(\"Response has headers object\", function() {\n    pm.expect(pm.response.text()).to.include(\"headers\")\n})\nconsole.log(\"Echo path:\", pm.response.json().path)"
+                },
+                {
+                    "name": "User List \u2013 validate response structure",
+                    "method": "GET",
+                    "url": "{{baseUrl}}/api/users",
+                    "preRequestScript": "console.log(\"Fetching user list from\", pm.environment.get(\"baseUrl\"))",
+                    "testScript": "pm.test(\"Status is 200\", function() {\n    pm.expect(pm.response.code).to.equal(200)\n})\npm.test(\"Response has users array\", function() {\n    pm.expect(pm.response.text()).to.include(\"users\")\n})\npm.test(\"Method field is GET\", function() {\n    pm.expect(pm.response.json().method).to.equal(\"GET\")\n})\nconsole.log(\"User list loaded successfully\")"
                 }
             ]
         }

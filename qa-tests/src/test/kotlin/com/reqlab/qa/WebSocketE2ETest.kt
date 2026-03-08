@@ -3,9 +3,11 @@ package com.reqlab.qa
 import com.reqlab.testsupport.DummyApiServer
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -20,7 +22,9 @@ class WebSocketE2ETest {
     fun setUp() {
         server = DummyApiServer()
         server.start()
-        client = HttpClient(CIO)
+        client = HttpClient(CIO) {
+            install(WebSockets)
+        }
     }
 
     @AfterTest
@@ -30,7 +34,8 @@ class WebSocketE2ETest {
     }
 
     @Test
-    fun connect_send_receive_and_disconnect() = kotlinx.coroutines.test.runTest {
+    fun connect_send_receive_and_disconnect() {
+        runBlocking {
         val wsUrl = server.baseUrl().replace("http", "ws") + "/ws"
 
         withTimeout(5_000) {
@@ -46,6 +51,7 @@ class WebSocketE2ETest {
                 val goodbye = (incoming.receive() as Frame.Text).readText()
                 assertEquals("bye", goodbye)
             }
+        }
         }
     }
 }

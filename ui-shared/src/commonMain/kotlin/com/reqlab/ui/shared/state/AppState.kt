@@ -61,6 +61,18 @@ data class CollectionNode(
     val method: HttpMethodType? = null,
     val url: String? = null,
     val children: MutableList<CollectionNode> = mutableStateListOf(),
+    val preRequestScript: String? = null,
+    val testScript: String? = null,
+    // Request configuration populated from collection import
+    val userHeaders: List<Pair<String, String>> = emptyList(),
+    val bodyType: BodyType? = null,
+    val bodyContent: String? = null,
+    val authType: AuthType? = null,
+    val authUsername: String? = null,
+    val authPassword: String? = null,
+    val authToken: String? = null,
+    val authApiKey: String? = null,
+    val authApiValue: String? = null,
 )
 
 /** Mutable key-value pair used in param / header / variable editors. */
@@ -392,6 +404,22 @@ class AppState(openDefaultTab: Boolean = true) {
     fun activeVariableLayers(): List<Map<String, String>> =
         listOf(selectedEnvironment.toVariableMap())
 
+    /**
+     * Merges variables set by a pre-request or test script into the active environment.
+     * Existing variables with the same key are updated; new keys are appended.
+     */
+    fun mergeScriptVariables(vars: Map<String, String>) {
+        val env = selectedEnvironment
+        vars.forEach { (key, value) ->
+            val existing = env.variables.firstOrNull { it.key == key }
+            if (existing != null) {
+                existing.value = value
+            } else {
+                env.variables.add(MutableKeyValue(key = key, value = value))
+            }
+        }
+    }
+
     // ── settings ────────
     val settings = AppSettings()
 
@@ -438,7 +466,25 @@ class AppState(openDefaultTab: Boolean = true) {
             }
         }
         val pathWithoutNode = if (found && fPath.isNotEmpty()) fPath.dropLast(1) else emptyList()
-        openTabs.add(RequestTabState(id = requestId, name = name, method = method, url = url, collectionName = cName, folderPath = pathWithoutNode))
+        val node = findNodeById(collections, requestId)
+        val tab = RequestTabState(id = requestId, name = name, method = method, url = url, collectionName = cName, folderPath = pathWithoutNode)
+        node?.preRequestScript?.takeIf { it.isNotBlank() }?.let { tab.preRequestScript = it }
+        node?.testScript?.takeIf { it.isNotBlank() }?.let { tab.testScript = it }
+        // Populate body, headers, and auth from collection node
+        node?.bodyType?.let { tab.bodyType = it; tab.syncSystemHeaders() }
+        node?.bodyContent?.takeIf { it.isNotBlank() }?.let { tab.bodyContent = it }
+        node?.authType?.let { tab.authType = it }
+        node?.authUsername?.takeIf { it.isNotBlank() }?.let { tab.authUsername = it }
+        node?.authPassword?.takeIf { it.isNotBlank() }?.let { tab.authPassword = it }
+        node?.authToken?.takeIf { it.isNotBlank() }?.let { tab.authToken = it }
+        node?.authApiKey?.takeIf { it.isNotBlank() }?.let { tab.authApiKey = it }
+        node?.authApiValue?.takeIf { it.isNotBlank() }?.let { tab.authApiValue = it }
+        node?.userHeaders?.forEach { (k, v) ->
+            val existing = tab.headers.find { h -> h.key.equals(k, ignoreCase = true) }
+            if (existing != null) existing.value = v
+            else tab.headers.add(MutableKeyValue(k, v, kind = HeaderKind.USER))
+        }
+        openTabs.add(tab)
         activeTabIndex = openTabs.size - 1
         selectedRequestId = requestId
     }
@@ -453,6 +499,14 @@ class AppState(openDefaultTab: Boolean = true) {
             path.removeAt(path.size - 1)
         }
         return false
+    }
+
+    private fun findNodeById(nodes: List<CollectionNode>, id: String): CollectionNode? {
+        for (node in nodes) {
+            if (node.id == id) return node
+            if (node.isFolder) findNodeById(node.children, id)?.let { return it }
+        }
+        return null
     }
 
     fun closeTab(index: Int) {

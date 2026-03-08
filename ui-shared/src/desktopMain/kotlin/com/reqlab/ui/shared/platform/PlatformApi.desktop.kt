@@ -7,6 +7,7 @@ import java.awt.Cursor
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.io.File
+import java.util.Base64
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.UUID
@@ -40,6 +41,18 @@ actual fun pickFileForImport(onResult: (String) -> Unit) {
     if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
         runCatching { chooser.selectedFile.readText() }
             .onSuccess { onResult(it) }
+    }
+}
+
+actual fun pickBinaryFileForRequest(onResult: (PickedBinaryFile) -> Unit) {
+    val chooser = JFileChooser()
+    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+        val selected = chooser.selectedFile
+        runCatching { selected.readBytes() }
+            .onSuccess { bytes ->
+                val base64 = Base64.getEncoder().encodeToString(bytes)
+                onResult(PickedBinaryFile(name = selected.name, base64Content = base64))
+            }
     }
 }
 

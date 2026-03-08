@@ -72,7 +72,7 @@ fun RequestEditor(
             isLoading = tab.isLoading,
             onSend = onSend,
             onSave = onSave,
-            onCopyCurl = { copyToClipboard(buildCurlCommand(tab)) },
+            copyFormats = buildCopyFormats(tab, state),
             retryCount = tab.retryCount,
             retryDelayMs = tab.retryDelayMs,
             onRetryCountChanged = { tab.retryCount = it; markDirty() },
@@ -94,8 +94,8 @@ fun RequestEditor(
                     markDirty()
                 }
                 RequestEditorTab.HEADERS     -> KeyValueEditor(tab.headers, "header", state = state) { markDirty() }
-                RequestEditorTab.BODY        -> BodyEditor(tab) { markDirty() }
-                RequestEditorTab.AUTH        -> AuthEditor(tab) { markDirty() }
+                RequestEditorTab.BODY        -> BodyEditor(tab, state) { markDirty() }
+                RequestEditorTab.AUTH        -> AuthEditor(tab, state) { markDirty() }
                 RequestEditorTab.PRE_REQUEST -> ScriptEditor(
                     script          = tab.preRequestScript,
                     onScriptChanged = { tab.preRequestScript = it; markDirty() },
@@ -150,6 +150,21 @@ fun syncUrlFromParams(tab: RequestTabState) {
 
 private fun copyToClipboard(text: String) {
     runCatching { platformCopyToClipboard(text) }
+}
+
+/**
+ * Builds the list of (label, action) pairs shown in the copy-as dropdown.
+ * Variables from the active environment are resolved for "resolved" variants.
+ */
+private fun buildCopyFormats(tab: RequestTabState, state: AppState): List<Pair<String, () -> Unit>> {
+    val layers = state.activeVariableLayers()
+    return listOf(
+        "cURL (resolved)"        to { copyToClipboard(buildCurlCommand(tab, layers)) },
+        "cURL (raw template)"    to { copyToClipboard(buildCurlCommandRaw(tab)) },
+        "Python requests"        to { copyToClipboard(buildPythonCommand(tab, layers)) },
+        "HTTPie"                 to { copyToClipboard(buildHTTPieCommand(tab, layers)) },
+        "PowerShell"             to { copyToClipboard(buildPowerShellCommand(tab, layers)) },
+    )
 }
 
 // ── Editor Tab Bar ──────────────────────────────────────────────

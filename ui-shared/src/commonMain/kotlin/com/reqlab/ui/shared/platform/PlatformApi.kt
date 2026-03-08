@@ -3,6 +3,11 @@ package com.reqlab.ui.shared.platform
 import androidx.compose.ui.input.pointer.PointerIcon
 import kotlinx.coroutines.CoroutineDispatcher
 
+data class PickedBinaryFile(
+    val name: String,
+    val base64Content: String,
+)
+
 // ── Identity / Time ─────────────────────────────────────────────
 
 /** Platform-safe UUID generation. */
@@ -41,6 +46,11 @@ expect val verticalResizeCursor: PointerIcon
  * On desktop this opens a JFileChooser; on web it triggers an <input type=file>.
  */
 expect fun pickFileForImport(onResult: (String) -> Unit)
+
+/**
+ * Pick any binary/text file from the filesystem and deliver filename + base64 bytes.
+ */
+expect fun pickBinaryFileForRequest(onResult: (PickedBinaryFile) -> Unit)
 
 /**
  * Save [content] as a file with the given [defaultFilename].

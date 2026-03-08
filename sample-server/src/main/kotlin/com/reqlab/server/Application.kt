@@ -229,31 +229,60 @@ fun Application.module() {
 
         post("/api/upload") {
             val files = mutableListOf<JsonElement>()
-            call.receiveMultipart().forEachPart { part ->
-                when (part) {
-                    is PartData.FileItem -> {
-                        @Suppress("DEPRECATION")
-                        val bytes = part.streamProvider().readBytes()
-                        files += buildJsonObject {
-                            put("filename", part.originalFileName ?: "unnamed")
-                            put("fieldName", part.name ?: "file")
-                            put("sizeBytes", bytes.size)
+            val contentType = call.request.header("Content-Type").orEmpty()
+
+            if (contentType.startsWith("multipart/form-data", ignoreCase = true)) {
+                call.receiveMultipart().forEachPart { part ->
+                    when (part) {
+                        is PartData.FileItem -> {
+                            @Suppress("DEPRECATION")
+                            val bytes = part.streamProvider().readBytes()
+                            val filename = part.originalFileName ?: "unnamed"
+                            val textPreview = bytes.takeIf { looksLikeTextContent(it, part.contentType?.toString()) }
+                                ?.let { firstWordsPreview(it.decodeToString(), limit = 20) }
+                            files += buildJsonObject {
+                                put("filename", filename)
+                                put("fieldName", part.name ?: "file")
+                                put("sizeBytes", bytes.size)
+                                if (textPreview != null) {
+                                    put("summary", textPreview)
+                                    put("summaryType", "textPreview")
+                                } else {
+                                    put("summary", filename)
+                                    put("summaryType", "filename")
+                                }
+                            }
                         }
+                        else -> Unit
                     }
-                    else -> Unit
+                    part.dispose()
                 }
-                part.dispose()
             }
-            if (files.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, buildJsonObject {
-                    put("error", "No file part found in multipart request")
-                })
-            } else {
+
+            if (files.isNotEmpty()) {
                 call.respond(HttpStatusCode.OK, buildJsonObject {
                     put("message", "File(s) uploaded successfully")
+                    put("mode", "multipart")
                     put("files", buildJsonArray { files.forEach { add(it) } })
                 })
+                return@post
             }
+
+            val rawBytes = runCatching { call.receiveText().encodeToByteArray() }.getOrDefault(ByteArray(0))
+            val filenameHint = call.request.header("X-ReqLab-Filename").orEmpty().ifBlank { "upload.bin" }
+            val rawSummary = if (looksLikeTextContent(rawBytes, contentType)) {
+                firstWordsPreview(rawBytes.decodeToString(), limit = 20)
+            } else {
+                filenameHint
+            }
+            call.respond(HttpStatusCode.OK, buildJsonObject {
+                put("message", "Upload request accepted")
+                put("mode", if (rawBytes.isNotEmpty()) "raw" else "empty")
+                put("sizeBytes", rawBytes.size)
+                put("contentType", contentType)
+                put("summary", rawSummary)
+                put("summaryType", if (looksLikeTextContent(rawBytes, contentType)) "textPreview" else "filename")
+            })
         }
 
         // ── Authentication ─────────────────────────────────────────────────
@@ -374,6 +403,105 @@ fun Application.module() {
             })
         }
 
+        // ── Scripting / chaining helpers ───────────────────────────────────
+
+        /**
+         * GET /api/timestamp
+         * Returns the current server time in multiple formats.
+         * Useful in pre-request scripts: pm.environment.set("ts", pm.response.json().unix)
+         */
+        get("/api/timestamp") {
+            val now = Instant.now()
+            call.respond(buildJsonObject {
+                put("unix", now.epochSecond)
+                put("ms",   now.toEpochMilli())
+                put("iso",  now.toString())
+                put("tz",   "UTC")
+            })
+        }
+
+        /**
+         * POST /api/token
+         * Body: { "user": "alice", "role": "admin" }
+         * Returns a fake JWT-style token.  Pre-request scripts can fetch this
+         * and store the token: pm.environment.set("token", pm.response.json().token)
+         */
+        post("/api/token") {
+            val body = runCatching { call.receiveText() }.getOrDefault("{}")
+            val user = Regex(""""user"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1) ?: "anonymous"
+            val role = Regex(""""role"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1) ?: "user"
+            val token = "rl.${Base64.getEncoder().encodeToString("$user:$role:${System.currentTimeMillis()}".toByteArray())}"
+            call.respond(buildJsonObject {
+                put("token", token)
+                put("user",  user)
+                put("role",  role)
+                put("expiresIn", 3600)
+            })
+        }
+
+        /**
+         * GET /api/protected
+         * Requires header: X-Token  (set by a pre-request script)
+         * Returns 401 if missing, 200 with user info if present.
+         */
+        get("/api/protected") {
+            val token = call.request.header("X-Token")
+            if (token.isNullOrBlank()) {
+                call.respond(HttpStatusCode.Unauthorized, buildJsonObject {
+                    put("error", "Missing X-Token header")
+                    put("hint",  "Add a pre-request script that sets the X-Token header via pm.environment.set()")
+                })
+            } else {
+                val decoded = runCatching {
+                    String(Base64.getDecoder().decode(token.removePrefix("rl.")))
+                }.getOrDefault(token)
+                call.respond(buildJsonObject {
+                    put("message",  "Access granted")
+                    put("token",    token)
+                    put("decoded",  decoded)
+                    put("resource", "protected data")
+                })
+            }
+        }
+
+        /**
+         * POST /api/validate
+         * Validates any JSON body and returns the field names found.
+         * Test scripts can assert: pm.expect(pm.response.json().valid).to.equal(true)
+         */
+        post("/api/validate") {
+            val body = runCatching { call.receiveText() }.getOrDefault("")
+            val isValidJson = body.isNotBlank() && (body.trimStart().startsWith('{') || body.trimStart().startsWith('['))
+            val fieldCount = Regex(""""(\w+)"\s*:""").findAll(body).count()
+            call.respond(buildJsonObject {
+                put("valid",      isValidJson)
+                put("fieldCount", fieldCount)
+                put("bodyLength", body.length)
+                put("message",    if (isValidJson) "Valid JSON body received" else "Empty or non-JSON body")
+            })
+        }
+
+        /**
+         * GET /api/echo-full
+         * Echoes method, URL, all headers, and query parameters back to the caller.
+         * Useful for verifying that pre-request scripts injected the right values.
+         */
+        get("/api/echo-full") {
+            val headers = buildJsonObject {
+                call.request.headers.entries().forEach { (k, v) -> put(k, v.firstOrNull() ?: "") }
+            }
+            val params = buildJsonObject {
+                call.request.queryParameters.entries().forEach { (k, v) -> put(k, v.firstOrNull() ?: "") }
+            }
+            call.respond(buildJsonObject {
+                put("method",  "GET")
+                put("path",    call.request.local.uri)
+                put("headers", headers)
+                put("params",  params)
+                put("message", "Full echo – inspect headers/params injected by your pre-request script")
+            })
+        }
+
         // ── WebSocket – echo ───────────────────────────────────────────────
         webSocket("/ws") {
             send(Frame.Text("Connected to ReqLab WebSocket echo server. Send any message and it will be echoed."))
@@ -386,4 +514,29 @@ fun Application.module() {
             }
         }
     }
+}
+
+private fun looksLikeTextContent(bytes: ByteArray, contentType: String?): Boolean {
+    val normalizedType = contentType?.lowercase().orEmpty()
+    if (normalizedType.startsWith("text/")) return true
+    if (normalizedType.contains("json") || normalizedType.contains("xml") || normalizedType.contains("graphql") || normalizedType.contains("x-www-form-urlencoded")) {
+        return true
+    }
+    if (bytes.isEmpty()) return false
+    val sample = bytes.take(256)
+    val controlChars = sample.count { b ->
+        val c = b.toInt() and 0xFF
+        c in 0..8 || c in 14..31
+    }
+    return controlChars < sample.size / 10
+}
+
+private fun firstWordsPreview(text: String, limit: Int): String {
+    val words = text
+        .trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+    if (words.isEmpty()) return ""
+    val preview = words.take(limit).joinToString(" ")
+    return if (words.size > limit) "$preview…" else preview
 }

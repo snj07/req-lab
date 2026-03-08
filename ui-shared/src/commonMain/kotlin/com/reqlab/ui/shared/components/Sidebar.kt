@@ -219,7 +219,11 @@ fun Sidebar(state: AppState) {
                                 onClick = {
                                     pickFileForImport { content ->
                                         launchTracked("Importing collection", "Importing collection...") {
+                                            val existingIds = state.collections.map { it.id }.toSet()
                                             val importedName = ImportExportRepository.importCollectionFromString(state, content)
+                                            state.collections.firstOrNull { it.id !in existingIds }?.let { imported ->
+                                                state.collectionExpandedState[imported.id] = false
+                                            }
                                             withContext(kotlinx.coroutines.Dispatchers.Main) {
                                                 WorkspaceRepository.save(state)
                                                 state.log("Collection imported: $importedName", LogLevel.SUCCESS)
@@ -1318,6 +1322,8 @@ private fun duplicateNode(node: CollectionNode, rootNameOverride: String? = null
         method = node.method,
         url = node.url,
         children = androidx.compose.runtime.mutableStateListOf<CollectionNode>().also { it.addAll(duplicatedChildren) },
+        preRequestScript = node.preRequestScript,
+        testScript = node.testScript,
     )
 }
 

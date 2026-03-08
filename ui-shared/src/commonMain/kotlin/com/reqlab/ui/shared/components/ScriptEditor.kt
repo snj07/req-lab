@@ -52,10 +52,12 @@ fun ScriptEditor(
                 .padding(12.dp),
             decorationBox = { inner ->
                 if (script.isEmpty()) {
+                    val hint = if (title.contains("Pre-request", ignoreCase = true))
+                        PRE_REQUEST_HINT else TEST_HINT
                     Text(
-                        text = "// Write your ${title.lowercase()} here…",
+                        text = hint,
                         color = ReqLabColors.OnSurfaceDim,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontFamily = CodeFontFamily,
                     )
                 }
@@ -64,3 +66,46 @@ fun ScriptEditor(
         )
     }
 }
+
+// ── Script API reference hints ──────────────────────────────────
+
+private val PRE_REQUEST_HINT = """
+// Pre-request script — runs BEFORE the HTTP request is sent.
+// Use it to compute dynamic values or set environment variables.
+//
+// Available API:
+//   pm.environment.set("key", "value")   // set/override an env variable
+//   pm.environment.get("key")            // read an env variable
+//   console.log("message", value)        // log to the Console panel
+//
+// Example:
+//   pm.environment.set("timestamp", String.valueOf(System.currentTimeMillis()))
+//   pm.environment.set("authHeader", "Bearer " + pm.environment.get("token"))
+//   console.log("Sending request to", pm.environment.get("baseUrl"))
+""".trim()
+
+private val TEST_HINT = """
+// Tests script — runs AFTER the response is received.
+// Use it to validate the response and extract values for chaining.
+//
+// Available API:
+//   pm.test("name", function() { ... })              // define a test block
+//   pm.expect(pm.response.code).to.equal(200)        // assert status code
+//   pm.expect(pm.response.code).to.be.oneOf([200, 201])
+//   pm.expect(pm.response.code).to.be.above(199)
+//   pm.expect(pm.response.text()).to.include("ok")   // check body text
+//   pm.expect(pm.response.json().name).to.equal("Alice")  // check JSON field
+//   pm.expect(pm.response.json().users[0].id).to.equal(1)
+//   pm.response.to.have.status(200)                  // shorthand status check
+//   pm.environment.set("token", pm.response.json().token) // chain to next request
+//   console.log("Status:", pm.response.code)
+//
+// Example:
+//   pm.test("Status is 200", function() {
+//       pm.expect(pm.response.code).to.equal(200)
+//   })
+//   pm.test("Response has token", function() {
+//       pm.expect(pm.response.json().token).to.exist
+//       pm.environment.set("token", pm.response.json().token)
+//   })
+""".trim()

@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
@@ -35,6 +37,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,7 +50,12 @@ import com.reqlab.ui.shared.state.LogLevel
 import com.reqlab.ui.shared.state.TestResultEntry
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
+import com.reqlab.ui.shared.platform.copyToClipboard
 import com.reqlab.ui.shared.platform.formatTimestamp
+import com.reqlab.ui.shared.platform.verticalResizeCursor
+
+private const val MIN_BOTTOM_PANEL_HEIGHT = 120
+private const val MAX_BOTTOM_PANEL_HEIGHT = 560
 
 @Composable
 fun BottomPanel(state: AppState) {
@@ -114,6 +123,26 @@ fun BottomPanel(state: AppState) {
 
             // Clear button
             if (state.bottomPanelExpanded) {
+                IconButton(
+                    onClick = {
+                        copyToClipboard(
+                            when (state.selectedBottomTab) {
+                                BottomTab.CONSOLE -> state.consoleLogs.asConsoleTextDump()
+                                BottomTab.LOGS -> state.consoleLogs.asConsoleTextDump()
+                                BottomTab.TEST_RESULTS -> state.testResults.asTestResultsTextDump()
+                            }
+                        )
+                        state.log("Copied ${state.selectedBottomTab.label.lowercase()} output", LogLevel.INFO)
+                    },
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy output",
+                        tint = ReqLabColors.OnSurfaceDim,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
                 IconButton(onClick = {
                     when (state.selectedBottomTab) {
                         BottomTab.CONSOLE      -> state.consoleLogs.clear()
@@ -134,21 +163,56 @@ fun BottomPanel(state: AppState) {
             enter = expandVertically(),
             exit = shrinkVertically(),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(state.bottomPanelHeight.dp)
-                    .background(ReqLabColors.SurfaceVariant),
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .pointerHoverIcon(verticalResizeCursor)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures { _, dragAmount ->
+                                val nextHeight = (state.bottomPanelHeight - dragAmount.toInt())
+                                    .coerceIn(MIN_BOTTOM_PANEL_HEIGHT, MAX_BOTTOM_PANEL_HEIGHT)
+                                state.bottomPanelHeight = nextHeight
+                            }
+                        }
+                        .background(ReqLabColors.Border)
+                        .testTag("bottom-panel-resize-handle"),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(state.bottomPanelHeight.dp)
+                        .background(ReqLabColors.SurfaceVariant),
+                ) {
                 when (state.selectedBottomTab) {
                     BottomTab.CONSOLE      -> ConsoleView(state.consoleLogs)
                     BottomTab.TEST_RESULTS -> TestResultsView(state.testResults)
                     BottomTab.LOGS         -> ConsoleView(state.consoleLogs) // shared view
                 }
             }
+            }
         }
     }
 }
+
+private fun List<ConsoleEntry>.asConsoleTextDump(): String =
+    if (isEmpty()) {
+        "No console output"
+    } else {
+        joinToString("\n") { entry ->
+            "${formatTimestamp(entry.timestamp)} ${entry.level.name}: ${entry.message}"
+        }
+    }
+
+private fun List<TestResultEntry>.asTestResultsTextDump(): String =
+    if (isEmpty()) {
+        "No test results"
+    } else {
+        joinToString("\n") { entry ->
+            "${if (entry.passed) "PASS" else "FAIL"} ${entry.name}${if (entry.message.isNotBlank()) " - ${entry.message}" else ""}"
+        }
+    }
 
 // ── Console View ────────────────────────────────────────────────
 

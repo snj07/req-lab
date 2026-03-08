@@ -2,10 +2,13 @@ package com.reqlab.core.network
 
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
+import com.reqlab.core.model.RequestBody
 import com.reqlab.core.model.RequestDefinition
+import com.reqlab.core.model.BodyType
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -142,5 +145,58 @@ class KtorApiClientTest {
         assertTrue(metrics.serverMs >= 0, "serverMs should be non-negative")
         assertTrue(metrics.downloadMs >= 0, "downloadMs should be non-negative")
         assertTrue(metrics.responseSizeBytes > 0, "responseSizeBytes should be positive")
+    }
+
+    @Test
+    fun form_data_body_is_sent_as_multipart() = runTest {
+        var capturedBody = ""
+
+        val mockEngine = MockEngine { request ->
+            capturedBody = request.body.toByteArray().decodeToString()
+            respond(
+                content = "ok",
+                status = HttpStatusCode.OK,
+                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, ContentType.Text.Plain.toString())
+            )
+        }
+
+        val client = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+            expectSuccess = false
+        }
+
+        val apiClient = KtorApiClient(
+            httpClient = client,
+            retryPolicy = RetryPolicy(maxAttempts = 1)
+        )
+
+        val request = RequestDefinition(
+            id = "req-form",
+            name = "Multipart",
+            method = HttpMethodType.POST,
+            url = "https://api.test/form-data",
+            body = RequestBody(
+                type = BodyType.FORM_DATA,
+                formEntries = listOf(
+                    KeyValueEntry("name", "alice"),
+                    KeyValueEntry("role", "tester"),
+                ),
+            ),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L
+        )
+
+        val events = apiClient.execute(request).toList()
+        assertTrue(events.last() is NetworkEvent.Success)
+        assertTrue(
+            capturedBody.contains("form-data", ignoreCase = true),
+            "Expected multipart payload content, got '$capturedBody'",
+        )
+        assertTrue(
+            capturedBody.contains("name") && capturedBody.contains("alice") && capturedBody.contains("role") && capturedBody.contains("tester"),
+            "Multipart payload should contain form fields, got '$capturedBody'",
+        )
     }
 }

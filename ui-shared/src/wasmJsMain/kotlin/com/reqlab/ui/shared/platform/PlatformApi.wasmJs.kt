@@ -35,12 +35,22 @@ private fun jsPickFileStart(): JsAny? = js(
     "(() => { window.__reqlab_fc = null; window.__reqlab_fr = false; var i = document.createElement('input'); i.type = 'file'; i.accept = '.json,application/json'; i.onchange = function() { var f = i.files[0]; if (f) { var r = new FileReader(); r.onload = function() { window.__reqlab_fc = r.result; window.__reqlab_fr = true; }; r.readAsText(f); } }; i.click(); })()"
 )
 
+private fun jsPickBinaryFileStart(): JsAny? = js(
+    "(() => { window.__reqlab_bf = null; window.__reqlab_bn = null; window.__reqlab_br = false; var i = document.createElement('input'); i.type = 'file'; i.onchange = function() { var f = i.files[0]; if (f) { var r = new FileReader(); r.onload = function() { var result = String(r.result || ''); var comma = result.indexOf(','); window.__reqlab_bf = comma >= 0 ? result.substring(comma + 1) : result; window.__reqlab_bn = f.name || 'upload.bin'; window.__reqlab_br = true; }; r.readAsDataURL(f); } }; i.click(); })()"
+)
+
 private fun jsFileReady(): JsBoolean = js("window.__reqlab_fr === true")
+private fun jsBinaryFileReady(): JsBoolean = js("window.__reqlab_br === true")
 
 private fun jsGetFileContent(): JsString? = js("window.__reqlab_fc")
+private fun jsGetBinaryFileContent(): JsString? = js("window.__reqlab_bf")
+private fun jsGetBinaryFileName(): JsString? = js("window.__reqlab_bn")
 
 private fun jsClearFileContent(): JsAny? = js("window.__reqlab_fc = null")
 private fun jsClearFileReady(): JsAny? = js("window.__reqlab_fr = false")
+private fun jsClearBinaryFileContent(): JsAny? = js("window.__reqlab_bf = null")
+private fun jsClearBinaryFileName(): JsAny? = js("window.__reqlab_bn = null")
+private fun jsClearBinaryFileReady(): JsAny? = js("window.__reqlab_br = false")
 
 // ── Actual implementations ──────────────────────────────────────
 
@@ -78,6 +88,27 @@ actual fun pickFileForImport(onResult: (String) -> Unit) {
                 jsClearFileReady()
                 if (content != null) {
                     onResult(content.toString())
+                }
+                return@launch
+            }
+        }
+    }
+}
+
+@OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+actual fun pickBinaryFileForRequest(onResult: (PickedBinaryFile) -> Unit) {
+    jsPickBinaryFileStart()
+    GlobalScope.launch {
+        repeat(600) {
+            delay(100)
+            if (jsBinaryFileReady().toBoolean()) {
+                val content = jsGetBinaryFileContent()?.toString().orEmpty()
+                val name = jsGetBinaryFileName()?.toString().orEmpty().ifBlank { "upload.bin" }
+                jsClearBinaryFileContent()
+                jsClearBinaryFileName()
+                jsClearBinaryFileReady()
+                if (content.isNotBlank()) {
+                    onResult(PickedBinaryFile(name = name, base64Content = content))
                 }
                 return@launch
             }

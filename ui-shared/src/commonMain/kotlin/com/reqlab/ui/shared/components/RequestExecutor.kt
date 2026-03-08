@@ -2,17 +2,21 @@ package com.reqlab.ui.shared.components
 
 import com.reqlab.core.model.AuthConfig
 import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestBody
 import com.reqlab.core.model.RequestDefinition
 import com.reqlab.core.network.NetworkEvent
 import com.reqlab.core.network.NetworkLogger
 import com.reqlab.core.network.RetryPolicy
+import com.reqlab.core.scripting.ReqLabScriptEngine
+import com.reqlab.core.scripting.ScriptContext
 import com.reqlab.ui.shared.network.NetworkClientFactory
 import com.reqlab.ui.shared.persistence.TabsRepository
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.LogLevel
 import com.reqlab.ui.shared.state.RequestTabState
+import com.reqlab.ui.shared.state.TestResultEntry
 import com.reqlab.ui.shared.platform.currentTimeMillis
 import com.reqlab.ui.shared.platform.ioDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +28,9 @@ import kotlinx.coroutines.withContext
  * Issues an HTTP request for [tab] and streams the result back into [tab]'s
  * state properties.  All heavy work runs off the main thread.
  */
+private val scriptEngine = ReqLabScriptEngine()
+private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
+
 fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
     if (tab.url.isBlank()) {
         state.log("URL is empty", LogLevel.WARNING)
@@ -34,6 +41,28 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
         tab.isLoading = true
         tab.response  = null
         tab.lastError = null
+        state.testResults.clear()
+
+        // ── Pre-request script ────────────────────────────────────────────
+        if (tab.preRequestScript.isNotBlank()) {
+            val layers = state.activeVariableLayers()
+            val flatVars = buildMap<String, String> { layers.asReversed().forEach { putAll(it) } }
+            val preCtx = ScriptContext(
+                url       = tab.url,
+                method    = tab.method.name,
+                variables = flatVars,
+            )
+            val preResult = scriptEngine.executePreRequestScript(tab.preRequestScript, preCtx)
+            preResult.logs.forEach { state.log(it) }
+            if (preResult.error != null) {
+                state.log("⚠ Pre-request script error: ${preResult.error}", LogLevel.ERROR)
+            }
+            // Merge new variables from the script into the active environment
+            if (preResult.newVariables.isNotEmpty()) {
+                state.mergeScriptVariables(preResult.newVariables)
+            }
+        }
+
         state.log("→ ${tab.method} ${tab.url}")
 
         try {
@@ -45,7 +74,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                 queryParams = tab.params.filter { it.enabled }.map { KeyValueEntry(it.key, it.value) },
                 headers = tab.headers.filter { it.enabled }.map { KeyValueEntry(it.key, it.value) },
                 auth = buildAuthConfig(tab),
-                body = RequestBody(type = tab.bodyType, content = tab.bodyContent.ifBlank { null }),
+                body = buildRequestBody(tab.bodyType, tab.bodyContent),
                 createdAtEpochMillis = currentTimeMillis(),
                 updatedAtEpochMillis = currentTimeMillis(),
             )
@@ -89,6 +118,37 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                                 " ${event.response.metrics.responseSizeBytes}B)",
                             LogLevel.SUCCESS,
                         )
+                        // ── Test script ───────────────────────────────────
+                        if (tab.testScript.isNotBlank()) {
+                            val resp = event.response
+                            val layers2 = state.activeVariableLayers()
+                            val flatVars2 = buildMap<String, String> { layers2.asReversed().forEach { putAll(it) } }
+                            val testCtx = ScriptContext(
+                                url             = tab.url,
+                                method          = tab.method.name,
+                                statusCode      = resp.statusCode,
+                                responseBody    = resp.bodyText,
+                                responseHeaders = resp.headers.associate { it.key to it.value },
+                                responseTimeMs  = resp.metrics.responseTimeMs,
+                                variables       = flatVars2,
+                            )
+                            val testResult = scriptEngine.executeTestScript(tab.testScript, testCtx)
+                            testResult.logs.forEach { state.log(it) }
+                            if (testResult.error != null) {
+                                state.log("⚠ Test script error: ${testResult.error}", LogLevel.ERROR)
+                            }
+                            testResult.assertions.forEach { a ->
+                                state.testResults.add(TestResultEntry(a.name, a.passed, a.message ?: ""))
+                                state.log(
+                                    "${if (a.passed) "✓" else "✗"} ${a.name}" +
+                                        if (!a.passed && a.message != null) " — ${a.message}" else "",
+                                    if (a.passed) LogLevel.SUCCESS else LogLevel.ERROR,
+                                )
+                            }
+                            if (testResult.newVariables.isNotEmpty()) {
+                                state.mergeScriptVariables(testResult.newVariables)
+                            }
+                        }
                     }
                     is NetworkEvent.Failure -> {
                         tab.lastError = event.error.message ?: "Unknown error"
@@ -137,42 +197,213 @@ fun buildAuthConfig(tab: RequestTabState): AuthConfig {
     return AuthConfig(type = tab.authType, params = params)
 }
 
-/** Builds a cURL command string for the given tab. */
-fun buildCurlCommand(tab: RequestTabState): String {
+/**
+ * Builds a [RequestBody] for the given body type and raw content string.
+ * For FORM_DATA and X_WWW_FORM_URLENCODED, parses [content] as key=value pairs
+ * separated by & or newlines and populates [RequestBody.formEntries].
+ */
+fun buildRequestBody(bodyType: BodyType, content: String): RequestBody {
+    val rawContent = content.ifBlank { null }
+    val binaryAttachment = parseBinaryAttachment(content)
+    val formEntries = when (bodyType) {
+        BodyType.FORM_DATA, BodyType.X_WWW_FORM_URLENCODED -> {
+            content.split("&", "\n").mapNotNull { part ->
+                val idx = part.indexOf('=')
+                if (idx > 0) KeyValueEntry(
+                    key = part.substring(0, idx).trim(),
+                    value = part.substring(idx + 1).trim(),
+                ) else null
+            }
+        }
+        else -> emptyList()
+    }
+    return RequestBody(
+        type = bodyType,
+        content = rawContent,
+        formEntries = formEntries,
+        binaryName = binaryAttachment?.first,
+        binaryBytesBase64 = binaryAttachment?.second,
+    )
+}
+
+private fun parseBinaryAttachment(content: String): Pair<String, String>? {
+    if (!content.startsWith(BINARY_ATTACHMENT_PREFIX)) return null
+    val separator = content.indexOf('\n')
+    if (separator <= BINARY_ATTACHMENT_PREFIX.length || separator >= content.length - 1) return null
+    val fileName = content.substring(BINARY_ATTACHMENT_PREFIX.length, separator).trim()
+    val base64 = content.substring(separator + 1).trim()
+    if (fileName.isBlank() || base64.isBlank()) return null
+    return fileName to base64
+}
+
+/** Builds a cURL command string for the given tab, resolving {{vars}} from variable layers. */
+fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+    fun resolve(s: String) = resolveVariables(s, variableLayers)
+
     val parts = mutableListOf("curl", "-X ${tab.method.name}")
 
     tab.headers
         .filter { it.enabled && it.key.isNotBlank() }
-        .forEach { parts += "-H ${shellQuote("${it.key}: ${it.value}")}" }
+        .forEach { parts += "-H ${shellQuote("${resolve(it.key)}: ${resolve(it.value)}")}" }
 
     when (tab.authType) {
         AuthType.BEARER -> {
-            val token = tab.authToken.trim()
+            val token = resolve(tab.authToken).trim()
             if (token.isNotEmpty()) parts += "-H ${shellQuote("Authorization: Bearer $token")}"
         }
         AuthType.BASIC -> {
             if (tab.authUsername.isNotBlank() || tab.authPassword.isNotBlank()) {
-                parts += "-u ${shellQuote("${tab.authUsername}:${tab.authPassword}")}"
+                parts += "-u ${shellQuote("${resolve(tab.authUsername)}:${resolve(tab.authPassword)}")}"
             }
         }
         AuthType.API_KEY -> {
             if (tab.authApiKey.isNotBlank() && tab.authApiValue.isNotBlank()) {
-                parts += "-H ${shellQuote("${tab.authApiKey}: ${tab.authApiValue}")}"
+                parts += "-H ${shellQuote("${resolve(tab.authApiKey)}: ${resolve(tab.authApiValue)}")}"
             }
         }
         AuthType.JWT -> {
-            val token = tab.authToken.trim()
+            val token = resolve(tab.authToken).trim()
             if (token.isNotEmpty()) parts += "-H ${shellQuote("Authorization: Bearer $token")}"
         }
         AuthType.OAUTH2, AuthType.NONE -> Unit
     }
 
     if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
-        parts += "--data ${shellQuote(tab.bodyContent)}"
+        parts += "--data ${shellQuote(resolve(tab.bodyContent))}"
     }
 
-    parts += shellQuote(tab.url)
+    // Build URL with inline query params
+    val resolvedUrl = buildUrlWithParams(resolve(tab.url), tab, variableLayers)
+    parts += shellQuote(resolvedUrl)
     return parts.joinToString(" \\\n  ")
 }
 
-private fun shellQuote(value: String) = "'" + value.replace("'", "'\\''") + "'"
+/** cURL command with raw (unresolved) {{variables}} preserved – useful for sharing templates. */
+fun buildCurlCommandRaw(tab: RequestTabState): String = buildCurlCommand(tab, emptyList())
+
+/** Python `requests` snippet resolving {{vars}}. */
+fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+    fun resolve(s: String) = resolveVariables(s, variableLayers)
+
+    val sb = StringBuilder()
+    sb.appendLine("import requests")
+    sb.appendLine()
+
+    val headers = buildHeaderMap(tab, variableLayers)
+    if (headers.isNotEmpty()) {
+        sb.appendLine("headers = {")
+        headers.forEach { (k, v) -> sb.appendLine("    ${pyStr(k)}: ${pyStr(v)},") }
+        sb.appendLine("}")
+        sb.appendLine()
+    }
+
+    val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers)
+    val method = tab.method.name.uppercase()
+
+    if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
+        val body = resolve(tab.bodyContent)
+        sb.appendLine("data = ${pyStr(body)}")
+        sb.appendLine()
+        sb.append("response = requests.${method.lowercase()}(${pyStr(url)}")
+        if (headers.isNotEmpty()) sb.append(", headers=headers")
+        sb.appendLine(", data=data)")
+    } else {
+        sb.append("response = requests.${method.lowercase()}(${pyStr(url)}")
+        if (headers.isNotEmpty()) sb.append(", headers=headers")
+        sb.appendLine(")")
+    }
+    sb.appendLine("print(response.status_code, response.text)")
+    return sb.toString().trimEnd()
+}
+
+/** HTTPie CLI snippet resolving {{vars}}. */
+fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+    fun resolve(s: String) = resolveVariables(s, variableLayers)
+
+    val parts = mutableListOf("http", tab.method.name)
+    val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers)
+    parts += shellQuote(url)
+
+    buildHeaderMap(tab, variableLayers).forEach { (k, v) -> parts += shellQuote("$k:$v") }
+
+    if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
+        parts += "--raw"
+        parts += shellQuote(resolve(tab.bodyContent))
+    }
+
+    return parts.joinToString(" \\\n  ")
+}
+
+/** PowerShell `Invoke-WebRequest` snippet resolving {{vars}}. */
+fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+    fun resolve(s: String) = resolveVariables(s, variableLayers)
+
+    val sb = StringBuilder()
+    val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers)
+    val headers = buildHeaderMap(tab, variableLayers)
+
+    if (headers.isNotEmpty()) {
+        sb.appendLine("\$headers = @{")
+        headers.forEach { (k, v) -> sb.appendLine("    '${k.replace("'", "''")}'='${v.replace("'", "''")}'") }
+        sb.appendLine("}")
+        sb.appendLine()
+    }
+
+    sb.append("Invoke-WebRequest -Uri '${url.replace("'", "''")}' -Method ${tab.method.name}")
+    if (headers.isNotEmpty()) sb.append(" -Headers \$headers")
+
+    if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
+        val body = resolve(tab.bodyContent).replace("'", "''")
+        sb.append(" -Body '$body'")
+    }
+
+    return sb.toString().trimEnd()
+}
+
+// ── Curl / format helpers ────────────────────────────────────────────
+
+/**
+ * Resolves {{varName}} patterns using the provided variable layers
+ * (first layer wins, matching Postman behaviour).
+ */
+fun resolveVariables(text: String, variableLayers: List<Map<String, String>>): String {
+    if (variableLayers.isEmpty() || !text.contains("{{")) return text
+    val flatMap = mutableMapOf<String, String>()
+    variableLayers.asReversed().forEach { flatMap.putAll(it) }   // first layer wins after forEach
+    return Regex("""\{\{([^{}]+)}}""").replace(text) { match ->
+        flatMap[match.groupValues[1].trim()] ?: match.value
+    }
+}
+
+private fun buildUrlWithParams(resolvedBase: String, tab: RequestTabState, variableLayers: List<Map<String, String>>): String {
+    val enabledParams = tab.params.filter { it.enabled && it.key.isNotBlank() }
+    if (enabledParams.isEmpty()) return resolvedBase
+    val separator = if (resolvedBase.contains('?')) "&" else "?"
+    val qs = enabledParams.joinToString("&") { p ->
+        "${resolveVariables(p.key, variableLayers)}=${resolveVariables(p.value, variableLayers)}"
+    }
+    return "$resolvedBase$separator$qs"
+}
+
+private fun buildHeaderMap(tab: RequestTabState, variableLayers: List<Map<String, String>>): Map<String, String> {
+    fun resolve(s: String) = resolveVariables(s, variableLayers)
+    val map = linkedMapOf<String, String>()
+    tab.headers.filter { it.enabled && it.key.isNotBlank() }
+        .forEach { map[resolve(it.key)] = resolve(it.value) }
+    when (tab.authType) {
+        AuthType.BEARER, AuthType.JWT -> {
+            val token = resolve(tab.authToken).trim()
+            if (token.isNotEmpty()) map["Authorization"] = "Bearer $token"
+        }
+        AuthType.API_KEY -> {
+            if (tab.authApiKey.isNotBlank() && tab.authApiValue.isNotBlank())
+                map[resolve(tab.authApiKey)] = resolve(tab.authApiValue)
+        }
+        else -> Unit
+    }
+    return map
+}
+
+private fun pyStr(s: String): String = "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+internal fun shellQuote(value: String) = "'" + value.replace("'", "'\\''") + "'"

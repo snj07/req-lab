@@ -9,7 +9,11 @@ import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
@@ -27,10 +31,13 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
 
 class KtorApiClient(
     private val httpClient: HttpClient = defaultHttpClient(),
@@ -57,6 +64,13 @@ class KtorApiClient(
             val startTime = currentTimeMillis()
 
             try {
+                val resolvedUrl = VariableResolver.resolve(request.url, variableLayers)
+                if (resolvedUrl.startsWith("ws://") || resolvedUrl.startsWith("wss://")) {
+                    val wsResponse = executeWebSocketRequest(request, resolvedUrl, startTime)
+                    emit(NetworkEvent.Success(wsResponse))
+                    return@flow
+                }
+
                 val preparedRequest = buildRequest(request, variableLayers)
                 interceptors.forEach { interceptor -> interceptor.onRequest(preparedRequest) }
 
@@ -185,6 +199,48 @@ class KtorApiClient(
         }
     }
 
+    private suspend fun executeWebSocketRequest(
+        request: RequestDefinition,
+        resolvedUrl: String,
+        requestStartTime: Long,
+    ): ResponseDefinition {
+        val session = httpClient.webSocketSession {
+            url(resolvedUrl)
+        }
+
+        val transcript = mutableListOf<String>()
+        withTimeout(5_000) {
+            val firstFrame = session.incoming.receiveCatching().getOrNull()
+            (firstFrame as? Frame.Text)?.readText()?.let { transcript += it }
+            session.send(Frame.Text("hello"))
+            val secondFrame = session.incoming.receiveCatching().getOrNull()
+            (secondFrame as? Frame.Text)?.readText()?.let { transcript += it }
+        }
+        runCatching { session.outgoing.close() }
+
+        val endTime = currentTimeMillis()
+        val body = transcript.joinToString("\n")
+        val bodySize = body.encodeToByteArray().size.toLong()
+
+        return ResponseDefinition(
+            requestId = request.id,
+            statusCode = 101,
+            statusText = "Switching Protocols",
+            headers = emptyList(),
+            cookies = emptyList(),
+            bodyText = body,
+            contentType = "text/plain",
+            executedAtEpochMillis = endTime,
+            metrics = ResponseMetrics(
+                statusCode = 101,
+                responseTimeMs = endTime - requestStartTime,
+                responseSizeBytes = bodySize,
+                serverMs = endTime - requestStartTime,
+                downloadMs = 0,
+            )
+        )
+    }
+
     private fun applyBody(
         builder: HttpRequestBuilder,
         request: RequestDefinition,
@@ -238,17 +294,26 @@ class KtorApiClient(
             }
 
             BodyType.FORM_DATA -> {
-                val payload = body.formEntries
-                    .filter { it.enabled }
-                    .joinToString("&") { entry ->
-                        "${entry.key.encodeURLPath()}=${VariableResolver.resolve(entry.value, variableLayers).encodeURLPath()}"
+                val multipart = MultiPartFormDataContent(
+                    formData {
+                        body.formEntries.filter { it.enabled }.forEach { entry ->
+                            append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
+                        }
                     }
-                builder.setBody(payload)
+                )
+                builder.setBody(multipart)
             }
 
             BodyType.BINARY -> {
-                val content = body.content.orEmpty()
-                builder.setBody(content.encodeToByteArray())
+                val payloadBytes = body.binaryBytesBase64
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { decodeBase64ToByteArray(it) }
+                    ?: body.content.orEmpty().encodeToByteArray()
+                body.binaryName
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { builder.header("X-ReqLab-Filename", it) }
+                builder.setBody(payloadBytes)
             }
         }
     }
@@ -310,6 +375,7 @@ private fun defaultHttpClient(): HttpClient = createPlatformHttpClient {
             explicitNulls = false
         })
     }
+    install(WebSockets)
     expectSuccess = false
 }
 
@@ -342,4 +408,46 @@ private fun ByteArray.encodeBase64(): String {
         }
     }
     return result.toString()
+}
+
+private fun decodeBase64ToByteArray(input: String): ByteArray {
+    val cleaned = input.filterNot { it.isWhitespace() }
+    if (cleaned.isEmpty()) return ByteArray(0)
+
+    val output = ArrayList<Byte>((cleaned.length * 3) / 4)
+    var index = 0
+
+    fun decodeChar(c: Char): Int = when (c) {
+        in 'A'..'Z' -> c.code - 'A'.code
+        in 'a'..'z' -> c.code - 'a'.code + 26
+        in '0'..'9' -> c.code - '0'.code + 52
+        '+' -> 62
+        '/' -> 63
+        '=' -> -2
+        else -> -1
+    }
+
+    while (index < cleaned.length) {
+        val c0 = decodeChar(cleaned[index++])
+        val c1 = if (index < cleaned.length) decodeChar(cleaned[index++]) else -2
+        val c2 = if (index < cleaned.length) decodeChar(cleaned[index++]) else -2
+        val c3 = if (index < cleaned.length) decodeChar(cleaned[index++]) else -2
+
+        if (c0 < 0 || c1 < 0 || c2 == -1 || c3 == -1) continue
+
+        val b0 = (c0 shl 2) or (c1 ushr 4)
+        output.add((b0 and 0xFF).toByte())
+
+        if (c2 >= 0) {
+            val b1 = ((c1 and 0x0F) shl 4) or (c2 ushr 2)
+            output.add((b1 and 0xFF).toByte())
+        }
+
+        if (c3 >= 0 && c2 >= 0) {
+            val b2 = ((c2 and 0x03) shl 6) or c3
+            output.add((b2 and 0xFF).toByte())
+        }
+    }
+
+    return output.toByteArray()
 }

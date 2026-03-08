@@ -149,6 +149,7 @@ private fun KeyValueRow(
             onValueChange = { if (!isSystemHeader) { kv.key = it; onDirty() } },
             placeholder = "Key",
             modifier = Modifier.weight(1f),
+            state = state,
         )
         InlineTextField(
             value = kv.value,
