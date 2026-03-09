@@ -7,6 +7,7 @@ import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
 import androidx.compose.runtime.mutableStateListOf
 import com.reqlab.ui.shared.state.EnvState
+import com.reqlab.ui.shared.state.HistoryItem
 import com.reqlab.ui.shared.state.MutableKeyValue
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -78,6 +79,16 @@ data class ReqLabEnvironmentDto(
 data class ReqLabWorkspaceDto(
     val collections: List<ReqLabCollectionDto>,
     val environments: List<ReqLabEnvironmentDto>,
+    val globalVariables: List<ReqLabEnvironmentDto> = emptyList(),
+    val history: List<HistoryItemDto> = emptyList(),
+)
+
+data class HistoryItemDto(
+    val id: String,
+    val method: String,
+    val name: String,
+    val url: String,
+    val timestamp: Long,
 )
 
 data class WorkspaceImportResult(
@@ -128,6 +139,29 @@ object ImportExportRepository {
             })
             put("environments", buildJsonArray {
                 state.environments.forEach { add(environmentToJson(it)) }
+            })
+            put("globalVariables", buildJsonArray {
+                state.globalVariables.forEach { v ->
+                    val key = v.key.trim()
+                    if (key.isNotEmpty()) {
+                        add(buildJsonObject {
+                            put("type", "reqLabEnvironment")
+                            put("name", key)
+                            put("variables", buildJsonObject { put("value", v.value) })
+                        })
+                    }
+                }
+            })
+            put("history", buildJsonArray {
+                state.historyItems.forEach { item ->
+                    add(buildJsonObject {
+                        put("id", item.id)
+                        put("method", item.method.name)
+                        put("name", item.name)
+                        put("url", item.url)
+                        put("timestamp", item.timestamp)
+                    })
+                }
             })
         }
         return json.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), root)
@@ -182,8 +216,30 @@ object ImportExportRepository {
 
         state.environments.clear()
         state.environments.addAll(workspace.environments.map { environmentDtoToState(it, it.name) })
-        if (state.environments.isEmpty()) state.environments.add(EnvState("Default"))
-        state.selectedEnvIndex = state.selectedEnvIndex.coerceIn(0, state.environments.lastIndex)
+        state.selectedEnvIndex = if (state.environments.isEmpty()) 0 else state.selectedEnvIndex.coerceIn(0, state.environments.lastIndex)
+
+        state.globalVariables.clear()
+        state.globalVariables.addAll(
+            workspace.globalVariables.map { env ->
+                MutableKeyValue(
+                    key = env.name,
+                    value = env.variables["value"] ?: "",
+                )
+            }
+        )
+
+        state.historyItems.clear()
+        state.historyItems.addAll(
+            workspace.history.map {
+                HistoryItem(
+                    id = it.id,
+                    method = runCatching { HttpMethodType.valueOf(it.method.uppercase()) }.getOrDefault(HttpMethodType.GET),
+                    name = it.name,
+                    url = it.url,
+                    timestamp = it.timestamp,
+                )
+            }
+        )
     }
 
     private fun parseJsonString(rawJson: String): JsonObject =
@@ -297,6 +353,20 @@ object ImportExportRepository {
             put("environments", buildJsonArray {
                 workspace.environments.forEach { add(environmentDtoToJson(it)) }
             })
+            put("globalVariables", buildJsonArray {
+                workspace.globalVariables.forEach { add(environmentDtoToJson(it)) }
+            })
+            put("history", buildJsonArray {
+                workspace.history.forEach { item ->
+                    add(buildJsonObject {
+                        put("id", item.id)
+                        put("method", item.method)
+                        put("name", item.name)
+                        put("url", item.url)
+                        put("timestamp", item.timestamp)
+                    })
+                }
+            })
         }
     }
 
@@ -356,8 +426,23 @@ object ImportExportRepository {
     private fun workspaceDtoFromJson(root: JsonObject): ReqLabWorkspaceDto {
         val collections = root["collections"]?.jsonArray?.map { collectionDtoFromJson(it.jsonObject) } ?: emptyList()
         val environments = root["environments"]?.jsonArray?.map { environmentDtoFromJson(it.jsonObject) } ?: emptyList()
-        return ReqLabWorkspaceDto(collections = collections, environments = environments)
+        val globalVariables = root["globalVariables"]?.jsonArray?.map { environmentDtoFromJson(it.jsonObject) } ?: emptyList()
+        val history = root["history"]?.jsonArray?.map { historyItemDtoFromJson(it.jsonObject) } ?: emptyList()
+        return ReqLabWorkspaceDto(
+            collections = collections,
+            environments = environments,
+            globalVariables = globalVariables,
+            history = history,
+        )
     }
+
+    private fun historyItemDtoFromJson(root: JsonObject): HistoryItemDto = HistoryItemDto(
+        id = root["id"]?.jsonPrimitive?.contentOrNull ?: generateUuid(),
+        method = root["method"]?.jsonPrimitive?.contentOrNull ?: HttpMethodType.GET.name,
+        name = root["name"]?.jsonPrimitive?.contentOrNull ?: "Untitled",
+        url = root["url"]?.jsonPrimitive?.contentOrNull ?: "",
+        timestamp = root["timestamp"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L,
+    )
 
     private fun collectionDtoFromJson(root: JsonObject): ReqLabCollectionDto {
         val name = root["name"]?.jsonPrimitive?.contentOrNull

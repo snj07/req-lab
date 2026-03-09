@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
 import com.reqlab.ui.shared.i18n.AppLanguage
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppState
@@ -85,6 +86,16 @@ private enum class SettingsSection(val label: String, val icon: ImageVector) {
     NETWORK("Network",   Icons.Default.NetworkCheck),
     PROXY("Proxy",       Icons.Default.SettingsApplications),
     DATA("Data",         Icons.Default.Storage),
+}
+
+@Composable
+private fun settingsSectionLabel(section: SettingsSection): String = when (section) {
+    SettingsSection.GENERAL -> Strings.general
+    SettingsSection.THEME -> Strings.theme
+    SettingsSection.LANGUAGE -> Strings.language
+    SettingsSection.NETWORK -> Strings.network
+    SettingsSection.PROXY -> Strings.proxy
+    SettingsSection.DATA -> "Data"
 }
 
 @Composable
@@ -143,7 +154,7 @@ fun SettingsDialog(state: AppState) {
                         .padding(12.dp),
                 ) {
                     Text(
-                        "Settings",
+                        Strings.settings,
                         style = MaterialTheme.typography.titleMedium,
                         color = ReqLabColors.OnSurface,
                         fontWeight = FontWeight.Bold,
@@ -169,7 +180,7 @@ fun SettingsDialog(state: AppState) {
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
-                                section.label,
+                                settingsSectionLabel(section),
                                 fontSize = 13.sp,
                                 color = if (isActive) ReqLabColors.OnSurface else ReqLabColors.OnSurfaceVariant,
                                 fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
@@ -190,7 +201,7 @@ fun SettingsDialog(state: AppState) {
                         .verticalScroll(rememberScrollState()),
                 ) {
                     Text(
-                        selectedSection.label,
+                        settingsSectionLabel(selectedSection),
                         style = MaterialTheme.typography.titleMedium,
                         color = ReqLabColors.OnSurface,
                         fontWeight = FontWeight.SemiBold,

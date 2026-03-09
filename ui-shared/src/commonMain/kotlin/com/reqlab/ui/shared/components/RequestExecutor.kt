@@ -60,7 +60,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
             // so stale keys don't accumulate across re-sends.
             if (tab.scriptInjectedVarKeys.isNotEmpty()) {
                 val env = state.selectedEnvironment
-                env.variables.removeAll { it.key in tab.scriptInjectedVarKeys && it.kind == com.reqlab.ui.shared.state.HeaderKind.USER }
+                env?.variables?.removeAll { it.key in tab.scriptInjectedVarKeys && it.kind == com.reqlab.ui.shared.state.HeaderKind.USER }
                 tab.scriptInjectedVarKeys.clear()
             }
             val preResult = scriptEngine.executePreRequestScript(tab.preRequestScript, preCtx)
@@ -114,6 +114,12 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
             client.execute(request, state.activeVariableLayers()).collect { event ->
                 when (event) {
                     is NetworkEvent.Started -> {
+                        state.recordHistory(
+                            requestId = tab.id,
+                            method = tab.method,
+                            name = tab.name,
+                            url = tab.url,
+                        )
                         state.logNetworkEvent("Request started", LogLevel.INFO)
                     }
                     is NetworkEvent.RetryScheduled -> {

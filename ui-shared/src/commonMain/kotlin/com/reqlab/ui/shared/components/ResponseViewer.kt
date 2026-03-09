@@ -252,7 +252,9 @@ private fun ResponseTabBar(selectedTab: ResponseTab, onTabSelected: (ResponseTab
                 Tab(
                     selected = selected,
                     onClick = { onTabSelected(tab) },
-                    modifier = Modifier.height(34.dp),
+                    modifier = Modifier
+                        .height(34.dp)
+                        .testTag("response-tab-${tab.name.lowercase()}"),
                 ) {
                     Text(
                         tab.label,

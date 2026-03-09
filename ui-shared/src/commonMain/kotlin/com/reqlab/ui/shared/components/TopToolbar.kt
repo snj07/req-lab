@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -41,7 +42,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.EnvState
 import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.WorkspaceMode
 import com.reqlab.ui.shared.theme.ReqLabColors
@@ -69,7 +72,7 @@ fun TopToolbar(state: AppState) {
         // Logo
         Spacer(Modifier.width(4.dp))
         Text(
-            text = "ReqLab",
+            text = Strings.appName,
             color = ReqLabColors.Primary,
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
@@ -87,7 +90,11 @@ fun TopToolbar(state: AppState) {
             WorkspaceMode.entries.forEach { mode ->
                 val selected = state.workspaceMode == mode
                 Text(
-                    text = mode.label,
+                    text = when (mode) {
+                        WorkspaceMode.HTTP -> "HTTP"
+                        WorkspaceMode.REALTIME -> Strings.protocols
+                        WorkspaceMode.GRAPHQL -> "GraphQL"
+                    },
                     fontSize = 12.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceVariant,
@@ -136,7 +143,7 @@ fun TopToolbar(state: AppState) {
         ) {
             Icon(
                 Icons.Default.Public,
-                contentDescription = "Global Variables",
+                contentDescription = Strings.globalVariables,
                 tint = ReqLabColors.OnSurfaceVariant,
             )
         }
@@ -145,7 +152,7 @@ fun TopToolbar(state: AppState) {
         IconButton(onClick = { state.showSettingsDialog = true }) {
             Icon(
                 Icons.Default.Settings,
-                contentDescription = "Settings",
+                contentDescription = Strings.settings,
                 tint = ReqLabColors.OnSurfaceVariant,
                 modifier = Modifier.testTag("settings-button"),
             )
@@ -167,6 +174,8 @@ private fun EnvironmentChip(state: AppState) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
+    val selectedEnvironment = state.selectedEnvironment
+
     Box {
         Row(
             modifier = Modifier
@@ -186,7 +195,7 @@ private fun EnvironmentChip(state: AppState) {
                     .background(ReqLabColors.Secondary)
             )
             Text(
-                text = state.selectedEnvironment.name,
+                text = selectedEnvironment?.name ?: Strings.noEnvironmentsConfigured,
                 style = MaterialTheme.typography.labelMedium,
                 color = ReqLabColors.OnSurface,
             )
@@ -199,25 +208,44 @@ private fun EnvironmentChip(state: AppState) {
         }
 
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-            state.environments.forEachIndexed { index, env ->
+            if (state.environments.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text(env.name) },
+                    text = { Text(Strings.noEnvironmentsConfigured) },
+                    onClick = { menuExpanded = false },
+                )
+                DropdownMenuItem(
+                    text = { Text(Strings.createEnvironment) },
                     onClick = {
-                        state.selectedEnvIndex = index
+                        val created = EnvState("New Environment")
+                        state.environments.add(created)
+                        state.selectedEnvIndex = state.environments.lastIndex
+                        state.openEnvEdit(state.selectedEnvIndex)
                         menuExpanded = false
                     },
                 )
+            } else {
+                state.environments.forEachIndexed { index, env ->
+                    DropdownMenuItem(
+                        text = { Text(env.name) },
+                        onClick = {
+                            state.selectedEnvIndex = index
+                            menuExpanded = false
+                        },
+                    )
+                }
             }
-            androidx.compose.material3.HorizontalDivider()
+            HorizontalDivider()
             DropdownMenuItem(
                 text = { Text("Edit environment…") },
                 onClick = {
-                    state.openEnvEdit(state.selectedEnvIndex)
+                    if (state.selectedEnvIndex in state.environments.indices) {
+                        state.openEnvEdit(state.selectedEnvIndex)
+                    }
                     menuExpanded = false
                 },
             )
             DropdownMenuItem(
-                text = { Text("Global Variables…") },
+                text = { Text("${Strings.globalVariables}…") },
                 onClick = {
                     state.showGlobalVariablesDialog = true
                     menuExpanded = false

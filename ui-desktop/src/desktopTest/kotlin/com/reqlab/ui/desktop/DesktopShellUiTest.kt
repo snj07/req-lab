@@ -75,7 +75,7 @@ class MainScreenUiTest {
 
     @Test
     fun renders_toolbar_brand_and_environment() {
-        composeRule.setContent { MainScreen() }
+        composeRule.setContent { MainScreen(AppState(withDemoData = true)) }
 
         composeRule.onNodeWithText("ReqLab").assertIsDisplayed()
         // "Development" appears in both toolbar chip and sidebar environment list
@@ -100,7 +100,8 @@ class MainScreenUiTest {
 
     @Test
     fun clicking_sidebar_history_item_opens_request_tab() {
-        composeRule.setContent { MainScreen() }
+        val state = AppState(withDemoData = true).apply { historyExpanded = true }
+        composeRule.setContent { MainScreen(state) }
 
         // Click the first history item via the sidebar
         composeRule.onAllNodesWithText("List users")[0].performClick()
@@ -134,7 +135,7 @@ class MainScreenUiTest {
 
     @Test
     fun sidebar_search_filters_collection_tree() {
-        composeRule.setContent { MainScreen() }
+        composeRule.setContent { MainScreen(AppState(withDemoData = true)) }
 
         composeRule.onNodeWithTag("sidebar-search-input").performTextInput("Auth")
         composeRule.waitForIdle()
@@ -158,7 +159,7 @@ class MainScreenUiTest {
         )
 
         composeRule.setContent { MainScreen(state) }
-        composeRule.onNodeWithTag("save-response-button").assertIsDisplayed()
+        composeRule.onNodeWithTag("download-body-button").assertIsDisplayed()
     }
 
     @Test

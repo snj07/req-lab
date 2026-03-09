@@ -38,7 +38,7 @@ class UiRegressionFixTest {
      */
     @Test
     fun collection_context_menu_has_all_expected_items() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val rootId = state.collections.first().id
         composeRule.setContent { MainScreen(state) }
 
@@ -67,7 +67,7 @@ class UiRegressionFixTest {
      */
     @Test
     fun request_context_menu_has_all_expected_items() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val requestId = state.collections.first().children.first().id
         composeRule.setContent { MainScreen(state) }
 
@@ -91,7 +91,7 @@ class UiRegressionFixTest {
      */
     @Test
     fun environment_context_menu_has_all_expected_items() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val envName = state.environments.first().name
         composeRule.setContent { MainScreen(state) }
 
@@ -180,7 +180,7 @@ class UiRegressionFixTest {
      */
     @Test
     fun request_tooltip_is_hidden_on_startup() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val requestId = state.collections.first().children.first().id
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()

@@ -246,7 +246,7 @@ class TabManagementUiTest {
 
     @Test
     fun rename_request_updates_sidebar_name_and_open_tab_state() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
@@ -262,7 +262,7 @@ class TabManagementUiTest {
 
     @Test
     fun show_in_sidebar_action_selects_request_indicator() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.openRequest(requestId = "r2", name = "Create user", method = HttpMethodType.POST, url = "{{baseUrl}}/users")
         val tabId = "r2"
         composeRule.setContent { MainScreen(state) }
@@ -277,7 +277,7 @@ class TabManagementUiTest {
 
     @Test
     fun hovering_long_request_name_shows_tooltip() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.renameRequestEverywhere("r1", "Get User By ID and Validate Permissions")
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
@@ -364,7 +364,7 @@ class TabManagementUiTest {
 
     @Test
     fun show_in_sidebar_selects_request_and_switches_tab() {
-        val state = AppState().apply {
+        val state = AppState(withDemoData = true).apply {
             // Open two collection requests as tabs
             openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
             openRequest(requestId = "r4", name = "Login", method = HttpMethodType.POST, url = "{{baseUrl}}/auth/login")
@@ -393,7 +393,7 @@ class TabManagementUiTest {
 
     @Test
     fun switching_tabs_updates_sidebar_selection() {
-        val state = AppState().apply {
+        val state = AppState(withDemoData = true).apply {
             openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "u1")
             openRequest(requestId = "r4", name = "Login", method = HttpMethodType.POST, url = "u2")
         }
@@ -417,7 +417,7 @@ class TabManagementUiTest {
 
     @Test
     fun sidebar_highlights_request_matching_active_tab() {
-        val state = AppState().apply {
+        val state = AppState(withDemoData = true).apply {
             openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
             // Simulate what startup does
             syncSidebarToActiveTab()

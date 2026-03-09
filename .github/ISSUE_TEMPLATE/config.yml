@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation (Development Guide)
+    url: https://github.com/snj07/req-lab/blob/main/DEVELOPMENT.md
+    about: Check setup, build, run, and test instructions before opening an issue.
+  - name: Architecture Notes
+    url: https://github.com/snj07/req-lab/blob/main/docs/architecture.md
+    about: Review architecture and module boundaries for design-related questions.

@@ -12,7 +12,7 @@ class AppStateCollectionTest {
 
     @Test
     fun addRequestToCollection_adds_child_and_opens_tab() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val collectionId = state.collections.first().id
         val childrenBefore = state.collections.first().children.size
         val tabsBefore = state.openTabs.size
@@ -26,7 +26,7 @@ class AppStateCollectionTest {
 
     @Test
     fun addRequestToCollection_ignores_nonexistent_collection() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val tabsBefore = state.openTabs.size
 
         state.addRequestToCollection("nonexistent-id")
@@ -36,7 +36,7 @@ class AppStateCollectionTest {
 
     @Test
     fun addTabInSelectedCollection_uses_selected_collection() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val secondCollection = state.collections[1]
         state.selectedCollectionId = secondCollection.id
         val childrenBefore = secondCollection.children.size
@@ -48,7 +48,7 @@ class AppStateCollectionTest {
 
     @Test
     fun addTabInSelectedCollection_falls_back_to_first_collection() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.selectedCollectionId = null
         val firstCollection = state.collections.first()
         val childrenBefore = firstCollection.children.size
@@ -60,7 +60,7 @@ class AppStateCollectionTest {
 
     @Test
     fun addTabInSelectedCollection_creates_orphan_tab_when_no_collections() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.collections.clear()
         state.selectedCollectionId = null
         val tabsBefore = state.openTabs.size
@@ -72,7 +72,7 @@ class AppStateCollectionTest {
 
     @Test
     fun selectedCollectionId_updates_on_assignment() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         assertNull(state.selectedCollectionId)
 
         state.selectedCollectionId = "c1"
@@ -81,7 +81,7 @@ class AppStateCollectionTest {
 
     @Test
     fun addRequestToCollection_generates_unique_name() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val collectionId = state.collections.first().id
 
         state.addRequestToCollection(collectionId)
@@ -181,7 +181,7 @@ class AppStateCollectionTest {
 
     @Test
     fun collapse_and_expand_all_collections_updates_folder_state_map() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
 
         state.collapseAllCollections()
         assertTrue(state.collectionExpandedState.values.all { expanded -> !expanded })
@@ -192,7 +192,7 @@ class AppStateCollectionTest {
 
     @Test
     fun renameRequestEverywhere_updates_tab_and_sidebar_node_name() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val requestId = "r1"
 
         state.openRequest(requestId = requestId, name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
@@ -241,7 +241,7 @@ class AppStateCollectionTest {
 
     @Test
     fun revealRequestInSidebar_sets_selectedRequestId_for_collection_request() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.selectedRequestId = null
 
         state.revealRequestInSidebar("r1")
@@ -251,7 +251,7 @@ class AppStateCollectionTest {
 
     @Test
     fun revealRequestInSidebar_expands_ancestor_folder_for_collection_request() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         // Collapse the parent collection "c1" first
         state.collectionExpandedState["c1"] = false
 
@@ -263,7 +263,7 @@ class AppStateCollectionTest {
 
     @Test
     fun revealRequestInSidebar_sets_selectedRequestId_even_for_orphan_request() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         // "orphan-999" is NOT in any collection; revealRequestInSidebar must
         // still record it as selected (it won't expand anything, but it
         // correctly tracks which request should be highlighted).
@@ -274,7 +274,7 @@ class AppStateCollectionTest {
 
     @Test
     fun revealRequestInSidebar_sets_scroll_target_for_collection_request() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
 
         state.revealRequestInSidebar("r2")
 
@@ -285,7 +285,7 @@ class AppStateCollectionTest {
 
     @Test
     fun revealRequestInSidebar_switches_active_tab_to_matching_request() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         // Open two requests from collections as tabs
         state.openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
         state.openRequest(requestId = "r4", name = "Login", method = HttpMethodType.POST, url = "{{baseUrl}}/auth/login")
@@ -303,7 +303,7 @@ class AppStateCollectionTest {
 
     @Test
     fun syncSidebarToActiveTab_sets_selectedRequestId_and_expands_ancestors() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         // Simulate restored state: tab open for r1, ancestors collapsed
         state.openRequest(requestId = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
         state.collectionExpandedState["c1"] = false
@@ -351,7 +351,7 @@ class AppStateCollectionTest {
         // Simulate: TabsRepository restores a tab with id "r1",
         // WorkspaceRepository restores collections containing node id "r1".
         // After syncSidebarToActiveTab, sidebar should highlight it.
-        val state = AppState(openDefaultTab = false)
+        val state = AppState(openDefaultTab = false, withDemoData = true)
         // Manually add tab as TabsRepository.load would
         state.openTabs.add(RequestTabState(id = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users"))
         state.activeTabIndex = 0

@@ -19,6 +19,8 @@ fun main() = application {
     val state = remember {
         AppState(openDefaultTab = false).also {
             SettingsRepository.load(it.settings)
+            it.collectionsExpanded = it.settings.collectionsExpanded
+            it.environmentsExpanded = it.settings.environmentsExpanded
             WorkspaceRepository.load(it)   // collections first
             TabsRepository.load(it)         // IDs resolved against loaded collections
             // Link restored tabs to sidebar: highlight + expand ancestors

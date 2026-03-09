@@ -1,6 +1,7 @@
 package com.reqlab.ui.shared.persistence
 
 import com.reqlab.ui.shared.platform.PlatformStorage
+import com.reqlab.ui.shared.i18n.AppLanguage
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.AppTheme
 import com.reqlab.ui.shared.state.ResponseLayout
@@ -19,8 +20,11 @@ class SettingsRepositoryTest {
         "settings.defaultTimeoutSec",
         "settings.responseLayout",
         "settings.theme",
+        "settings.language",
         "settings.requestTimeoutSec",
         "settings.followRedirects",
+        "settings.collectionsExpanded",
+        "settings.environmentsExpanded",
         "settings.proxyEnabled",
         "settings.httpProxy",
         "settings.httpsProxy",
@@ -48,8 +52,11 @@ class SettingsRepositoryTest {
         assertEquals(30, settings.defaultTimeoutSec)
         assertEquals(ResponseLayout.RIGHT, settings.responseLayout)
         assertEquals(AppTheme.DARK, settings.theme)
+        assertEquals(AppLanguage.EN, settings.language)
         assertEquals(30, settings.requestTimeoutSec)
         assertTrue(settings.followRedirects)
+        assertFalse(settings.collectionsExpanded)
+        assertFalse(settings.environmentsExpanded)
         assertFalse(settings.proxyEnabled)
         assertEquals("", settings.httpProxy)
         assertEquals("", settings.httpsProxy)
@@ -65,8 +72,11 @@ class SettingsRepositoryTest {
             defaultTimeoutSec   = 60
             responseLayout      = ResponseLayout.BOTTOM
             theme               = AppTheme.LIGHT
+            language            = AppLanguage.FR
             requestTimeoutSec   = 45
             followRedirects     = false
+            collectionsExpanded = true
+            environmentsExpanded = true
             proxyEnabled        = true
             httpProxy           = "http://proxy.example.com:8080"
             httpsProxy          = "https://proxy.example.com:8443"
@@ -82,8 +92,11 @@ class SettingsRepositoryTest {
         assertEquals(60, loaded.defaultTimeoutSec)
         assertEquals(ResponseLayout.BOTTOM, loaded.responseLayout)
         assertEquals(AppTheme.LIGHT, loaded.theme)
+        assertEquals(AppLanguage.FR, loaded.language)
         assertEquals(45, loaded.requestTimeoutSec)
         assertFalse(loaded.followRedirects)
+        assertTrue(loaded.collectionsExpanded)
+        assertTrue(loaded.environmentsExpanded)
         assertTrue(loaded.proxyEnabled)
         assertEquals("http://proxy.example.com:8080", loaded.httpProxy)
         assertEquals("https://proxy.example.com:8443", loaded.httpsProxy)

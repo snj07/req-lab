@@ -18,7 +18,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun duplicate_request_flow_updates_collection_state() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val usersCollection = state.collections.first()
         val before = usersCollection.children.size
 
@@ -31,7 +31,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun delete_request_flow_updates_collection_state() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val usersCollection = state.collections.first()
         val before = usersCollection.children.size
 
@@ -44,7 +44,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun drag_reorder_before_updates_collection_order() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val usersCollection = state.collections.first()
 
         val moved = moveRequestBeforeRequest(state.collections, "r3", "r1")
@@ -55,7 +55,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun drag_reorder_after_updates_collection_order() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val usersCollection = state.collections.first()
 
         // Move r1 to after r2 → order should be r2, r1, r3
@@ -90,7 +90,7 @@ class RequestFlowsIntegrationTest {
      */
     @Test
     fun add_request_mutation_completes_within_30ms() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         val collectionId = state.collections.first().id
 
         val start = System.currentTimeMillis()
@@ -106,7 +106,7 @@ class RequestFlowsIntegrationTest {
      */
     @Test
     fun delete_request_mutation_completes_within_30ms() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
 
         val start = System.currentTimeMillis()
         deleteRequestFromCollections(state.collections, "r1")
@@ -185,7 +185,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun revealRequestInSidebar_selects_request_and_sets_scroll_target() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
 
         state.revealRequestInSidebar("r3")
 
@@ -195,7 +195,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun renameRequestEverywhere_updates_collections_and_open_tabs() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.openRequest(requestId = "r2", name = "Create user", method = com.reqlab.core.model.HttpMethodType.POST, url = "{{baseUrl}}/users")
 
         state.renameRequestEverywhere("r2", "Create user renamed")
@@ -206,7 +206,7 @@ class RequestFlowsIntegrationTest {
 
     @Test
     fun clear_history_via_confirm_action_empties_history_items() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         assertTrue(state.historyItems.isNotEmpty())
 
         state.showConfirm("Clear history?", "Are you sure you want to clear request history?") {

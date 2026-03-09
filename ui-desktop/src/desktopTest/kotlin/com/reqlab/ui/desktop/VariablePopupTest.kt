@@ -401,7 +401,7 @@ class VariablePopupTest {
         composeRule.onNodeWithTag("variable-popup-save", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
-        assertEquals("https://api.example.com", state.selectedEnvironment.toVariableMap()["baseUrl"])
+        assertEquals("https://api.example.com", state.selectedEnvironment!!.toVariableMap()["baseUrl"])
     }
 
     @Test
@@ -425,7 +425,7 @@ class VariablePopupTest {
      */
     @Test
     fun url_input_is_rendered_and_accessible() {
-        composeRule.setContent { MainScreen() }
+        composeRule.setContent { MainScreen(AppState(openDefaultTab = true)) }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("url-input").assertIsDisplayed()
@@ -449,7 +449,7 @@ class VariablePopupTest {
             })
         }
 
-        val env = state.selectedEnvironment
+        val env = state.selectedEnvironment!!
         val variable = env.variables.first { it.key == "baseUrl" }
         assertEquals("https://old.example.com", variable.value)
 
@@ -457,7 +457,7 @@ class VariablePopupTest {
         variable.value = "https://new.example.com"
 
         // Verify via toVariableMap (the same lookup used in the popup and URL resolution)
-        assertEquals("https://new.example.com", state.selectedEnvironment.toVariableMap()["baseUrl"])
+        assertEquals("https://new.example.com", state.selectedEnvironment!!.toVariableMap()["baseUrl"])
     }
 
     /**
@@ -471,7 +471,7 @@ class VariablePopupTest {
             environments.add(EnvState("Dev"))
         }
 
-        val env = state.selectedEnvironment
+        val env = state.selectedEnvironment!!
         assertNull(env.toVariableMap()["apiKey"])
 
         // Simulate Save for a new variable
@@ -495,14 +495,14 @@ class VariablePopupTest {
             })
         }
 
-        val map = state.selectedEnvironment.toVariableMap()
+        val map = state.selectedEnvironment!!.toVariableMap()
         assertEquals("staging.example.com", map["host"])
         assertEquals("8080", map["port"])
 
         // Update one variable
-        state.selectedEnvironment.variables.first { it.key == "host" }.value = "prod.example.com"
+        state.selectedEnvironment!!.variables.first { it.key == "host" }.value = "prod.example.com"
 
-        val updatedMap = state.selectedEnvironment.toVariableMap()
+        val updatedMap = state.selectedEnvironment!!.toVariableMap()
         assertEquals("prod.example.com", updatedMap["host"])
         // Other variables are unaffected
         assertEquals("8080", updatedMap["port"])

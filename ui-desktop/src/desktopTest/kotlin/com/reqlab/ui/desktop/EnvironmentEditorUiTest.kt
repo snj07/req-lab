@@ -24,7 +24,7 @@ class EnvironmentEditorUiTest {
 
     @Test
     fun environment_editor_shows_variable_rows_with_test_tags() {
-        val state = AppState().apply {
+        val state = AppState(withDemoData = true).apply {
             environments.first().variables.clear()
             environments.first().variables.add(MutableKeyValue("baseUrl", "http://localhost:8080"))
             environments.first().variables.add(MutableKeyValue("token", "abc123"))
@@ -41,7 +41,7 @@ class EnvironmentEditorUiTest {
 
     @Test
     fun environment_editor_input_can_be_edited_and_saved() {
-        val state = AppState().apply {
+        val state = AppState(withDemoData = true).apply {
             environments.first().variables.clear()
             environments.first().variables.add(MutableKeyValue("baseUrl", "http://localhost:8080"))
             openEnvEdit(0)
@@ -66,7 +66,7 @@ class EnvironmentEditorUiTest {
      */
     @Test
     fun environment_dialog_title_bar_drag_moves_dialog() {
-        val state = AppState().apply { openEnvEdit(0) }
+        val state = AppState(withDemoData = true).apply { openEnvEdit(0) }
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
@@ -95,7 +95,7 @@ class EnvironmentEditorUiTest {
      */
     @Test
     fun environment_dialog_drag_to_edge_stays_within_viewport() {
-        val state = AppState().apply { openEnvEdit(0) }
+        val state = AppState(withDemoData = true).apply { openEnvEdit(0) }
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
@@ -127,7 +127,7 @@ class EnvironmentEditorUiTest {
      */
     @Test
     fun environment_dialog_title_bar_drag_moves_dialog_horizontally() {
-        val state = AppState().apply { openEnvEdit(0) }
+        val state = AppState(withDemoData = true).apply { openEnvEdit(0) }
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
@@ -155,7 +155,7 @@ class EnvironmentEditorUiTest {
      */
     @Test
     fun environment_dialog_smooth_drag_with_small_increments() {
-        val state = AppState().apply { openEnvEdit(0) }
+        val state = AppState(withDemoData = true).apply { openEnvEdit(0) }
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 

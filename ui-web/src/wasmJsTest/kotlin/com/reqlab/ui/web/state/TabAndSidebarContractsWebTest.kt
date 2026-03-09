@@ -60,7 +60,7 @@ class TabAndSidebarContractsWebTest {
 
     @Test
     fun revealRequestInSidebar_always_sets_selectedRequestId_on_web() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.selectedRequestId = null
 
         state.revealRequestInSidebar("r1")
@@ -79,7 +79,7 @@ class TabAndSidebarContractsWebTest {
 
     @Test
     fun revealRequestInSidebar_sets_scroll_target_for_known_request_on_web() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.revealRequestInSidebar("r2")
 
         assertEquals("r2", state.sidebarScrollToRequestId)
@@ -87,7 +87,7 @@ class TabAndSidebarContractsWebTest {
 
     @Test
     fun revealRequestInSidebar_expands_ancestor_collection_on_web() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.collectionExpandedState["c1"] = false
 
         state.revealRequestInSidebar("r1")
@@ -99,7 +99,7 @@ class TabAndSidebarContractsWebTest {
 
     @Test
     fun revealRequestInSidebar_switches_active_tab_to_matching_request_on_web() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.openRequest(requestId = "r1", name = "A", method = HttpMethodType.GET, url = "u1")
         state.openRequest(requestId = "r4", name = "B", method = HttpMethodType.POST, url = "u2")
         assertEquals("r4", state.activeTab?.id)
@@ -114,7 +114,7 @@ class TabAndSidebarContractsWebTest {
 
     @Test
     fun syncSidebarToActiveTab_sets_selectedRequestId_and_expands_ancestors_on_web() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.openRequest(requestId = "r1", name = "A", method = HttpMethodType.GET, url = "u1")
         state.collectionExpandedState["c1"] = false
         state.selectedRequestId = null
@@ -152,7 +152,7 @@ class TabAndSidebarContractsWebTest {
 
     @Test
     fun restored_tab_id_matches_collection_node_id_on_web() {
-        val state = AppState(openDefaultTab = false)
+        val state = AppState(openDefaultTab = false, withDemoData = true)
         state.openTabs.add(RequestTabState(id = "r1", name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users"))
         state.activeTabIndex = 0
 

@@ -1,6 +1,7 @@
 package com.reqlab.ui.shared.persistence
 
 import com.reqlab.ui.shared.platform.PlatformStorage
+import com.reqlab.ui.shared.i18n.AppLanguage
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppTheme
@@ -30,8 +31,15 @@ object SettingsRepository {
             settings.theme,
         )
 
+        settings.language = safeEnumOf(
+            PlatformStorage.getString(PREFIX + "language") ?: settings.language.name,
+            settings.language,
+        )
+
         settings.requestTimeoutSec = getInt("requestTimeoutSec", settings.requestTimeoutSec)
         settings.followRedirects   = getBool("followRedirects", settings.followRedirects)
+        settings.collectionsExpanded  = getBool("collectionsExpanded", settings.collectionsExpanded)
+        settings.environmentsExpanded = getBool("environmentsExpanded", settings.environmentsExpanded)
 
         settings.proxyEnabled = getBool("proxyEnabled", settings.proxyEnabled)
         settings.httpProxy    = PlatformStorage.getString(PREFIX + "httpProxy") ?: settings.httpProxy
@@ -47,8 +55,11 @@ object SettingsRepository {
         putInt("defaultTimeoutSec", settings.defaultTimeoutSec)
         PlatformStorage.putString(PREFIX + "responseLayout", settings.responseLayout.name)
         PlatformStorage.putString(PREFIX + "theme", settings.theme.name)
+        PlatformStorage.putString(PREFIX + "language", settings.language.name)
         putInt("requestTimeoutSec", settings.requestTimeoutSec)
         putBool("followRedirects", settings.followRedirects)
+        putBool("collectionsExpanded", settings.collectionsExpanded)
+        putBool("environmentsExpanded", settings.environmentsExpanded)
         putBool("proxyEnabled", settings.proxyEnabled)
         PlatformStorage.putString(PREFIX + "httpProxy", settings.httpProxy)
         PlatformStorage.putString(PREFIX + "httpsProxy", settings.httpsProxy)

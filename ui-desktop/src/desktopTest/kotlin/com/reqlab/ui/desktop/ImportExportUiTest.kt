@@ -1,6 +1,7 @@
 package com.reqlab.ui.desktop
 
 import com.reqlab.ui.shared.MainScreen
+import com.reqlab.ui.shared.state.AppState
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,7 +30,7 @@ class ImportExportUiTest {
 
     @Test
     fun collection_actions_menu_shows_folder_actions_and_collection_actions() {
-        composeRule.setContent { MainScreen() }
+        composeRule.setContent { MainScreen(AppState(withDemoData = true)) }
 
         composeRule.onNodeWithTag("collection-actions-c1", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
@@ -44,7 +45,7 @@ class ImportExportUiTest {
 
     @Test
     fun environment_actions_menu_shows_export_duplicate_delete() {
-        composeRule.setContent { MainScreen() }
+        composeRule.setContent { MainScreen(AppState(withDemoData = true)) }
 
         composeRule.onNodeWithTag("env-actions-Development", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()

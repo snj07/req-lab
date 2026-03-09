@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Input
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
@@ -91,6 +92,7 @@ import com.reqlab.ui.shared.persistence.ImportExportException
 import com.reqlab.ui.shared.persistence.ImportExportNaming
 import com.reqlab.ui.shared.persistence.ImportExportRepository
 import com.reqlab.ui.shared.persistence.WorkspaceRepository
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
 import com.reqlab.ui.shared.state.EnvState
@@ -194,7 +196,7 @@ fun Sidebar(state: AppState) {
             item {
                 SectionHeader(
                     icon = Icons.Default.History,
-                    title = "History",
+                    title = Strings.history,
                     expanded = state.historyExpanded,
                     onToggle = { state.historyExpanded = !state.historyExpanded },
                 )
@@ -213,7 +215,7 @@ fun Sidebar(state: AppState) {
                 }
                 items(visibleHistory, key = { it.id }) { item ->
                     HistoryRow(item, onClick = {
-                        state.openRequest(name = item.name, method = item.method, url = item.url)
+                        state.openRequest(requestId = item.id, name = item.name, method = item.method, url = item.url)
                     })
                 }
                 item { SectionSpacer() }
@@ -222,9 +224,12 @@ fun Sidebar(state: AppState) {
             item {
                 SectionHeader(
                     icon = Icons.Default.FolderOpen,
-                    title = "Collections",
+                    title = Strings.collections,
                     expanded = state.collectionsExpanded,
-                    onToggle = { state.collectionsExpanded = !state.collectionsExpanded },
+                    onToggle = {
+                        state.collectionsExpanded = !state.collectionsExpanded
+                        state.settings.collectionsExpanded = state.collectionsExpanded
+                    },
                     trailing = {
                         Row {
                             IconButton(
@@ -245,7 +250,12 @@ fun Sidebar(state: AppState) {
                                 },
                                 modifier = Modifier.size(24.dp).testTag("collection-import-button"),
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = "Import collection", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+                                Icon(
+                                    Icons.Default.Input,
+                                    contentDescription = "Import collection",
+                                    tint = ReqLabColors.OnSurfaceDim,
+                                    modifier = Modifier.size(14.dp).testTag("collection-import-icon"),
+                                )
                             }
                             IconButton(
                                 onClick = {
@@ -445,9 +455,12 @@ fun Sidebar(state: AppState) {
             item {
                 SectionHeader(
                     icon = Icons.Default.Settings,
-                    title = "Environments",
+                    title = Strings.environments,
                     expanded = state.environmentsExpanded,
-                    onToggle = { state.environmentsExpanded = !state.environmentsExpanded },
+                    onToggle = {
+                        state.environmentsExpanded = !state.environmentsExpanded
+                        state.settings.environmentsExpanded = state.environmentsExpanded
+                    },
                     trailing = {
                         Row {
                             IconButton(
@@ -466,7 +479,12 @@ fun Sidebar(state: AppState) {
                                 },
                                 modifier = Modifier.size(24.dp).testTag("environment-import-button"),
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = "Import environment", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+                                Icon(
+                                    Icons.Default.Input,
+                                    contentDescription = "Import environment",
+                                    tint = ReqLabColors.OnSurfaceDim,
+                                    modifier = Modifier.size(14.dp).testTag("environment-import-icon"),
+                                )
                             }
                             IconButton(
                                 onClick = {
@@ -487,6 +505,40 @@ fun Sidebar(state: AppState) {
                 )
             }
             if (state.environmentsExpanded) {
+                if (state.environments.isEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 28.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = Strings.noEnvironmentsConfigured,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ReqLabColors.OnSurfaceDim,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = Strings.createEnvironment,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ReqLabColors.Primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(ReqLabColors.Primary.copy(alpha = 0.10f))
+                                    .clickable {
+                                        val names = state.environments.map { it.name }.toSet()
+                                        val name = ImportExportNaming.generateUniqueEnvironmentName("New Environment", names)
+                                        state.environments.add(EnvState(name))
+                                        renameEnvironmentIndex = state.environments.lastIndex
+                                        renameEnvironmentValue = name
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
                 state.environments.forEachIndexed { index, env ->
                     item(key = "env_$index") {
                         EnvironmentRow(
@@ -523,12 +575,10 @@ fun Sidebar(state: AppState) {
                             },
                             onDelete = {
                                 val action = {
-                                    if (state.environments.size <= 1) {
-                                        state.showError("Cannot delete", "At least one environment must remain.")
-                                    } else {
+                                    if (state.environments.isNotEmpty()) {
                                         val deletedName = state.environments[index].name
                                         state.environments.removeAt(index)
-                                        state.selectedEnvIndex = state.selectedEnvIndex.coerceIn(0, state.environments.lastIndex)
+                                        state.selectedEnvIndex = if (state.environments.isEmpty()) 0 else state.selectedEnvIndex.coerceIn(0, state.environments.lastIndex)
                                         state.log("Environment deleted: $deletedName", LogLevel.INFO)
                                     }
                                 }
@@ -674,7 +724,7 @@ private fun SearchBar(query: String, onQueryChanged: (String) -> Unit, modifier:
             cursorBrush = SolidColor(ReqLabColors.Primary),
             modifier = Modifier.testTag("sidebar-search-input"),
             decorationBox = { inner ->
-                if (query.isEmpty()) Text("Search…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+                if (query.isEmpty()) Text("${Strings.search}…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
                 inner()
             },
         )
@@ -1034,7 +1084,7 @@ private fun CollectionTreeNode(
                         if (isCollectionRoot) {
                             DropdownMenuItem(
                                 text = { Text("Export Collection") },
-                                leadingIcon = { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                leadingIcon = { Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                 onClick = { showMenu = false; onExportCollection(node) },
                             )
                             DropdownMenuItem(
@@ -1243,7 +1293,7 @@ private fun EnvironmentRow(
                 })
                 DropdownMenuItem(
                     text = { Text("Export Environment") },
-                    leadingIcon = { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    leadingIcon = { Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
                     onExport()

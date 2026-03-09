@@ -156,6 +156,10 @@ class AppSettings {
     var requestTimeoutSec    by mutableStateOf(30)
     var followRedirects      by mutableStateOf(true)
 
+    // Sidebar
+    var collectionsExpanded  by mutableStateOf(false)
+    var environmentsExpanded by mutableStateOf(false)
+
     // Proxy
     var httpProxy            by mutableStateOf("")
     var httpsProxy           by mutableStateOf("")
@@ -217,7 +221,7 @@ class RequestTabState(
      * The coroutine Job for the currently in-flight HTTP request.
      * Cancelling this job aborts the request (fixes H-1 race condition).
      */
-    @Volatile var currentJob: Job? = null
+    var currentJob: Job? = null
 
     // response associated with this tab
     var response    by mutableStateOf<ResponseDefinition?>(null)
@@ -311,16 +315,16 @@ class RequestTabState(
 
 // ── Global application state ────────────────────────────────────
 
-class AppState(openDefaultTab: Boolean = true) {
+class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     // ── workspace mode ──
     var workspaceMode by mutableStateOf(WorkspaceMode.HTTP)
 
     // ── sidebar ────────
     var sidebarExpanded      by mutableStateOf(true)
     var sidebarWidth         by mutableStateOf(260f)
-    var historyExpanded      by mutableStateOf(true)
-    var collectionsExpanded  by mutableStateOf(true)
-    var environmentsExpanded by mutableStateOf(true)
+    var historyExpanded      by mutableStateOf(false)
+    var collectionsExpanded  by mutableStateOf(withDemoData)
+    var environmentsExpanded by mutableStateOf(withDemoData)
     var sidebarSearchQuery   by mutableStateOf("")
     var selectedCollectionId by mutableStateOf<String?>(null)
     var selectedRequestId    by mutableStateOf<String?>(null)
@@ -415,29 +419,21 @@ class AppState(openDefaultTab: Boolean = true) {
 
     // ── environment ──
     var selectedEnvIndex by mutableStateOf(0)
-    val environments = mutableStateListOf(
-        EnvState("Development", listOf(
-            MutableKeyValue("baseUrl",   "http://localhost:8080"),
-            MutableKeyValue("authToken", "dev-token-1234"),
-        )),
-        EnvState("Staging", listOf(
-            MutableKeyValue("baseUrl",   "https://staging.api.example.com"),
-            MutableKeyValue("authToken", "stg-token-abcd"),
-        )),
-        EnvState("Production", listOf(
-            MutableKeyValue("baseUrl",   "https://api.example.com"),
-            MutableKeyValue("authToken", "prod-token-xyz", secret = true),
-        )),
-    )
+    val environments = mutableStateListOf<EnvState>().also {
+        if (withDemoData) {
+            it.addAll(AppStateDemoData.environments())
+        }
+    }
 
     // ── global variables (lowest priority, overridden by environment + local) ──
-    val globalVariables = mutableStateListOf(
-        MutableKeyValue("appName", "ReqLab"),
-        MutableKeyValue("apiVersion", "v1"),
-    )
+    val globalVariables = mutableStateListOf<MutableKeyValue>().also {
+        if (withDemoData) {
+            it.addAll(AppStateDemoData.globalVariables())
+        }
+    }
     var showGlobalVariablesDialog by mutableStateOf(false)
 
-    val selectedEnvironment: EnvState get() = environments.getOrElse(selectedEnvIndex) { environments.first() }
+    val selectedEnvironment: EnvState? get() = environments.getOrNull(selectedEnvIndex)
 
     /**
      * Variable layers for the active environment (used in request variable resolution).
@@ -446,7 +442,7 @@ class AppState(openDefaultTab: Boolean = true) {
      */
     fun activeVariableLayers(): List<Map<String, String>> =
         listOf(
-            selectedEnvironment.toVariableMap(),
+            selectedEnvironment?.toVariableMap().orEmpty(),
             globalVariables.filter { it.enabled }.associate { it.key to it.value },
         )
 
@@ -455,7 +451,7 @@ class AppState(openDefaultTab: Boolean = true) {
      * Existing variables with the same key are updated; new keys are appended.
      */
     fun mergeScriptVariables(vars: Map<String, String>) {
-        val env = selectedEnvironment
+        val env = selectedEnvironment ?: return
         vars.forEach { (key, value) ->
             val existing = env.variables.firstOrNull { it.key == key }
             if (existing != null) {
@@ -469,24 +465,18 @@ class AppState(openDefaultTab: Boolean = true) {
     // ── settings ────────
     val settings = AppSettings()
 
-    // ── demo / history data ──
-    val historyItems = mutableStateListOf(
-        HistoryItem("h1", HttpMethodType.GET,    "List users",  "http://localhost:8080/users",     currentTimeMillis() - 300_000),
-        HistoryItem("h2", HttpMethodType.POST,   "Create user", "http://localhost:8080/users",     currentTimeMillis() - 600_000),
-        HistoryItem("h3", HttpMethodType.DELETE, "Delete user", "http://localhost:8080/users/1",   currentTimeMillis() - 900_000),
-    )
+    // ── history data ──
+    val historyItems = mutableStateListOf<HistoryItem>().also {
+        if (withDemoData) {
+            it.addAll(AppStateDemoData.historyItems())
+        }
+    }
 
-    val collections = mutableStateListOf(
-        CollectionNode("c1", "Users API", isFolder = true, children = mutableStateListOf(
-            CollectionNode("r1", "Get all users", method = HttpMethodType.GET,  url = "{{baseUrl}}/users"),
-            CollectionNode("r2", "Create user",   method = HttpMethodType.POST, url = "{{baseUrl}}/users"),
-            CollectionNode("r3", "Update user",   method = HttpMethodType.PUT,  url = "{{baseUrl}}/users/1"),
-        )),
-        CollectionNode("c2", "Auth", isFolder = true, children = mutableStateListOf(
-            CollectionNode("r4", "Login",   method = HttpMethodType.POST, url = "{{baseUrl}}/auth/login"),
-            CollectionNode("r5", "Refresh", method = HttpMethodType.POST, url = "{{baseUrl}}/auth/refresh"),
-        )),
-    )
+    val collections = mutableStateListOf<CollectionNode>().also {
+        if (withDemoData) {
+            it.addAll(AppStateDemoData.collections())
+        }
+    }
 
     // ── actions ──────────────────────────────────────────────────
 
@@ -670,10 +660,41 @@ class AppState(openDefaultTab: Boolean = true) {
         val tabIdx = openTabs.indexOfFirst { it.id == requestId }
         if (tabIdx >= 0) activeTabIndex = tabIdx
 
+        val tab = openTabs.getOrNull(tabIdx)
+        if (tab != null && historyItems.none { it.id == requestId }) {
+            historyItems.add(
+                0,
+                HistoryItem(
+                    id = tab.id,
+                    method = tab.method,
+                    name = tab.name,
+                    url = tab.url,
+                    timestamp = currentTimeMillis(),
+                ),
+            )
+        }
+
         if (expandAncestorsForRequest(collections, requestId)) {
             sidebarScrollToRequestId = requestId
             notifyCollectionsChanged()
+        } else {
+            historyExpanded = true
         }
+    }
+
+    fun recordHistory(requestId: String, method: HttpMethodType, name: String, url: String) {
+        val existing = historyItems.indexOfFirst { it.id == requestId }
+        val item = HistoryItem(
+            id = requestId,
+            method = method,
+            name = name,
+            url = url,
+            timestamp = currentTimeMillis(),
+        )
+        if (existing >= 0) {
+            historyItems.removeAt(existing)
+        }
+        historyItems.add(0, item)
     }
 
     /**

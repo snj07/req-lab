@@ -275,8 +275,8 @@ fun VariableEditorPopup(
 ) {
     val cleanName = remember(variableName) { normalizeVariableDisplayName(variableName) }
     val env = state.selectedEnvironment
-    val envVar = remember(cleanName, env) { env.variables.firstOrNull { it.key == cleanName } }
-    val resolved = env.toVariableMap()[cleanName]
+    val envVar = remember(cleanName, env) { env?.variables?.firstOrNull { it.key == cleanName } }
+    val resolved = env?.toVariableMap()?.get(cleanName)
 
     var editValue by remember(cleanName) { mutableStateOf(TextFieldValue(envVar?.value ?: "")) }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -368,7 +368,7 @@ fun VariableEditorPopup(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "Environment: ${env.name}",
+                                text = "Environment: ${env?.name ?: "None"}",
                                 fontSize = 11.sp,
                                 color = ReqLabColors.OnSurfaceDim,
                                 maxLines = 1,
@@ -461,7 +461,7 @@ fun VariableEditorPopup(
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(ReqLabColors.Primary.copy(alpha = 0.10f))
                                 .clickable {
-                                    val idx = state.environments.indexOf(env)
+                                    val idx = env?.let { state.environments.indexOf(it) } ?: -1
                                     if (idx >= 0) state.openEnvEdit(idx)
                                     onDismiss()
                                 }
@@ -491,7 +491,9 @@ fun VariableEditorPopup(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(ReqLabColors.Primary)
                                 .clickable {
-                                    if (envVar != null) {
+                                    if (env == null) {
+                                        onDismiss()
+                                    } else if (envVar != null) {
                                         envVar.value = editValue.text
                                     } else {
                                         env.variables.add(MutableKeyValue(key = cleanName, value = editValue.text))

@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.i18n.AppLanguage
+import com.reqlab.ui.shared.theme.ReqLabTheme
 import org.junit.Rule
 import org.junit.Test
 
@@ -104,7 +106,7 @@ class SettingsDialogUiTest {
 
     @Test
     fun clear_history_requires_confirmation_and_clears_entries() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         composeRule.setContent { MainScreen(state = state) }
 
         composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
@@ -120,5 +122,37 @@ class SettingsDialogUiTest {
 
         assert(state.historyItems.isEmpty()) { "History should be cleared after confirmation" }
         composeRule.onAllNodesWithText("List users", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun language_selection_updates_settings_language() {
+        val state = AppState()
+        composeRule.setContent { MainScreen(state = state) }
+
+        composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Language", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("language-es", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assert(state.settings.language == AppLanguage.ES) { "Language should switch to Spanish" }
+    }
+
+    @Test
+    fun language_switch_updates_sidebar_label_without_restart() {
+        val state = AppState(openDefaultTab = false)
+        composeRule.setContent {
+            ReqLabTheme(appTheme = state.settings.theme, language = state.settings.language) {
+                MainScreen(state = state)
+            }
+        }
+
+        composeRule.onNodeWithText("History", useUnmergedTree = true).assertIsDisplayed()
+
+        composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Language", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("language-es", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Historial", useUnmergedTree = true).assertIsDisplayed()
     }
 }

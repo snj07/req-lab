@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Validate wrapper
+        uses: gradle/actions/wrapper-validation@v3
+
+      - name: Grant execute permission for gradlew
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
+
+      - name: Build distribution for current OS
+        run: ./gradlew :ui-desktop:packageDistributionForCurrentOS --no-daemon
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-distribution
+          path: |
+            ui-desktop/build/compose/binaries/**
+            ui-desktop/build/compose/jars/**
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.*

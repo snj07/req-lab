@@ -78,7 +78,7 @@ class ArchitecturalFixesUiTest {
     @Test
     fun workspaceRestore_correctLoadOrder_resolvesTabIdToCollectionNode() {
         // Simulate the startup sequence: workspace first, THEN tabs.
-        val origin = AppState()
+        val origin = AppState(withDemoData = true)
         // Ensure there is at least one request in a collection.
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req, "Need at least one request in default collections")
@@ -113,7 +113,7 @@ class ArchitecturalFixesUiTest {
     fun workspaceRestore_wrongLoadOrder_failsToResolveId() {
         // This test documents the OLD broken behaviour: if tabs load first,
         // the ID cannot be resolved because collections are still empty.
-        val origin = AppState()
+        val origin = AppState(withDemoData = true)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req)
 
@@ -142,7 +142,7 @@ class ArchitecturalFixesUiTest {
 
     @Test
     fun syncSidebarToActiveTab_setsScrollTarget_afterCorrectRestore() {
-        val origin = AppState()
+        val origin = AppState(withDemoData = true)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req)
 

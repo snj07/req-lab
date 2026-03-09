@@ -1,6 +1,9 @@
 package com.reqlab.ui.shared.persistence
 
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.HistoryItem
+import com.reqlab.core.model.HttpMethodType
+import com.reqlab.ui.shared.platform.currentTimeMillis
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -23,7 +26,7 @@ class ImportExportRepositoryTest {
 
     @Test
     fun exportWorkspace_writesExpectedSchemaEnvelope() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
 
         val json = ImportExportRepository.exportWorkspaceToString(state)
 
@@ -31,11 +34,13 @@ class ImportExportRepositoryTest {
         assertTrue(json.contains("\"version\": \"1.0\""))
         assertTrue(json.contains("\"collections\""))
         assertTrue(json.contains("\"environments\""))
+        assertTrue(json.contains("\"globalVariables\""))
+        assertTrue(json.contains("\"history\""))
     }
 
     @Test
     fun exportWorkspace_then_importWorkspace_restoresCollectionsAndEnvironments() {
-        val source = AppState()
+        val source = AppState(withDemoData = true)
 
         val json = ImportExportRepository.exportWorkspaceToString(source)
 
@@ -53,11 +58,11 @@ class ImportExportRepositoryTest {
 
     @Test
     fun importWorkspace_renamesDuplicateCollectionsAndEnvironments() {
-        val source = AppState()
+        val source = AppState(withDemoData = true)
 
         val json = ImportExportRepository.exportWorkspaceToString(source)
 
-        val target = AppState()
+        val target = AppState(withDemoData = true)
         val beforeCollections = target.collections.map { it.name }.toSet()
         val beforeEnvironments = target.environments.map { it.name }.toSet()
 
@@ -75,7 +80,7 @@ class ImportExportRepositoryTest {
 
     @Test
     fun exportAndImportSingleCollection_roundTripsWithCollectionSchema() {
-        val source = AppState()
+        val source = AppState(withDemoData = true)
         val collection = source.collections.first()
 
         val content = ImportExportRepository.exportCollectionToString(collection)
@@ -92,7 +97,7 @@ class ImportExportRepositoryTest {
 
     @Test
     fun exportAndImportEnvironment_roundTripsWithEnvironmentSchema() {
-        val source = AppState()
+        val source = AppState(withDemoData = true)
         val environment = source.environments.first()
 
         val content = ImportExportRepository.exportEnvironmentToString(environment)
@@ -123,7 +128,7 @@ class ImportExportRepositoryTest {
 
     @Test
     fun end_to_end_workspace_backup_restore_flow() {
-        val app = AppState()
+        val app = AppState(withDemoData = true)
         app.collections.add(
             com.reqlab.ui.shared.state.CollectionNode(
                 id = "custom-c1",
@@ -159,5 +164,32 @@ class ImportExportRepositoryTest {
         assertTrue(result.importedEnvironments > 0)
         assertTrue(app.collections.any { it.name == "Custom API" })
         assertTrue(app.environments.any { it.name == "CI" })
+    }
+
+    @Test
+    fun replaceWorkspaceState_restores_global_variables_and_history() {
+        val source = AppState().apply {
+            globalVariables.add(com.reqlab.ui.shared.state.MutableKeyValue("apiKey", "abc123"))
+            historyItems.add(
+                HistoryItem(
+                    id = "hist-1",
+                    method = HttpMethodType.GET,
+                    name = "Ping",
+                    url = "https://example.com/ping",
+                    timestamp = currentTimeMillis(),
+                )
+            )
+        }
+
+        val json = ImportExportRepository.exportWorkspaceToString(source)
+        val target = AppState()
+        target.globalVariables.clear()
+        target.historyItems.clear()
+
+        val workspace = ImportExportRepository.decodeWorkspace(json)
+        ImportExportRepository.replaceWorkspaceState(target, workspace)
+
+        assertTrue(target.globalVariables.any { it.key == "apiKey" && it.value == "abc123" })
+        assertTrue(target.historyItems.any { it.id == "hist-1" && it.name == "Ping" })
     }
 }

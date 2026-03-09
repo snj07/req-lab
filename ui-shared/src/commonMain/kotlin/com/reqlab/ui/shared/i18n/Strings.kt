@@ -51,6 +51,10 @@ object Strings {
     val newFolder: String @Composable @ReadOnlyComposable get() = t("new_folder")
     val collapseAll: String @Composable @ReadOnlyComposable get() = t("collapse_all")
     val expandAll: String @Composable @ReadOnlyComposable get() = t("expand_all")
+    val noEnvironmentsConfigured: String @Composable @ReadOnlyComposable get() = t("no_environments_configured")
+    val createEnvironment: String @Composable @ReadOnlyComposable get() = t("create_environment")
+    val noRequestSelected: String @Composable @ReadOnlyComposable get() = t("no_request_selected")
+    val openRequestToStart: String @Composable @ReadOnlyComposable get() = t("open_request_to_start")
 
     // ── Request Editor ──────────────────────────
     val params: String @Composable @ReadOnlyComposable get() = t("params")
@@ -200,6 +204,10 @@ private val enTranslations = mapOf(
     "new_folder" to "New Folder",
     "collapse_all" to "Collapse All",
     "expand_all" to "Expand All",
+    "no_environments_configured" to "No environments configured",
+    "create_environment" to "Create Environment",
+    "no_request_selected" to "No request selected",
+    "open_request_to_start" to "Open a request from History or Collections to start.",
     // Request Editor
     "params" to "Params",
     "headers" to "Headers",
@@ -310,6 +318,10 @@ private val esTranslations = mapOf(
     "new_folder" to "Nueva carpeta",
     "collapse_all" to "Contraer todo",
     "expand_all" to "Expandir todo",
+    "no_environments_configured" to "No hay entornos configurados",
+    "create_environment" to "Crear entorno",
+    "no_request_selected" to "No hay solicitud seleccionada",
+    "open_request_to_start" to "Abra una solicitud desde Historial o Colecciones para comenzar.",
     "params" to "Parámetros",
     "headers" to "Encabezados",
     "body" to "Cuerpo",
@@ -411,6 +423,10 @@ private val frTranslations = mapOf(
     "new_folder" to "Nouveau dossier",
     "collapse_all" to "Tout réduire",
     "expand_all" to "Tout développer",
+    "no_environments_configured" to "Aucun environnement configuré",
+    "create_environment" to "Créer un environnement",
+    "no_request_selected" to "Aucune requête sélectionnée",
+    "open_request_to_start" to "Ouvrez une requête depuis l'Historique ou les Collections pour commencer.",
     "params" to "Paramètres",
     "headers" to "En-têtes",
     "body" to "Corps",
@@ -512,6 +528,10 @@ private val deTranslations = mapOf(
     "new_folder" to "Neuer Ordner",
     "collapse_all" to "Alle einklappen",
     "expand_all" to "Alle ausklappen",
+    "no_environments_configured" to "Keine Umgebungen konfiguriert",
+    "create_environment" to "Umgebung erstellen",
+    "no_request_selected" to "Keine Anfrage ausgewählt",
+    "open_request_to_start" to "Öffnen Sie eine Anfrage aus Verlauf oder Sammlungen, um zu beginnen.",
     "params" to "Parameter",
     "headers" to "Header",
     "body" to "Body",

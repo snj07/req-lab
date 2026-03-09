@@ -55,7 +55,7 @@ class ArchitecturalFixesWebTest {
 
     @Test
     fun workspaceRestore_correctLoadOrder_resolvesTabIdToCollectionNode() {
-        val origin = AppState()
+        val origin = AppState(withDemoData = true)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req, "Need at least one request in default collections")
 
@@ -80,7 +80,7 @@ class ArchitecturalFixesWebTest {
 
     @Test
     fun workspaceRestore_wrongLoadOrder_failsToResolveId() {
-        val origin = AppState()
+        val origin = AppState(withDemoData = true)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req)
 
@@ -105,7 +105,7 @@ class ArchitecturalFixesWebTest {
 
     @Test
     fun workspaceRestore_retainsTabs() {
-        val state = AppState()
+        val state = AppState(withDemoData = true)
         state.addTabInSelectedCollection()
 
         TabsRepository.save(state)
@@ -118,7 +118,7 @@ class ArchitecturalFixesWebTest {
 
     @Test
     fun syncSidebarToActiveTab_setsScrollTarget_afterCorrectRestore() {
-        val origin = AppState()
+        val origin = AppState(withDemoData = true)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req)
 

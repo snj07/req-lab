@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -35,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.components.BottomPanel
 import com.reqlab.ui.shared.components.ConfirmDeleteDialog
 import com.reqlab.ui.shared.components.DirtyCloseDialog
@@ -107,7 +112,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|${responseLayout.name}|$requestTimeoutSec|$followRedirects|$proxyEnabled|$httpProxy|$httpsProxy"
+                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy"
             }
         }.drop(1)
             .collect { withContext(ioDispatcher) { SettingsRepository.save(state.settings) } }
@@ -138,7 +143,13 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                 val vars = env.variables.joinToString(",") { v -> "${v.key}=${v.value}:${v.enabled}:${v.secret}" }
                 "${env.name}:[$vars]"
             }
-            "$collectionFingerprint#$envFingerprint"
+            val globalFingerprint = state.globalVariables.joinToString("|") { gv ->
+                "${gv.key}=${gv.value}:${gv.enabled}:${gv.secret}"
+            }
+            val historyFingerprint = state.historyItems.joinToString("|") { hi ->
+                "${hi.id}:${hi.method}:${hi.name}:${hi.url}:${hi.timestamp}"
+            }
+            "$collectionFingerprint#$envFingerprint#$globalFingerprint#$historyFingerprint"
         }.drop(1)
             .collect { withContext(ioDispatcher) { WorkspaceRepository.save(state) } }
     }
@@ -381,16 +392,44 @@ private fun ColumnScope.HttpWorkspaceContent(
                             modifier = Modifier.padding(24.dp),
                         ) {
                             Text(
-                                text = "No request selected",
+                                text = Strings.noRequestSelected,
                                 color = ReqLabColors.OnSurface,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = "Open a request from History or Collections to start.",
+                                text = Strings.openRequestToStart,
                                 color = ReqLabColors.OnSurfaceDim,
                                 fontSize = 13.sp,
                             )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(ReqLabColors.Primary)
+                                        .clickable { state.addTabInSelectedCollection() }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .testTag("empty-create-request"),
+                                ) {
+                                    Text("Create Request", color = ReqLabColors.OnPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(ReqLabColors.SurfaceContainer)
+                                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            state.sidebarExpanded = true
+                                            state.historyExpanded = true
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .testTag("empty-open-request"),
+                                ) {
+                                    Text("Open Request", color = ReqLabColors.OnSurface, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
                         }
                     }
                 }
