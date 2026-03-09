@@ -7,8 +7,6 @@
 build/
 **/build/
 gradle-app.setting
-!gradle-wrapper.jar
-!gradle/wrapper/gradle-wrapper.properties
 
 # ── IntelliJ IDEA ────────────────────────────────────────────
 .idea/
@@ -38,6 +36,9 @@ Thumbs.db
 *.ear
 hs_err_pid*
 replay_pid*
+# Keep Gradle wrapper artifacts tracked — must come AFTER *.jar to override it
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
 
 # ── Node (ui-web / KMP JS) ───────────────────────────────────
 node_modules/
