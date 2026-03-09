@@ -8,12 +8,16 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.ui.shared.i18n.AppLanguage
+import com.reqlab.ui.shared.i18n.I18nProvider
+import com.reqlab.ui.shared.i18n.LocalI18n
 import com.reqlab.ui.shared.state.AppTheme
 
 /**
@@ -97,9 +101,13 @@ private val ReqLabTypography = Typography(
     labelSmall  = TextStyle(fontSize = 11.sp),
 )
 
-/** Wraps [content] in Material3 + ReqLab colour scheme based on [appTheme]. */
+/** Wraps [content] in Material3 + ReqLab colour scheme based on [appTheme] and i18n [language]. */
 @Composable
-fun ReqLabTheme(appTheme: AppTheme = AppTheme.DARK, content: @Composable () -> Unit) {
+fun ReqLabTheme(
+    appTheme: AppTheme = AppTheme.DARK,
+    language: AppLanguage = AppLanguage.EN,
+    content: @Composable () -> Unit,
+) {
     val systemDark = isSystemInDarkTheme()
     val palette = when (appTheme) {
         AppTheme.DARK   -> DarkAppColors
@@ -144,7 +152,12 @@ fun ReqLabTheme(appTheme: AppTheme = AppTheme.DARK, content: @Composable () -> U
         )
     }
 
-    CompositionLocalProvider(LocalAppColors provides palette) {
+    val i18nProvider = remember(language) { I18nProvider(language) }
+
+    CompositionLocalProvider(
+        LocalAppColors provides palette,
+        LocalI18n provides i18nProvider,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography  = ReqLabTypography,

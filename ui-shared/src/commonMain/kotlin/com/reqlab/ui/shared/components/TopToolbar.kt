@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material3.DropdownMenu
@@ -35,12 +36,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.ResponseLayout
+import com.reqlab.ui.shared.state.WorkspaceMode
 import com.reqlab.ui.shared.theme.ReqLabColors
 
 @Composable
@@ -72,6 +75,32 @@ fun TopToolbar(state: AppState) {
             fontSize = 16.sp,
         )
 
+        Spacer(Modifier.width(16.dp))
+
+        // Workspace mode selector (HTTP / Realtime / GraphQL)
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(ReqLabColors.SurfaceContainer),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            WorkspaceMode.entries.forEach { mode ->
+                val selected = state.workspaceMode == mode
+                Text(
+                    text = mode.label,
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceVariant,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (selected) ReqLabColors.Primary.copy(alpha = 0.12f) else Color.Transparent)
+                        .clickable { state.workspaceMode = mode }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("workspace-mode-${mode.name.lowercase()}"),
+                )
+            }
+        }
+
         Spacer(Modifier.weight(1f))
 
         // Environment selector
@@ -99,6 +128,18 @@ fun TopToolbar(state: AppState) {
         }
 
         Spacer(Modifier.width(4.dp))
+
+        // Global variables
+        IconButton(
+            onClick = { state.showGlobalVariablesDialog = true },
+            modifier = Modifier.testTag("global-variables-button"),
+        ) {
+            Icon(
+                Icons.Default.Public,
+                contentDescription = "Global Variables",
+                tint = ReqLabColors.OnSurfaceVariant,
+            )
+        }
 
         // Settings
         IconButton(onClick = { state.showSettingsDialog = true }) {
@@ -174,6 +215,14 @@ private fun EnvironmentChip(state: AppState) {
                     state.openEnvEdit(state.selectedEnvIndex)
                     menuExpanded = false
                 },
-            )        }
+            )
+            DropdownMenuItem(
+                text = { Text("Global Variables…") },
+                onClick = {
+                    state.showGlobalVariablesDialog = true
+                    menuExpanded = false
+                },
+            )
+        }
     }
 }

@@ -49,4 +49,44 @@ class VariableResolverTest {
 
         assertEquals("{{missingValue}}", resolved)
     }
+
+    // ── Global variable layer tests (F2) ────────────────────────
+
+    @Test
+    fun environment_vars_override_global_vars() {
+        // Layer 0 = environment, Layer 1 = global
+        // First layer wins for same key
+        val resolved = VariableResolver.resolve(
+            value = "{{apiUrl}}",
+            variableLayers = listOf(
+                mapOf("apiUrl" to "https://env.api.com"),  // environment
+                mapOf("apiUrl" to "https://global.api.com"),  // global
+            )
+        )
+        assertEquals("https://env.api.com", resolved)
+    }
+
+    @Test
+    fun global_vars_used_when_not_in_environment() {
+        val resolved = VariableResolver.resolve(
+            value = "{{appName}}/{{apiVersion}}",
+            variableLayers = listOf(
+                mapOf("otherKey" to "envValue"),  // environment has no appName/apiVersion
+                mapOf("appName" to "ReqLab", "apiVersion" to "v1"),  // global
+            )
+        )
+        assertEquals("ReqLab/v1", resolved)
+    }
+
+    @Test
+    fun multiple_global_vars_in_single_url() {
+        val resolved = VariableResolver.resolve(
+            value = "{{baseUrl}}/{{apiVersion}}/{{resource}}",
+            variableLayers = listOf(
+                emptyMap(),  // empty environment
+                mapOf("baseUrl" to "https://api.example.com", "apiVersion" to "v2", "resource" to "users"),
+            )
+        )
+        assertEquals("https://api.example.com/v2/users", resolved)
+    }
 }

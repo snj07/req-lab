@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
+import com.reqlab.ui.shared.i18n.AppLanguage
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppState
@@ -80,8 +81,9 @@ import com.reqlab.ui.shared.platform.saveFileForExport
 private enum class SettingsSection(val label: String, val icon: ImageVector) {
     GENERAL("General",   Icons.Default.Settings),
     THEME("Theme",       Icons.Default.LightMode),
+    LANGUAGE("Language", Icons.Default.Language),
     NETWORK("Network",   Icons.Default.NetworkCheck),
-    PROXY("Proxy",       Icons.Default.Language),
+    PROXY("Proxy",       Icons.Default.SettingsApplications),
     DATA("Data",         Icons.Default.Storage),
 }
 
@@ -196,11 +198,12 @@ fun SettingsDialog(state: AppState) {
                     )
 
                     when (selectedSection) {
-                        SettingsSection.GENERAL -> GeneralSettings(settings)
-                        SettingsSection.THEME   -> ThemeSettings(settings)
-                        SettingsSection.NETWORK -> NetworkSettings(settings)
-                        SettingsSection.PROXY   -> ProxySettings(settings)
-                        SettingsSection.DATA    -> DataSettings(state)
+                        SettingsSection.GENERAL  -> GeneralSettings(settings)
+                        SettingsSection.THEME    -> ThemeSettings(settings)
+                        SettingsSection.LANGUAGE -> LanguageSettings(settings)
+                        SettingsSection.NETWORK  -> NetworkSettings(settings)
+                        SettingsSection.PROXY    -> ProxySettings(settings)
+                        SettingsSection.DATA     -> DataSettings(state)
                     }
                 }
             }
@@ -289,6 +292,42 @@ private fun ThemeSettings(s: AppSettings) {
             }
         }
     }
+}
+
+@Composable
+private fun LanguageSettings(s: AppSettings) {
+    Text("Language", style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppLanguage.entries.forEach { lang ->
+            val isSelected = s.language == lang
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isSelected) ReqLabColors.SelectedItem else ReqLabColors.SurfaceContainer)
+                    .border(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) ReqLabColors.Primary else ReqLabColors.Border,
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                    .clickable { s.language = lang }
+                    .padding(16.dp)
+                    .testTag("language-${lang.code}"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(lang.code.uppercase(), color = if (isSelected) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(lang.displayName, color = if (isSelected) ReqLabColors.OnSurface else ReqLabColors.OnSurfaceVariant, fontSize = 12.sp)
+            }
+        }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Changes take effect immediately. The UI language will update when you close this dialog.",
+        color = ReqLabColors.OnSurfaceDim,
+        fontSize = 11.sp,
+    )
 }
 
 @Composable

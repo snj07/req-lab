@@ -14,6 +14,8 @@ import kotlinx.coroutines.Job
 import com.reqlab.ui.shared.platform.generateUuid
 import com.reqlab.ui.shared.platform.currentTimeMillis
 
+import com.reqlab.ui.shared.i18n.AppLanguage
+
 // ── Enumerations ────────────────────────────────────────────────
 
 enum class RequestEditorTab(val label: String) {
@@ -33,6 +35,13 @@ enum class LogLevel { INFO, SUCCESS, WARNING, ERROR }
 
 enum class AppTheme { DARK, LIGHT, SYSTEM }
 enum class ResponseLayout { RIGHT, BOTTOM }
+
+/** Top-level workspace mode — determines which main panel is shown. */
+enum class WorkspaceMode(val label: String) {
+    HTTP("HTTP"),
+    REALTIME("Realtime"),
+    GRAPHQL("GraphQL"),
+}
 
 enum class HeaderKind { SYSTEM, USER }
 
@@ -139,6 +148,9 @@ class AppSettings {
 
     // Theme
     var theme by mutableStateOf(AppTheme.DARK)
+
+    // Language (i18n)
+    var language by mutableStateOf(AppLanguage.EN)
 
     // Network
     var requestTimeoutSec    by mutableStateOf(30)
@@ -300,6 +312,9 @@ class RequestTabState(
 // ── Global application state ────────────────────────────────────
 
 class AppState(openDefaultTab: Boolean = true) {
+    // ── workspace mode ──
+    var workspaceMode by mutableStateOf(WorkspaceMode.HTTP)
+
     // ── sidebar ────────
     var sidebarExpanded      by mutableStateOf(true)
     var sidebarWidth         by mutableStateOf(260f)
@@ -415,11 +430,25 @@ class AppState(openDefaultTab: Boolean = true) {
         )),
     )
 
+    // ── global variables (lowest priority, overridden by environment + local) ──
+    val globalVariables = mutableStateListOf(
+        MutableKeyValue("appName", "ReqLab"),
+        MutableKeyValue("apiVersion", "v1"),
+    )
+    var showGlobalVariablesDialog by mutableStateOf(false)
+
     val selectedEnvironment: EnvState get() = environments.getOrElse(selectedEnvIndex) { environments.first() }
 
-    /** Variable layers for the active environment (used in request variable resolution). */
+    /**
+     * Variable layers for the active environment (used in request variable resolution).
+     * Resolution priority (first match wins): Environment → Global.
+     * Environment variables override global variables.
+     */
     fun activeVariableLayers(): List<Map<String, String>> =
-        listOf(selectedEnvironment.toVariableMap())
+        listOf(
+            selectedEnvironment.toVariableMap(),
+            globalVariables.filter { it.enabled }.associate { it.key to it.value },
+        )
 
     /**
      * Merges variables set by a pre-request or test script into the active environment.

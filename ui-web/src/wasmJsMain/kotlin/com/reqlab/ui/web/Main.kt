@@ -21,7 +21,7 @@ fun main() {
                 it.syncSidebarToActiveTab()
             }
         }
-        ReqLabTheme(appTheme = state.settings.theme) {
+        ReqLabTheme(appTheme = state.settings.theme, language = state.settings.language) {
             MainScreen(state)
         }
     }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,8 +41,11 @@ import com.reqlab.ui.shared.components.DirtyCloseDialog
 import com.reqlab.ui.shared.components.DirtyMultiCloseDialog
 import com.reqlab.ui.shared.components.EnvironmentEditDialog
 import com.reqlab.ui.shared.components.ErrorMessageDialog
+import com.reqlab.ui.shared.components.GlobalVariablesDialog
+import com.reqlab.ui.shared.components.GraphQLPanel
 import com.reqlab.ui.shared.components.HorizontalSplitPane
 import com.reqlab.ui.shared.components.OperationProgressDialog
+import com.reqlab.ui.shared.components.RealtimePanel
 import com.reqlab.ui.shared.components.RequestEditor
 import com.reqlab.ui.shared.components.RequestTabsBar
 import com.reqlab.ui.shared.components.ResponseViewer
@@ -58,6 +62,7 @@ import com.reqlab.ui.shared.persistence.WorkspaceRepository
 import com.reqlab.ui.shared.platform.ioDispatcher
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.ResponseLayout
+import com.reqlab.ui.shared.state.WorkspaceMode
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -199,6 +204,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         // ── Dialog overlays ─────────────────────────────────
         EnvironmentEditDialog(state)
         SettingsDialog(state)
+        GlobalVariablesDialog(state)
         if (state.showConfirmDialog) {
             ConfirmDeleteDialog(
                 title   = state.confirmDialogTitle,
@@ -276,9 +282,28 @@ fun MainScreen(state: AppState = remember { AppState() }) {
             }
 
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                when (state.workspaceMode) {
+                    WorkspaceMode.HTTP -> HttpWorkspaceContent(state, scope, requestCloseTab, closeManyTabs)
+                    WorkspaceMode.REALTIME -> Box(modifier = Modifier.weight(1f).fillMaxWidth()) { RealtimePanel() }
+                    WorkspaceMode.GRAPHQL -> Box(modifier = Modifier.weight(1f).fillMaxWidth()) { GraphQLPanel(state) }
+                }
+
+                BottomPanel(state)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.HttpWorkspaceContent(
+    state: AppState,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onRequestClose: (Int) -> Unit,
+    closeManyTabs: (List<String>) -> Unit,
+) {
                 RequestTabsBar(
                     state = state,
-                    onRequestClose = requestCloseTab,
+                    onRequestClose = onRequestClose,
                     onRenameTab = { requestId, newName ->
                         state.renameRequestEverywhere(requestId, newName)
                     },
@@ -369,9 +394,4 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                         }
                     }
                 }
-
-                BottomPanel(state)
-            }
-        }
-    }
 }
