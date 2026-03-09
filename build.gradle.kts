@@ -7,9 +7,13 @@ plugins {
     alias(libs.plugins.composeCompiler) apply false
 }
 
+// ─── Centralized version ─────────────────────────────────────────────────────
+// Change the version only in gradle.properties: appVersion=x.y.z
+val appVersion: String by project
+
 allprojects {
     group = "com.reqlab"
-    version = "0.1.0"
+    version = appVersion
 }
 
 // Convenience: start the ReqLab sample API server from the repo root.

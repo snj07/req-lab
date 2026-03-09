@@ -1,11 +1,13 @@
 name: Build Artifacts & Release
 
+# ─── Triggers ──────────────────────────────────────────────────────────────────
+# • push to main          → build artifacts for QA / integration testing
+# • push of a v* tag      → build artifacts + create a GitHub release
+# • manual workflow_dispatch
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 concurrency:
@@ -13,63 +15,220 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: write   # needed to create releases and upload assets
 
+# ─── Build matrix ──────────────────────────────────────────────────────────────
 jobs:
   build:
-    name: Build Artifact (${{ matrix.os }})
+    name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
+        include:
+          - os: macos-latest
+            platform: macos
+            package-task: packageDmg
+            artifact-ext: dmg
+            artifact-subdir: dmg
+            include-jar: "true"   # packageReqLabJar already outputs to build/distribute; flag just controls verification
 
-      - uses: actions/setup-java@v4
+          - os: ubuntu-latest
+            platform: linux
+            package-task: packageDeb
+            artifact-ext: deb
+            artifact-subdir: deb
+            include-jar: "false"
+
+          - os: windows-latest
+            platform: windows
+            package-task: packageMsi
+            artifact-ext: msi
+            artifact-subdir: msi
+            include-jar: "false"
+
+    steps:
+      # ── 1. Source checkout ────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. JDK ───────────────────────────────────────────────────────────────
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
 
-      - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v3
+      # ── 3. Gradle (validates wrapper, provides caching) ───────────────────────
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
+      # ── 4. Permissions (POSIX only) ───────────────────────────────────────────
       - name: Grant execute permission for gradlew
         if: runner.os != 'Windows'
         run: chmod +x gradlew
 
-      - name: Build package (macOS/Linux)
-        if: runner.os != 'Windows'
-        run: ./gradlew :ui-desktop:packageDistributionForCurrentOS --no-daemon
+      # ── 5. Read the single-source version from gradle.properties ─────────────
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep '^appVersion=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
+          if [[ -z "${VERSION}" ]]; then
+            echo "ERROR: appVersion not found in gradle.properties"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Detected app version: ${VERSION}"
 
-      - name: Build package (Windows)
+      # ── 6a. Build – macOS / Linux ─────────────────────────────────────────────
+      - name: Build native package (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          ./gradlew \
+            :ui-desktop:${{ matrix.package-task }} \
+            :ui-desktop:packageReqLabJar \
+            --no-daemon --stacktrace
+
+      # ── 6b. Build – Windows ───────────────────────────────────────────────────
+      - name: Build native package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\gradlew.bat :ui-desktop:packageDistributionForCurrentOS --no-daemon
+        run: |
+          .\gradlew.bat `
+            :ui-desktop:${{ matrix.package-task }} `
+            :ui-desktop:packageReqLabJar `
+            --no-daemon --stacktrace
 
-      - name: Upload artifact
+      # ── 7. Collect, rename, and stage artifacts ───────────────────────────────
+      #    packageReqLabJar already writes ReqLab-{VERSION}.jar to build/distribute/.
+      #    This step adds the renamed native package alongside it.
+      #    Final layout of ui-desktop/build/distribute/:
+      #      ReqLab-{VERSION}-{PLATFORM}.{EXT}
+      #      ReqLab-{VERSION}.jar            (macOS runner only; others omit jar)
+      - name: Collect and rename artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          PLATFORM="${{ matrix.platform }}"
+          EXT="${{ matrix.artifact-ext }}"
+          SUBDIR="${{ matrix.artifact-subdir }}"
+          DIST="ui-desktop/build/distribute"
+          mkdir -p "${DIST}"
+
+          # ── Native package ────────────────────────────────────────────────────
+          SRC=$(find "ui-desktop/build/compose/binaries/main/${SUBDIR}" \
+                  -maxdepth 1 -name "*.${EXT}" 2>/dev/null | head -1 || true)
+
+          if [[ -z "${SRC}" ]]; then
+            echo "ERROR: No *.${EXT} found under ui-desktop/build/compose/binaries/main/${SUBDIR}"
+            ls -R ui-desktop/build/compose/binaries/ 2>/dev/null || true
+            exit 1
+          fi
+
+          TARGET="${DIST}/ReqLab-${VERSION}-${PLATFORM}.${EXT}"
+          cp "${SRC}" "${TARGET}"
+          echo "Staged: ${TARGET}"
+
+          # ── JAR ──────────────────────────────────────────────────────────────
+          # packageReqLabJar already wrote it to build/distribute/ReqLab-{VERSION}.jar.
+          # On non-macOS runners we remove it so each runner only uploads its own artifact.
+          if [[ "${{ matrix.include-jar }}" != "true" ]]; then
+            rm -f "${DIST}/ReqLab-${VERSION}.jar"
+            echo "Removed JAR from non-macOS runner (will be uploaded by macOS runner only)"
+          else
+            JAR="${DIST}/ReqLab-${VERSION}.jar"
+            if [[ ! -f "${JAR}" ]]; then
+              echo "ERROR: JAR not found at ${JAR}"
+              ls -lh "${DIST}/" || true
+              exit 1
+            fi
+            echo "JAR present: ${JAR}"
+          fi
+
+          ls -lh "${DIST}"
+
+      # ── 8. Verify every staged file contains the expected version string ──────
+      - name: Verify artifact versions match gradle.properties
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          FAILURES=0
+          for f in ui-desktop/build/distribute/*; do
+            name=$(basename "${f}")
+            if [[ "${name}" != *"${VERSION}"* ]]; then
+              echo "FAIL: '${name}' does not contain version '${VERSION}'"
+              FAILURES=$((FAILURES + 1))
+            fi
+          done
+          if [[ "${FAILURES}" -ne 0 ]]; then
+            echo "${FAILURES} artifact(s) failed version verification"
+            exit 1
+          fi
+          echo "All artifacts verified for version ${VERSION}"
+
+      # ── 9. Upload per-platform artifacts ──────────────────────────────────────
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-${{ runner.os }}-${{ github.sha }}
-          path: |
-            ui-desktop/build/compose/binaries/**
-            ui-desktop/build/compose/jars/**
+          name: reqlab-${{ matrix.platform }}-${{ github.sha }}
+          path: ui-desktop/build/distribute/
+          if-no-files-found: error
 
+  # ─── Release job (tag pushes only) ─────────────────────────────────────────
   release:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Read version from the single source of truth
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(grep '^appVersion=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      # Download all per-platform artifact bundles into one flat directory
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
 
-      - name: Publish release
+      - name: List release files
+        run: find artifacts -type f | sort
+
+      # Guard: the pushed tag must match gradle.properties version exactly
+      - name: Verify tag matches appVersion
+        run: |
+          TAG_VER="${{ github.ref_name }}"
+          TAG_VER="${TAG_VER#v}"               # strip leading v  e.g. v1.0.0 → 1.0.0
+          PROP_VER="${{ steps.version.outputs.version }}"
+          if [[ "${TAG_VER}" != "${PROP_VER}" ]]; then
+            echo "ERROR: Git tag '${TAG_VER}' does not match appVersion '${PROP_VER}' in gradle.properties"
+            echo "Bump appVersion in gradle.properties to match the tag before releasing."
+            exit 1
+          fi
+          echo "Tag matches gradle.properties appVersion: ${PROP_VER}"
+
+      # Create the release and attach all artifacts
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: ReqLab ${{ github.ref_name }}
+          name: "ReqLab ${{ github.ref_name }}"
           generate_release_notes: true
-          files: artifacts/**/*.*
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/*.dmg
+            artifacts/*.msi
+            artifacts/*.deb
+            artifacts/*.rpm
+            artifacts/*.jar
