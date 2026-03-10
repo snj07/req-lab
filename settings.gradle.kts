@@ -21,7 +21,6 @@ include(
     ":core-network",
     ":core-storage",
     ":core-scripting",
-    ":test-support",
     ":qa-tests",
     ":feature-requests",
     ":ui-shared",

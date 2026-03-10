@@ -21,5 +21,5 @@ allprojects {
 tasks.register("runServer") {
     group = "application"
     description = "Starts the ReqLab sample API server at http://localhost:8080"
-    dependsOn(":sample-server:run")
+    // dependsOn(":sample-server:run")
 }

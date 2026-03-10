@@ -267,3 +267,18 @@ Uses `CanvasBasedWindow` to render `MainScreen` in an HTML `<canvas>` element.
 # Run web dev server
 ./gradlew :ui-web:wasmJsBrowserDevelopmentRun
 ```
+
+
+## Remove data
+```
+# macOS — delete the prefs file
+defaults delete com.reqlab.ui.shared.platform
+# or remove the file directly
+rm ~/Library/Preferences/com.reqlab.ui.plist
+
+# Linux
+rm -rf ~/.java/.userPrefs/com/reqlab/
+
+# Windows (PowerShell)
+Remove-Item -Path "HKCU:\Software\JavaSoft\Prefs\com\reqlab" -Recurse
+```
