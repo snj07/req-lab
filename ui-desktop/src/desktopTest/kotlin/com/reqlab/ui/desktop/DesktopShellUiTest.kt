@@ -198,4 +198,24 @@ class MainScreenUiTest {
 
         composeRule.onAllNodesWithText("Untitled *").assertCountEquals(0)
     }
+
+    @Test
+    fun auto_save_on_tab_switch_marks_previous_tab_clean_when_enabled() {
+        val state = AppState().apply { settings.autoSaveRequests = true }
+        val firstTab = state.activeTab ?: error("Expected initial tab")
+        state.addTab(name = "Second Tab")
+        val secondTab = state.activeTab ?: error("Expected second tab")
+        state.activeTabIndex = 0
+
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("url-input").performTextInput("https://autosave.example.com")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Untitled *").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("tab-chip-${secondTab.id}").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { !firstTab.isDirty }
+
+        composeRule.onAllNodesWithText("Untitled *").assertCountEquals(0)
+    }
 }

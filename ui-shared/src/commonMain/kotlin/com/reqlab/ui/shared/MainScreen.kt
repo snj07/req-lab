@@ -84,6 +84,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
     val scope = rememberCoroutineScope()
     var dirtyCloseTabIndex by remember { mutableStateOf<Int?>(null) }
     var multiDirtyIdsToClose by remember { mutableStateOf<List<String>>(emptyList()) }
+    var lastActiveTabId by remember(state) { mutableStateOf(state.activeTab?.id) }
 
     val forceCloseByIds: (List<String>) -> Unit = { ids ->
         ids
@@ -154,6 +155,21 @@ fun MainScreen(state: AppState = remember { AppState() }) {
 
     LaunchedEffect(state.activeTabIndex, state.openTabs.size) {
         state.syncSidebarToActiveTab()
+    }
+
+    LaunchedEffect(state.activeTabIndex, state.openTabs.size, state.settings.autoSaveRequests) {
+        val previousId = lastActiveTabId
+        val currentId = state.activeTab?.id
+
+        if (state.settings.autoSaveRequests && previousId != null && previousId != currentId) {
+            val previousTab = state.openTabs.firstOrNull { it.id == previousId }
+            if (previousTab != null && previousTab.isDirty) {
+                withContext(ioDispatcher) { TabsRepository.save(state) }
+                previousTab.markSaved()
+            }
+        }
+
+        lastActiveTabId = currentId
     }
 
     Column(
