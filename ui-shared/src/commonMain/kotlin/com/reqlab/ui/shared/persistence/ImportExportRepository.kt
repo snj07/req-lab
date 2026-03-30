@@ -84,11 +84,13 @@ data class ReqLabWorkspaceDto(
 )
 
 data class HistoryItemDto(
-    val id: String,
+    val requestId: String,
     val method: String,
     val name: String,
     val url: String,
     val timestamp: Long,
+    val collectionId: String? = null,
+    val folderPath: List<String> = emptyList(),
 )
 
 data class WorkspaceImportResult(
@@ -155,11 +157,15 @@ object ImportExportRepository {
             put("history", buildJsonArray {
                 state.historyItems.forEach { item ->
                     add(buildJsonObject {
-                        put("id", item.id)
+                        put("requestId", item.requestId)
                         put("method", item.method.name)
                         put("name", item.name)
                         put("url", item.url)
                         put("timestamp", item.timestamp)
+                        item.collectionId?.let { put("collectionId", it) }
+                        put("folderPath", buildJsonArray {
+                            item.folderPath.forEach { segment -> add(JsonPrimitive(segment)) }
+                        })
                     })
                 }
             })
@@ -228,17 +234,18 @@ object ImportExportRepository {
             }
         )
 
-        state.historyItems.clear()
-        state.historyItems.addAll(
+        state.replaceHistoryItems(
             workspace.history.map {
                 HistoryItem(
-                    id = it.id,
+                    requestId = it.requestId,
                     method = runCatching { HttpMethodType.valueOf(it.method.uppercase()) }.getOrDefault(HttpMethodType.GET),
                     name = it.name,
                     url = it.url,
                     timestamp = it.timestamp,
+                    collectionId = it.collectionId,
+                    folderPath = it.folderPath,
                 )
-            }
+            },
         )
     }
 
@@ -359,11 +366,13 @@ object ImportExportRepository {
             put("history", buildJsonArray {
                 workspace.history.forEach { item ->
                     add(buildJsonObject {
-                        put("id", item.id)
+                        put("requestId", item.requestId)
                         put("method", item.method)
                         put("name", item.name)
                         put("url", item.url)
                         put("timestamp", item.timestamp)
+                        item.collectionId?.let { put("collectionId", it) }
+                        put("folderPath", buildJsonArray { item.folderPath.forEach { segment -> add(JsonPrimitive(segment)) } })
                     })
                 }
             })
@@ -437,11 +446,15 @@ object ImportExportRepository {
     }
 
     private fun historyItemDtoFromJson(root: JsonObject): HistoryItemDto = HistoryItemDto(
-        id = root["id"]?.jsonPrimitive?.contentOrNull ?: generateUuid(),
+        requestId = root["requestId"]?.jsonPrimitive?.contentOrNull
+            ?: root["id"]?.jsonPrimitive?.contentOrNull
+            ?: generateUuid(),
         method = root["method"]?.jsonPrimitive?.contentOrNull ?: HttpMethodType.GET.name,
         name = root["name"]?.jsonPrimitive?.contentOrNull ?: "Untitled",
         url = root["url"]?.jsonPrimitive?.contentOrNull ?: "",
         timestamp = root["timestamp"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L,
+        collectionId = root["collectionId"]?.jsonPrimitive?.contentOrNull,
+        folderPath = root["folderPath"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
     )
 
     private fun collectionDtoFromJson(root: JsonObject): ReqLabCollectionDto {

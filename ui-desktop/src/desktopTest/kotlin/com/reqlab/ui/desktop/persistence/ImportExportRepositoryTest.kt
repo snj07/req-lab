@@ -172,7 +172,7 @@ class ImportExportRepositoryTest {
             globalVariables.add(com.reqlab.ui.shared.state.MutableKeyValue("apiKey", "abc123"))
             historyItems.add(
                 HistoryItem(
-                    id = "hist-1",
+                    requestId = "hist-1",
                     method = HttpMethodType.GET,
                     name = "Ping",
                     url = "https://example.com/ping",
@@ -190,6 +190,6 @@ class ImportExportRepositoryTest {
         ImportExportRepository.replaceWorkspaceState(target, workspace)
 
         assertTrue(target.globalVariables.any { it.key == "apiKey" && it.value == "abc123" })
-        assertTrue(target.historyItems.any { it.id == "hist-1" && it.name == "Ping" })
+        assertTrue(target.historyItems.any { it.requestId == "hist-1" && it.name == "Ping" })
     }
 }

@@ -29,9 +29,33 @@ internal object AppStateDemoData {
     )
 
     fun historyItems(now: Long = currentTimeMillis()): List<HistoryItem> = listOf(
-        HistoryItem("h1", HttpMethodType.GET, "List users", "http://localhost:8080/users", now - 300_000),
-        HistoryItem("h2", HttpMethodType.POST, "Create user", "http://localhost:8080/users", now - 600_000),
-        HistoryItem("h3", HttpMethodType.DELETE, "Delete user", "http://localhost:8080/users/1", now - 900_000),
+        HistoryItem(
+            requestId = "r1",
+            method = HttpMethodType.GET,
+            name = "Get all users",
+            url = "{{baseUrl}}/users",
+            timestamp = now - 300_000,
+            collectionId = "c1",
+            folderPath = emptyList(),
+        ),
+        HistoryItem(
+            requestId = "r2",
+            method = HttpMethodType.POST,
+            name = "Create user",
+            url = "{{baseUrl}}/users",
+            timestamp = now - 600_000,
+            collectionId = "c1",
+            folderPath = emptyList(),
+        ),
+        HistoryItem(
+            requestId = "r4",
+            method = HttpMethodType.POST,
+            name = "Login",
+            url = "{{baseUrl}}/auth/login",
+            timestamp = now - 900_000,
+            collectionId = "c2",
+            folderPath = emptyList(),
+        ),
     )
 
     fun collections(): List<CollectionNode> = listOf(

@@ -104,11 +104,11 @@ class MainScreenUiTest {
         composeRule.setContent { MainScreen(state) }
 
         // Click the first history item via the sidebar
-        composeRule.onAllNodesWithText("List users")[0].performClick()
+        composeRule.onAllNodesWithText("Get all users")[0].performClick()
         composeRule.waitForIdle()
 
         // The item text should now appear at least twice (sidebar + tab)
-        val nodes = composeRule.onAllNodesWithText("List users")
+        val nodes = composeRule.onAllNodesWithText("Get all users")
         nodes[0].assertIsDisplayed()
     }
 

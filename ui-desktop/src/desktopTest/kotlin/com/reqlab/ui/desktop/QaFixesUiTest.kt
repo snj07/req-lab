@@ -240,7 +240,7 @@ class QaFixesUiTest {
         }
 
         assertEquals(1, filtered.size, "Only 'Create order' should match")
-        assertEquals("h2", filtered.first().id)
+        assertEquals("h2", filtered.first().requestId)
     }
 
     @Test
@@ -272,7 +272,7 @@ class QaFixesUiTest {
                 it.url.contains(query, ignoreCase = true)
         }
         assertEquals(1, filtered.size)
-        assertEquals("h1", filtered.first().id)
+        assertEquals("h1", filtered.first().requestId)
     }
 
     // ── M-6: History row shows timestamp ────────────────────────────────────

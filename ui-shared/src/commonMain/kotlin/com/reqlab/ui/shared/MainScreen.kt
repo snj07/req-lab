@@ -146,9 +146,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
             val globalFingerprint = state.globalVariables.joinToString("|") { gv ->
                 "${gv.key}=${gv.value}:${gv.enabled}:${gv.secret}"
             }
-            val historyFingerprint = state.historyItems.joinToString("|") { hi ->
-                "${hi.id}:${hi.method}:${hi.name}:${hi.url}:${hi.timestamp}"
-            }
+            val historyFingerprint = "rev-${state.historyRevision}"
             "$collectionFingerprint#$envFingerprint#$globalFingerprint#$historyFingerprint"
         }.drop(1)
             .collect { withContext(ioDispatcher) { WorkspaceRepository.save(state) } }

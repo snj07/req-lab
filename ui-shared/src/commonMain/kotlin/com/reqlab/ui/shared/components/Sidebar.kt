@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -216,9 +217,9 @@ fun Sidebar(state: AppState) {
                             item.url.contains(historyQuery, ignoreCase = true)
                     }
                 }
-                items(visibleHistory, key = { it.id }) { item ->
-                    HistoryRow(item, onClick = {
-                        state.openRequest(requestId = item.id, name = item.name, method = item.method, url = item.url)
+                items(visibleHistory, key = { "hist-${it.requestId}-${it.timestamp}" }) { item ->
+                    HistoryRow(state = state, item = item, onClick = {
+                        state.openHistoryItem(item)
                     })
                 }
                 item { SectionSpacer() }
@@ -800,17 +801,48 @@ private fun SectionHeader(
 }
 
 @Composable
-private fun HistoryRow(item: HistoryItem, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+private fun HistoryRow(state: AppState, item: HistoryItem, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    var showMenu by remember { mutableStateOf(false) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val tooltipIndentPx = with(density) { 28.dp.roundToPx() }
+
+    LaunchedEffect(isHovered) {
+        val tooltipId = "history-${item.requestId}-${item.timestamp}"
+        if (isHovered) {
+            sharedSidebarTooltipState.onHoverEnter(tooltipId, "${item.name}  ${item.url}")
+        } else {
+            sharedSidebarTooltipState.onHoverExit(tooltipId)
+        }
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(if (isHovered) ReqLabColors.HoverOverlay else Color.Transparent)
+            .background(
+                if (isHovered) ReqLabColors.HoverOverlay else Color.Transparent
+            )
+            .onGloballyPositioned { coordinates ->
+                if (sharedSidebarTooltipState.hoveredItemId == "history-${item.requestId}-${item.timestamp}") {
+                    val position = coordinates.positionInRoot()
+                    sharedSidebarTooltipState.updateHoverPosition(
+                        rowRootY = position.y.toInt(),
+                        rowHeightPx = coordinates.size.height,
+                        indentXPx = tooltipIndentPx,
+                    )
+                }
+            }
             .hoverable(interactionSource)
+            .onPointerEvent(PointerEventType.Press) {
+                if (it.buttons.isSecondaryPressed) {
+                    showMenu = true
+                }
+            }
             .clickable(onClick = onClick)
+            .testTag("history-row-${item.requestId}")
             .padding(start = 28.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -831,6 +863,52 @@ private fun HistoryRow(item: HistoryItem, onClick: () -> Unit) {
             color = ReqLabColors.OnSurfaceDim,
             fontSize = 10.sp,
         )
+        Box {
+            IconButton(
+                onClick = { showMenu = true },
+                modifier = Modifier.size(20.dp).testTag("history-actions-${item.requestId}"),
+            ) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "History actions",
+                    tint = ReqLabColors.OnSurfaceDim,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Open") },
+                    onClick = {
+                        showMenu = false
+                        onClick()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Open in Sidebar") },
+                    onClick = {
+                        showMenu = false
+                        state.goToCollectionFromHistory(item)
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Go to Collection") },
+                    onClick = {
+                        showMenu = false
+                        state.goToCollectionFromHistory(item)
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Remove from History") },
+                    onClick = {
+                        showMenu = false
+                        state.removeHistoryItem(item.requestId)
+                    },
+                )
+            }
+        }
     }
 }
 

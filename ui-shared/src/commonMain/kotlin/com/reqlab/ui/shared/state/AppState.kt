@@ -56,11 +56,13 @@ data class ConsoleEntry(
 data class TestResultEntry(val name: String, val passed: Boolean, val message: String = "")
 
 data class HistoryItem(
-    val id: String,
+    val requestId: String,
     val method: HttpMethodType,
     val name: String,
     val url: String,
     val timestamp: Long,
+    val collectionId: String? = null,
+    val folderPath: List<String> = emptyList(),
 )
 
 data class CollectionNode(
@@ -334,6 +336,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     var selectedRequestId    by mutableStateOf<String?>(null)
     var sidebarScrollToRequestId by mutableStateOf<String?>(null)
     var collectionsRevision  by mutableStateOf(0)
+    var historyRevision      by mutableStateOf(0)
 
     /** Per-folder expanded state. Absent key → expanded (true) by default. */
     val collectionExpandedState = mutableStateMapOf<String, Boolean>()
@@ -501,6 +504,19 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         }
     }
 
+    init {
+        syncHistoryWithCollections()
+    }
+
+    private data class RequestReference(
+        val requestId: String,
+        val collectionId: String?,
+        val folderPath: List<String>,
+        val name: String,
+        val method: HttpMethodType,
+        val url: String,
+    )
+
     // ── actions ──────────────────────────────────────────────────
 
     fun addTab(
@@ -647,6 +663,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         // Bump revision for the autosave snapshotFlow.
         // Children lists are now SnapshotStateList (mutableStateListOf), so Compose
         // automatically observes add/remove on them — no .copy() trick needed.
+        syncHistoryWithCollections()
         collectionsRevision++
     }
 
@@ -714,8 +731,15 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         notifyCollectionsChanged()
     }
 
-    fun revealRequestInSidebar(requestId: String) {
+    fun revealRequestInSidebar(requestId: String): Boolean {
         val resolvedRequestId = resolveSidebarRequestId(requestId)
+        val targetNode = findNodeById(collections, resolvedRequestId)
+        if (targetNode == null || targetNode.isFolder) {
+            showError("Request not found", "Request no longer exists in collections.")
+            return false
+        }
+        sidebarExpanded = true
+        sidebarSearchQuery = ""
 
         // Always select the request in the sidebar, even if it isn't
         // currently visible inside a collection (Issue 2 fix).
@@ -727,41 +751,94 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         val tabIdx = openTabs.indexOfFirst { it.id == requestId || it.id == resolvedRequestId }
         if (tabIdx >= 0) activeTabIndex = tabIdx
 
-        val tab = openTabs.getOrNull(tabIdx)
-        if (tab != null && historyItems.none { it.id == requestId }) {
-            historyItems.add(
-                0,
-                HistoryItem(
-                    id = tab.id,
-                    method = tab.method,
-                    name = tab.name,
-                    url = tab.url,
-                    timestamp = currentTimeMillis(),
-                ),
-            )
-        }
-
         if (expandAncestorsForRequest(collections, resolvedRequestId)) {
             sidebarScrollToRequestId = resolvedRequestId
-            notifyCollectionsChanged()
+        }
+        return true
+    }
+
+    fun recordHistory(
+        requestId: String,
+        method: HttpMethodType,
+        name: String,
+        url: String,
+        aliasRequestIds: Set<String> = emptySet(),
+    ) {
+        val references = buildRequestReferenceMap()
+        val resolvedRequestId = resolveSidebarRequestId(requestId)
+        val reference = references[resolvedRequestId]
+            ?: references.values.firstOrNull { it.name == name && it.method == method && it.url == url }
+            ?: return
+
+        val idsToReplace = (aliasRequestIds + requestId + resolvedRequestId + reference.requestId)
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (idsToReplace.isNotEmpty()) {
+            historyItems.removeAll { it.requestId in idsToReplace }
+        }
+        val item = HistoryItem(
+            requestId = reference.requestId,
+            method = reference.method,
+            name = reference.name,
+            url = reference.url,
+            timestamp = currentTimeMillis(),
+            collectionId = reference.collectionId,
+            folderPath = reference.folderPath,
+        )
+        historyItems.add(0, item)
+        historyRevision++
+    }
+
+    fun openHistoryItem(item: HistoryItem) {
+        val resolvedRequestId = resolveHistoryRequestId(item)
+        val target = findNodeById(collections, resolvedRequestId)
+        if (target != null && !target.isFolder) {
+            openRequest(requestId = resolvedRequestId, name = target.name, method = target.method ?: item.method, url = target.url ?: item.url)
+            selectedRequestId = resolvedRequestId
         } else {
-            historyExpanded = true
+            addTab(
+                requestId = generateUuid(),
+                name = item.name,
+                method = item.method,
+                url = item.url,
+            )
+            showError("Request not found", "Request no longer exists in collections. Opened a temporary tab.")
         }
     }
 
-    fun recordHistory(requestId: String, method: HttpMethodType, name: String, url: String) {
-        val existing = historyItems.indexOfFirst { it.id == requestId }
-        val item = HistoryItem(
-            id = requestId,
-            method = method,
-            name = name,
-            url = url,
-            timestamp = currentTimeMillis(),
+    private fun resolveHistoryRequestId(item: HistoryItem): String {
+        if (findNodeById(collections, item.requestId) != null) return item.requestId
+        val bySignature = findRequestBySignature(
+            nodes = collections,
+            name = item.name,
+            method = item.method,
+            url = item.url,
         )
-        if (existing >= 0) {
-            historyItems.removeAt(existing)
+        return bySignature?.id ?: item.requestId
+    }
+
+    fun goToCollectionFromHistory(item: HistoryItem): Boolean {
+        val resolvedRequestId = resolveHistoryRequestId(item)
+        return revealRequestInSidebar(resolvedRequestId)
+    }
+
+    fun clearHistory() {
+        if (historyItems.isEmpty()) return
+        historyItems.clear()
+        historyRevision++
+    }
+
+    fun removeHistoryItem(requestId: String) {
+        val removed = historyItems.removeAll { it.requestId == requestId }
+        if (removed) {
+            historyRevision++
         }
-        historyItems.add(0, item)
+    }
+
+    fun replaceHistoryItems(items: List<HistoryItem>) {
+        historyItems.clear()
+        historyItems.addAll(items)
+        historyRevision++
     }
 
     /**
@@ -776,6 +853,72 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         selectedRequestId = resolvedRequestId
         if (expandAncestorsForRequest(collections, resolvedRequestId)) {
             sidebarScrollToRequestId = resolvedRequestId
+        }
+    }
+
+    private fun buildRequestReferenceMap(): Map<String, RequestReference> {
+        val references = linkedMapOf<String, RequestReference>()
+        collectRequestReferences(
+            nodes = collections,
+            currentCollectionId = null,
+            currentFolderPath = emptyList(),
+            target = references,
+        )
+        return references
+    }
+
+    private fun collectRequestReferences(
+        nodes: List<CollectionNode>,
+        currentCollectionId: String?,
+        currentFolderPath: List<String>,
+        target: MutableMap<String, RequestReference>,
+    ) {
+        for (node in nodes) {
+            if (node.isFolder) {
+                val nextCollectionId = currentCollectionId ?: node.id
+                val nextFolderPath = if (currentCollectionId == null) {
+                    currentFolderPath
+                } else {
+                    currentFolderPath + node.name
+                }
+                collectRequestReferences(node.children, nextCollectionId, nextFolderPath, target)
+            } else {
+                val method = node.method ?: continue
+                val url = node.url ?: continue
+                target[node.id] = RequestReference(
+                    requestId = node.id,
+                    collectionId = currentCollectionId,
+                    folderPath = currentFolderPath,
+                    name = node.name,
+                    method = method,
+                    url = url,
+                )
+            }
+        }
+    }
+
+    private fun syncHistoryWithCollections() {
+        val references = buildRequestReferenceMap()
+        var changed = false
+        val synced = historyItems.mapNotNull { item ->
+            val ref = references[item.requestId] ?: run {
+                changed = true
+                return@mapNotNull null
+            }
+            val updated = item.copy(
+                method = ref.method,
+                name = ref.name,
+                url = ref.url,
+                collectionId = ref.collectionId,
+                folderPath = ref.folderPath,
+            )
+            if (updated != item) changed = true
+            updated
+        }
+        if (changed) {
+            historyItems.clear()
+            historyItems.addAll(synced)
+            historyRevision++
         }
     }
 

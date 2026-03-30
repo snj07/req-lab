@@ -264,12 +264,12 @@ class AppStateCollectionTest {
     @Test
     fun revealRequestInSidebar_sets_selectedRequestId_even_for_orphan_request() {
         val state = AppState(withDemoData = true)
-        // "orphan-999" is NOT in any collection; revealRequestInSidebar must
-        // still record it as selected (it won't expand anything, but it
-        // correctly tracks which request should be highlighted).
-        state.revealRequestInSidebar("orphan-999")
+        // "orphan-999" is NOT in any collection; revealRequestInSidebar should
+        // fail and surface a not-found error.
+        val ok = state.revealRequestInSidebar("orphan-999")
 
-        assertEquals("orphan-999", state.selectedRequestId)
+        assertFalse(ok)
+        assertTrue(state.showErrorDialog)
     }
 
     @Test
@@ -279,6 +279,32 @@ class AppStateCollectionTest {
         state.revealRequestInSidebar("r2")
 
         assertEquals("r2", state.sidebarScrollToRequestId)
+    }
+
+    @Test
+    fun revealRequestInSidebar_for_request_not_in_history_does_not_mutate_history() {
+        val state = AppState(withDemoData = true)
+        // Ensure r3 exists in collections but is not currently in demo history.
+        assertTrue(state.historyItems.none { it.requestId == "r3" })
+
+        // Add a legacy/broken history entry to verify reveal does not opportunistically clean it up.
+        state.historyItems.add(
+            0,
+            com.reqlab.ui.shared.state.HistoryItem(
+                requestId = "legacy-missing",
+                method = HttpMethodType.GET,
+                name = "Legacy Missing",
+                url = "{{baseUrl}}/legacy",
+                timestamp = 1L,
+            ),
+        )
+        val beforeIds = state.historyItems.map { it.requestId }
+
+        val ok = state.revealRequestInSidebar("r3")
+
+        assertTrue(ok)
+        assertEquals(beforeIds, state.historyItems.map { it.requestId })
+        assertEquals("r3", state.selectedRequestId)
     }
 
     // ── Issue 1: Show in Sidebar switches active tab ──────────────

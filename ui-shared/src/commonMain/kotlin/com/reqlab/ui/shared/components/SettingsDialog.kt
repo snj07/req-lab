@@ -463,7 +463,7 @@ private fun DataSettings(state: AppState) {
             title = "Clear history?",
             message = "Are you sure you want to clear request history?",
             action = {
-                state.historyItems.clear()
+                state.clearHistory()
                 state.log("History cleared", LogLevel.INFO)
             },
         )
