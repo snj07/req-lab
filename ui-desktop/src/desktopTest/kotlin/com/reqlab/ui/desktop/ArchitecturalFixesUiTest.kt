@@ -7,8 +7,12 @@ import com.reqlab.ui.shared.MainScreen
 import com.reqlab.ui.shared.components.sharedSidebarTooltipState
 import com.reqlab.ui.shared.persistence.TabsRepository
 import com.reqlab.ui.shared.persistence.WorkspaceRepository
+import com.reqlab.ui.shared.platform.PlatformStorage
+import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -27,6 +31,18 @@ class ArchitecturalFixesUiTest {
 
     @get:Rule
     val rule = createComposeRule()
+
+    @Before
+    fun clearPersistedStateBeforeEach() {
+        PlatformStorage.remove("reqlab.workspace")
+        PlatformStorage.remove("reqlab.tabs")
+    }
+
+    @After
+    fun clearPersistedStateAfterEach() {
+        PlatformStorage.remove("reqlab.workspace")
+        PlatformStorage.remove("reqlab.tabs")
+    }
 
     // ── Issue 1: Tooltip no longer uses per-item Popup ──────────────────────
 
@@ -75,10 +91,24 @@ class ArchitecturalFixesUiTest {
 
     // ── Issue 2: Workspace restore + "show in sidebar" ─────────────────────
 
+    /**
+     * Adds an extra collection so the workspace no longer matches the
+     * "legacy seeded demo" fingerprint in WorkspaceRepository.load().
+     * Without this, the load guard deletes the saved data and returns early.
+     */
+    private fun escapeFromDemoFingerprint(state: AppState) {
+        state.collections.add(
+            CollectionNode("extra-c", "Extra", isFolder = true, children = mutableListOf(
+                CollectionNode("extra-r", "Ping", method = HttpMethodType.GET, url = "http://localhost/ping")
+            ))
+        )
+    }
+
     @Test
     fun workspaceRestore_correctLoadOrder_resolvesTabIdToCollectionNode() {
         // Simulate the startup sequence: workspace first, THEN tabs.
         val origin = AppState(withDemoData = true)
+        escapeFromDemoFingerprint(origin)
         // Ensure there is at least one request in a collection.
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req, "Need at least one request in default collections")
@@ -114,6 +144,7 @@ class ArchitecturalFixesUiTest {
         // This test documents the OLD broken behaviour: if tabs load first,
         // the ID cannot be resolved because collections are still empty.
         val origin = AppState(withDemoData = true)
+        escapeFromDemoFingerprint(origin)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req)
 
@@ -143,6 +174,7 @@ class ArchitecturalFixesUiTest {
     @Test
     fun syncSidebarToActiveTab_setsScrollTarget_afterCorrectRestore() {
         val origin = AppState(withDemoData = true)
+        escapeFromDemoFingerprint(origin)
         val req = origin.collections.firstOrNull()?.children?.firstOrNull { !it.isFolder }
         assertNotNull(req)
 

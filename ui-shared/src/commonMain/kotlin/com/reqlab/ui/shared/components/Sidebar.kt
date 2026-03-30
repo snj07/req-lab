@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -148,6 +149,8 @@ fun Sidebar(state: AppState) {
 
     var renameEnvironmentIndex by remember { mutableStateOf(-1) }
     var renameEnvironmentValue by remember { mutableStateOf("") }
+    var showCreateEnvironmentDialog by remember { mutableStateOf(false) }
+    var createEnvironmentValue by remember { mutableStateOf("") }
 
     fun launchTracked(
         title: String,
@@ -488,13 +491,8 @@ fun Sidebar(state: AppState) {
                             }
                             IconButton(
                                 onClick = {
-                                    val names = state.environments.map { it.name }.toSet()
-                                    val name = ImportExportNaming.generateUniqueEnvironmentName("New Environment", names)
-                                    state.environments.add(EnvState(name))
-                                    // M-12: Immediately open the rename dialog so the user can
-                                    // give the environment a meaningful name right away.
-                                    renameEnvironmentIndex = state.environments.lastIndex
-                                    renameEnvironmentValue = name
+                                    createEnvironmentValue = ""
+                                    showCreateEnvironmentDialog = true
                                 },
                                 modifier = Modifier.size(24.dp),
                             ) {
@@ -528,11 +526,8 @@ fun Sidebar(state: AppState) {
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(ReqLabColors.Primary.copy(alpha = 0.10f))
                                     .clickable {
-                                        val names = state.environments.map { it.name }.toSet()
-                                        val name = ImportExportNaming.generateUniqueEnvironmentName("New Environment", names)
-                                        state.environments.add(EnvState(name))
-                                        renameEnvironmentIndex = state.environments.lastIndex
-                                        renameEnvironmentValue = name
+                                        createEnvironmentValue = ""
+                                        showCreateEnvironmentDialog = true
                                     }
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             )
@@ -545,6 +540,10 @@ fun Sidebar(state: AppState) {
                             envName = env.name,
                             active = index == state.selectedEnvIndex,
                             onClick = { state.selectedEnvIndex = index },
+                            onDoubleClick = {
+                                state.selectedEnvIndex = index
+                                state.openEnvEdit(index)
+                            },
                             onEdit = { state.openEnvEdit(index) },
                             onExport = {
                                 scope.launch {
@@ -699,6 +698,31 @@ fun Sidebar(state: AppState) {
                 }
                 renameEnvironmentIndex = -1
                 renameEnvironmentValue = ""
+            },
+        )
+    }
+
+    if (showCreateEnvironmentDialog) {
+        RenameItemDialog(
+            title = "Create environment",
+            value = createEnvironmentValue,
+            onValueChange = { createEnvironmentValue = it },
+            confirmText = "Create",
+            onDismiss = {
+                showCreateEnvironmentDialog = false
+                createEnvironmentValue = ""
+            },
+            onConfirm = {
+                val trimmed = createEnvironmentValue.trim()
+                if (trimmed.isNotEmpty()) {
+                    val existing = state.environments.map { it.name }.toSet()
+                    val unique = ImportExportNaming.generateUniqueEnvironmentName(trimmed, existing)
+                    state.environments.add(EnvState(unique))
+                    state.selectedEnvIndex = state.environments.lastIndex
+                    state.log("Environment created: $unique", LogLevel.SUCCESS)
+                }
+                showCreateEnvironmentDialog = false
+                createEnvironmentValue = ""
             },
         )
     }
@@ -1190,6 +1214,7 @@ private fun EnvironmentRow(
     envName: String,
     active: Boolean,
     onClick: () -> Unit,
+    onDoubleClick: () -> Unit,
     onEdit: () -> Unit,
     onExport: () -> Unit,
     onDuplicate: () -> Unit,
@@ -1235,7 +1260,7 @@ private fun EnvironmentRow(
             .background(rowBackground)
             .hoverable(interactionSource)
             .onPointerEvent(PointerEventType.Press) { if (it.buttons.isSecondaryPressed) showMenu = true }
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick)
             .padding(start = 28.dp, end = 4.dp, top = 5.dp, bottom = 5.dp)
             .testTag("env-row-$envName")
             .onGloballyPositioned { coords ->
@@ -1329,6 +1354,7 @@ private fun RenameItemDialog(
     title: String,
     value: String,
     onValueChange: (String) -> Unit,
+    confirmText: String = "Save",
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -1370,7 +1396,7 @@ private fun RenameItemDialog(
                         .testTag("rename-dialog-cancel"),
                 )
                 Text(
-                    text = "Save",
+                    text = confirmText,
                     color = ReqLabColors.OnPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,

@@ -107,6 +107,20 @@ class QaFixesUiTest {
         composeRule.onNodeWithTag("auth-password-field", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    @Test
+    fun `M-13 auth selector hides unimplemented OAuth2 option`() {
+        val state = AppState()
+        composeRule.setContent { MainScreen(state = state) }
+        composeRule.waitForIdle()
+
+        composeRule.runOnUiThread {
+            state.activeTab?.selectedEditorTab = RequestEditorTab.AUTH
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("OAUTH2", useUnmergedTree = true).assertDoesNotExist()
+    }
+
     // ── M-1: Settings dialog draggable ───────────────────────────────────────
 
     @Test

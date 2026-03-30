@@ -159,7 +159,7 @@ class GlobalVariablesUiTest {
         ))
 
         val layers = state.activeVariableLayers()
-        val globalLayer = layers[1] // global layer is second (after environment)
+        val globalLayer = layers[2] // global layer is third (after environment and collection)
         assertEquals("yes", globalLayer["active"])
         assertFalse(globalLayer.containsKey("inactive"))
     }
@@ -177,8 +177,8 @@ class GlobalVariablesUiTest {
         val layers = state.activeVariableLayers()
         // Environment layer is first (higher priority)
         assertEquals("http://env.example.com", layers[0]["baseUrl"])
-        // Global layer also has it but at lower priority
-        assertEquals("http://global.example.com", layers[1]["baseUrl"])
+        // Global layer is third (after collection layer) at lower priority
+        assertEquals("http://global.example.com", layers[2]["baseUrl"])
     }
 
     @Test
@@ -188,7 +188,7 @@ class GlobalVariablesUiTest {
 
         val layers = state.activeVariableLayers()
         val envLayer = layers[0]
-        val globalLayer = layers[1]
+        val globalLayer = layers[2] // global layer is third (after collection)
 
         assertFalse(envLayer.containsKey("appVersion"))
         assertEquals("2.0", globalLayer["appVersion"])

@@ -14,6 +14,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.header
+import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
@@ -69,6 +70,116 @@ fun Application.module() {
                 "ReqLab Sample API Server is running! Visit http://localhost:8080",
                 ContentType.Text.Plain
             )
+        }
+
+        // ── Deterministic scripting test endpoints ───────────────────────
+        get("/status/200") {
+            call.respond(HttpStatusCode.OK, buildJsonObject {
+                put("status", 200)
+                put("ok", true)
+                put("message", "Deterministic 200 response")
+            })
+        }
+
+        get("/status/201") {
+            call.respond(HttpStatusCode.Created, buildJsonObject {
+                put("status", 201)
+                put("ok", true)
+                put("message", "Deterministic 201 response")
+            })
+        }
+
+        get("/json/user") {
+            call.respond(buildJsonObject {
+                put("id", "1")
+                put("name", "Jane")
+                put("age", 23)
+                put("type", "Subscriber")
+                put("active", true)
+            })
+        }
+
+        get("/json/array") {
+            call.respond(buildJsonObject {
+                put("items", buildJsonArray {
+                    add(buildJsonObject {
+                        put("id", 1)
+                        put("label", "alpha")
+                        put("tags", buildJsonArray { add("core"); add("smoke") })
+                    })
+                    add(buildJsonObject {
+                        put("id", 2)
+                        put("label", "beta")
+                        put("tags", buildJsonArray { add("extended") })
+                    })
+                })
+            })
+        }
+
+        get("/json/object") {
+            call.respond(buildJsonObject {
+                put("meta", buildJsonObject {
+                    put("version", "1.0")
+                    put("env", "test")
+                })
+                put("payload", buildJsonObject {
+                    put("title", "ReqLab")
+                    put("count", 3)
+                    put("enabled", true)
+                    put("nullable", null)
+                    put("nested", buildJsonObject {
+                        put("code", "OBJ-1")
+                    })
+                    put("list", buildJsonArray { add(10); add(20); add(30) })
+                })
+            })
+        }
+
+        get("/headers") {
+            val trace = call.request.header("X-Trace-Id").orEmpty()
+            val run = call.request.header("X-Run-Id").orEmpty()
+            call.response.header("X-Sample-Server", "ReqLab-Sample")
+            call.respond(buildJsonObject {
+                put("traceId", trace)
+                put("runId", run)
+                put("hasTrace", trace.isNotBlank())
+                put("hasRunId", run.isNotBlank())
+            })
+        }
+
+        get("/cookies") {
+            call.response.cookies.append(Cookie("script_session", "sess-123", path = "/"))
+            call.response.cookies.append(Cookie("script_user", "qa", path = "/"))
+            call.respond(buildJsonObject {
+                put("message", "Cookies set")
+                put("receivedCookieHeader", call.request.header("Cookie") ?: "")
+            })
+        }
+
+        get("/response-time") {
+            val delayMs = call.request.queryParameters["ms"]?.toLongOrNull() ?: 120L
+            delay(delayMs)
+            call.respond(buildJsonObject {
+                put("delayMs", delayMs)
+                put("ok", true)
+            })
+        }
+
+        get("/string-body") {
+            call.respondText(
+                "ReqLab plain string body for scripting assertions",
+                ContentType.Text.Plain,
+                HttpStatusCode.OK,
+            )
+        }
+
+        post("/echo-body") {
+            val body = call.receiveText()
+            call.respond(buildJsonObject {
+                put("method", call.request.httpMethod.value)
+                put("body", body)
+                put("length", body.length)
+            })
         }
 
         // ── HTTP Methods ───────────────────────────────────────────────────
@@ -408,7 +519,7 @@ fun Application.module() {
         /**
          * GET /api/timestamp
          * Returns the current server time in multiple formats.
-         * Useful in pre-request scripts: pm.environment.set("ts", pm.response.json().unix)
+         * Useful in pre-request scripts: env.set("ts", response.json().unix)
          */
         get("/api/timestamp") {
             val now = Instant.now()
@@ -424,7 +535,7 @@ fun Application.module() {
          * POST /api/token
          * Body: { "user": "alice", "role": "admin" }
          * Returns a fake JWT-style token.  Pre-request scripts can fetch this
-         * and store the token: pm.environment.set("token", pm.response.json().token)
+         * and store the token: env.set("token", response.json().token)
          */
         post("/api/token") {
             val body = runCatching { call.receiveText() }.getOrDefault("{}")
@@ -449,7 +560,7 @@ fun Application.module() {
             if (token.isNullOrBlank()) {
                 call.respond(HttpStatusCode.Unauthorized, buildJsonObject {
                     put("error", "Missing X-Token header")
-                    put("hint",  "Add a pre-request script that sets the X-Token header via pm.environment.set()")
+                    put("hint",  "Add a pre-request script that sets the X-Token header via env.set()")
                 })
             } else {
                 val decoded = runCatching {
@@ -467,7 +578,7 @@ fun Application.module() {
         /**
          * POST /api/validate
          * Validates any JSON body and returns the field names found.
-         * Test scripts can assert: pm.expect(pm.response.json().valid).to.equal(true)
+         * Test scripts can assert: expect(response.json().valid).to.equal(true)
          */
         post("/api/validate") {
             val body = runCatching { call.receiveText() }.getOrDefault("")

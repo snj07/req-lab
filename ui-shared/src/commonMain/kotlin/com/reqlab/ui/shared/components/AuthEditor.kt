@@ -49,13 +49,15 @@ import com.reqlab.ui.shared.theme.ReqLabColors
  */
 @Composable
 fun AuthEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
+    val selectableAuthTypes = AuthType.entries.filterNot { it == AuthType.OAUTH2 }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Auth-type selector
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            AuthType.entries.forEach { at ->
+            selectableAuthTypes.forEach { at ->
                 val selected = at == tab.authType
                 Text(
                     text = at.name.replace('_', ' '),

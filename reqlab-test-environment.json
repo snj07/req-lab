@@ -6,6 +6,10 @@
         "token": "test-token",
         "apiKey": "test-api-key",
         "basicUser": "admin",
-        "basicPassword": "password"
+        "basicPassword": "password",
+        "X-Request-Id": "req-env-default",
+        "X-Client": "ReqLab-Env-Client",
+        "scriptToken": "",
+        "lastRunId": "run-env-default"
     }
 }

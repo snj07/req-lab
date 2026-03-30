@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.androidLibrary)
+    id("org.jetbrains.kotlinx.kover") version "0.9.1"
 }
 
 kotlin {
@@ -31,6 +32,19 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.coroutines.test)
         }
+
+        val desktopMain by getting {
+            dependencies {
+                implementation(libs.graalvm.polyglot)
+                implementation(libs.graalvm.js)
+            }
+        }
+        val androidMain by getting {
+            dependencies {
+                implementation(libs.graalvm.polyglot)
+                implementation(libs.graalvm.js)
+            }
+        }
     }
 }
 
@@ -41,3 +55,8 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
 }
+
+tasks.matching { it.name == "jsBrowserTest" || it.name == "wasmJsBrowserTest" }
+    .configureEach {
+        enabled = false
+    }

@@ -52,8 +52,8 @@ class TabsRepositoryTest {
         tab.authType = AuthType.API_KEY
         tab.authApiKey = "x-api-key"
         tab.authApiValue = "secret"
-        tab.preRequestScript = "pm.environment.set('k','v')"
-        tab.testScript = "pm.test('ok', () => true)"
+        tab.preRequestScript = "env.set('k','v')"
+        tab.testScript = "test('ok', function() { expect(response.status).to.equal(200) })"
         tab.retryCount = 3
         tab.retryDelayMs = 500L
 
@@ -79,8 +79,8 @@ class TabsRepositoryTest {
         assertEquals(AuthType.API_KEY, loaded.authType)
         assertEquals("x-api-key", loaded.authApiKey)
         assertEquals("secret", loaded.authApiValue)
-        assertEquals("pm.environment.set('k','v')", loaded.preRequestScript)
-        assertEquals("pm.test('ok', () => true)", loaded.testScript)
+        assertEquals("env.set('k','v')", loaded.preRequestScript)
+        assertEquals("test('ok', function() { expect(response.status).to.equal(200) })", loaded.testScript)
         assertEquals(3, loaded.retryCount)
         assertEquals(500L, loaded.retryDelayMs)
         assertEquals(123456789L, loaded.lastSavedTimestamp)

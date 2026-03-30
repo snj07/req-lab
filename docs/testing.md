@@ -68,6 +68,7 @@ Implemented and tested:
   - Raw text
   - GraphQL payload wrapper
 - Retry behavior and server error handling
+- Scripting runtime (pre-request scripts, post-response tests, assertions, variable scopes)
 - WebSocket connect/send/receive/disconnect
 - Storage behavior via in-memory repository implementations
 - Desktop shell rendering smoke tests (layout panels/labels)
@@ -76,7 +77,6 @@ Not yet fully testable because implementation is not complete yet:
 
 - Collection drag-and-drop and rich tree operations
 - History search/re-run UI flows
-- Pre-request/test script runtime execution
 - Collection runner reporting UI
 - Importers (Postman/OpenAPI/curl) and code generators
 - Full response JSON tree explorer, diff viewer, resizable panes, command palette
@@ -84,7 +84,7 @@ Not yet fully testable because implementation is not complete yet:
 
 ## CI
 
-GitHub Actions workflow: `.github/workflows/ci.yml`
+GitHub Actions workflow: `.github/workflows/release.yml`
 
-- macOS job: network/storage/integration/desktop UI tests
-- Ubuntu job: compile/build validation for all modules
+- Push to `main`: artifact build validation across macOS, Ubuntu, and Windows.
+- Tag `v*`: artifact build + GitHub Release publication.

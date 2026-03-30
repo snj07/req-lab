@@ -71,41 +71,65 @@ fun ScriptEditor(
 
 private val PRE_REQUEST_HINT = """
 // Pre-request script — runs BEFORE the HTTP request is sent.
-// Use it to compute dynamic values or set environment variables.
+// Default namespace prefix: "reqlab" (change in Settings › Scripts).
 //
-// Available API:
-//   pm.environment.set("key", "value")   // set/override an env variable
-//   pm.environment.get("key")            // read an env variable
-//   console.log("message", value)        // log to the Console panel
+// Variable scopes:
+//   reqlab.environment.set("key", "value")     // environment variable
+//   reqlab.environment.get("key")
+//   reqlab.globals.set("key", "value")          // global variable
+//   reqlab.collectionVariables.set("key", "v")  // collection variable
+//
+// Mutate the outgoing request:
+//   reqlab.request.headers.add("X-Trace", "id")
+//   reqlab.request.headers.upsert("X-Key", reqlab.environment.get("key"))
+//   request.setQueryParam("debug", "true")      // low-level aliases also work
+//   request.setMethod("POST")
+//   request.setUrl("https://other-host.example.com")
+//
+// Logging:
+//   console.log("msg", value)
+//   reqlab.console.log("msg")
 //
 // Example:
-//   pm.environment.set("timestamp", String.valueOf(System.currentTimeMillis()))
-//   pm.environment.set("authHeader", "Bearer " + pm.environment.get("token"))
-//   console.log("Sending request to", pm.environment.get("baseUrl"))
+//   reqlab.environment.set("ts", Date.now().toString())
+//   reqlab.request.headers.add("X-Timestamp", reqlab.environment.get("ts"))
+//   console.log("Sending", reqlab.request.method, reqlab.request.url)
 """.trim()
 
 private val TEST_HINT = """
-// Tests script — runs AFTER the response is received.
-// Use it to validate the response and extract values for chaining.
+// Test script — runs AFTER the response is received.
+// Default namespace prefix: "reqlab" (change in Settings › Scripts).
 //
-// Available API:
-//   pm.test("name", function() { ... })              // define a test block
-//   pm.expect(pm.response.code).to.equal(200)        // assert status code
-//   pm.expect(pm.response.code).to.be.oneOf([200, 201])
-//   pm.expect(pm.response.code).to.be.above(199)
-//   pm.expect(pm.response.text()).to.include("ok")   // check body text
-//   pm.expect(pm.response.json().name).to.equal("Alice")  // check JSON field
-//   pm.expect(pm.response.json().users[0].id).to.equal(1)
-//   pm.response.to.have.status(200)                  // shorthand status check
-//   pm.environment.set("token", pm.response.json().token) // chain to next request
-//   console.log("Status:", pm.response.code)
+// Test blocks:
+//   reqlab.test("name", () => {
+//     reqlab.expect(reqlab.response.code).to.equal(200)
+//   })
+//
+// Response accessors:
+//   reqlab.response.code          // HTTP status int
+//   reqlab.response.responseTime  // ms
+//   reqlab.response.size          // bytes
+//   reqlab.response.text()        // body as string
+//   reqlab.response.json()        // parsed JSON (use .field for paths)
+//   reqlab.response.headers.get("Content-Type")
+//
+// Assertions:
+//   .to.equal(v)  .to.notEqual(v)  .to.include("s")  .to.match("regex")
+//   .to.be.above(n)  .to.be.below(n)  .to.be.oneOf([a,b])
+//   .to.exist  .to.be.ok  .to.be.null  .to.be.empty
+//
+// Chain to next request:
+//   reqlab.environment.set("token", reqlab.response.json().token)
 //
 // Example:
-//   pm.test("Status is 200", function() {
-//       pm.expect(pm.response.code).to.equal(200)
+//   reqlab.test("Status is 200", () => {
+//     reqlab.expect(reqlab.response.code).to.equal(200)
 //   })
-//   pm.test("Response has token", function() {
-//       pm.expect(pm.response.json().token).to.exist
-//       pm.environment.set("token", pm.response.json().token)
+//   reqlab.test("Has token", () => {
+//     reqlab.expect(reqlab.response.json().token).to.exist
+//     reqlab.environment.set("token", reqlab.response.json().token)
+//   })
+//   reqlab.test("Fast response", () => {
+//     reqlab.expect(reqlab.response.responseTime).to.be.below(500)
 //   })
 """.trim()

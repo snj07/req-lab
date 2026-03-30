@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.components
 import com.reqlab.core.model.AuthConfig
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestBody
 import com.reqlab.core.model.RequestDefinition
@@ -46,6 +47,18 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
         tab.response  = null
         tab.lastError = null
         state.testResults.clear()
+        var effectiveUrl = tab.url
+        var effectiveMethod = tab.method
+        val effectiveHeaders = tab.headers
+            .filter { it.enabled }
+            .associate { it.key to it.value }
+            .toMutableMap()
+        val effectiveQueryParams = tab.params
+            .filter { it.enabled }
+            .associate { it.key to it.value }
+            .toMutableMap()
+        var effectiveBodyContent = tab.bodyContent
+        val requestScopedScriptVars = mutableMapOf<String, String>()
 
         // ── Pre-request script ────────────────────────────────────────────
         if (tab.preRequestScript.isNotBlank()) {
@@ -55,6 +68,11 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                 url       = tab.url,
                 method    = tab.method.name,
                 variables = flatVars,
+                globalVariables = state.globalVariables.filter { it.enabled }.associate { it.key to it.value },
+                collectionVariables = state.collectionVariables.toMap(),
+                requestHeaders = effectiveHeaders,
+                requestQueryParams = effectiveQueryParams,
+                requestBody = tab.bodyContent,
             )
             // M-8: Clean up variables injected by the previous run of this script
             // so stale keys don't accumulate across re-sends.
@@ -63,7 +81,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                 env?.variables?.removeAll { it.key in tab.scriptInjectedVarKeys && it.kind == com.reqlab.ui.shared.state.HeaderKind.USER }
                 tab.scriptInjectedVarKeys.clear()
             }
-            val preResult = scriptEngine.executePreRequestScript(tab.preRequestScript, preCtx)
+            val preResult = scriptEngine.executePreRequestScript(tab.preRequestScript, preCtx, state.settings.scriptPrefix)
             preResult.logs.forEach { state.log(it) }
             if (preResult.error != null) {
                 state.log("⚠ Pre-request script error: ${preResult.error}", LogLevel.ERROR)
@@ -74,20 +92,46 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                 tab.scriptInjectedVarKeys.addAll(preResult.newVariables.keys)
                 state.mergeScriptVariables(preResult.newVariables)
             }
+            if (preResult.newRequestVariables.isNotEmpty()) {
+                requestScopedScriptVars.putAll(preResult.newRequestVariables)
+            }
+            if (preResult.newGlobalVariables.isNotEmpty()) {
+                state.mergeGlobalScriptVariables(preResult.newGlobalVariables)
+            }
+            if (preResult.newCollectionVariables.isNotEmpty()) {
+                state.mergeCollectionScriptVariables(preResult.newCollectionVariables)
+            }
+            if (preResult.requestMutations.url != null) {
+                effectiveUrl = preResult.requestMutations.url ?: effectiveUrl
+            }
+            if (preResult.requestMutations.method != null) {
+                effectiveMethod = HttpMethodType.entries.firstOrNull {
+                    it.name.equals(preResult.requestMutations.method, ignoreCase = true)
+                } ?: effectiveMethod
+            }
+            if (preResult.requestMutations.body != null) {
+                effectiveBodyContent = preResult.requestMutations.body ?: effectiveBodyContent
+            }
+            if (preResult.requestMutations.headers.isNotEmpty()) {
+                effectiveHeaders.putAll(preResult.requestMutations.headers)
+            }
+            if (preResult.requestMutations.queryParams.isNotEmpty()) {
+                effectiveQueryParams.putAll(preResult.requestMutations.queryParams)
+            }
         }
 
-        state.logNetworkEvent("→ ${tab.method} ${tab.url}")
+        state.logNetworkEvent("→ $effectiveMethod $effectiveUrl")
 
         try {
             val request = RequestDefinition(
                 id = tab.id,
                 name = tab.name,
-                method = tab.method,
-                url = tab.url,
-                queryParams = tab.params.filter { it.enabled }.map { KeyValueEntry(it.key, it.value) },
-                headers = tab.headers.filter { it.enabled }.map { KeyValueEntry(it.key, it.value) },
+                method = effectiveMethod,
+                url = effectiveUrl,
+                queryParams = effectiveQueryParams.map { KeyValueEntry(it.key, it.value) },
+                headers = effectiveHeaders.map { KeyValueEntry(it.key, it.value) },
                 auth = buildAuthConfig(tab),
-                body = buildRequestBody(tab.bodyType, tab.bodyContent),
+                body = buildRequestBody(tab.bodyType, effectiveBodyContent),
                 createdAtEpochMillis = currentTimeMillis(),
                 updatedAtEpochMillis = currentTimeMillis(),
             )
@@ -143,15 +187,23 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                             val layers2 = state.activeVariableLayers()
                             val flatVars2 = buildMap<String, String> { layers2.asReversed().forEach { putAll(it) } }
                             val testCtx = ScriptContext(
-                                url             = tab.url,
-                                method          = tab.method.name,
+                                url             = effectiveUrl,
+                                method          = effectiveMethod.name,
                                 statusCode      = resp.statusCode,
                                 responseBody    = resp.bodyText,
                                 responseHeaders = resp.headers.associate { it.key to it.value },
                                 responseTimeMs  = resp.metrics.responseTimeMs,
-                                variables       = flatVars2,
+                                variables       = buildMap {
+                                    putAll(flatVars2)
+                                    putAll(requestScopedScriptVars)
+                                },
+                                globalVariables = state.globalVariables.filter { it.enabled }.associate { it.key to it.value },
+                                collectionVariables = state.collectionVariables.toMap(),
+                                requestHeaders = effectiveHeaders,
+                                requestQueryParams = effectiveQueryParams,
+                                requestBody = effectiveBodyContent,
                             )
-                            val testResult = scriptEngine.executeTestScript(tab.testScript, testCtx)
+                            val testResult = scriptEngine.executeTestScript(tab.testScript, testCtx, state.settings.scriptPrefix)
                             testResult.logs.forEach { state.log(it) }
                             if (testResult.error != null) {
                                 state.log("⚠ Test script error: ${testResult.error}", LogLevel.ERROR)
@@ -168,6 +220,12 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                                 // M-8: Track test-script injected keys alongside pre-request keys
                                 tab.scriptInjectedVarKeys.addAll(testResult.newVariables.keys)
                                 state.mergeScriptVariables(testResult.newVariables)
+                            }
+                            if (testResult.newGlobalVariables.isNotEmpty()) {
+                                state.mergeGlobalScriptVariables(testResult.newGlobalVariables)
+                            }
+                            if (testResult.newCollectionVariables.isNotEmpty()) {
+                                state.mergeCollectionScriptVariables(testResult.newCollectionVariables)
                             }
                         }
                     }

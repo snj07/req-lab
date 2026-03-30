@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +52,12 @@ import com.reqlab.ui.shared.theme.ReqLabColors
 
 @Composable
 fun TopToolbar(state: AppState) {
+    LaunchedEffect(state.workspaceMode) {
+        if (state.workspaceMode != WorkspaceMode.HTTP) {
+            state.workspaceMode = WorkspaceMode.HTTP
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -81,32 +88,32 @@ fun TopToolbar(state: AppState) {
         Spacer(Modifier.width(16.dp))
 
         // Workspace mode selector (HTTP / Realtime / GraphQL)
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(ReqLabColors.SurfaceContainer),
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            WorkspaceMode.entries.forEach { mode ->
-                val selected = state.workspaceMode == mode
-                Text(
-                    text = when (mode) {
-                        WorkspaceMode.HTTP -> "HTTP"
-                        WorkspaceMode.REALTIME -> Strings.protocols
-                        WorkspaceMode.GRAPHQL -> "GraphQL"
-                    },
-                    fontSize = 12.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceVariant,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (selected) ReqLabColors.Primary.copy(alpha = 0.12f) else Color.Transparent)
-                        .clickable { state.workspaceMode = mode }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .testTag("workspace-mode-${mode.name.lowercase()}"),
-                )
-            }
-        }
+        // Row(
+        //     modifier = Modifier
+        //         .clip(RoundedCornerShape(6.dp))
+        //         .background(ReqLabColors.SurfaceContainer),
+        //     horizontalArrangement = Arrangement.spacedBy(0.dp),
+        // ) {
+        //     WorkspaceMode.entries.forEach { mode ->
+        //         val selected = state.workspaceMode == mode
+        //         Text(
+        //             text = when (mode) {
+        //                 WorkspaceMode.HTTP -> "HTTP"
+        //                 WorkspaceMode.REALTIME -> Strings.protocols
+        //                 WorkspaceMode.GRAPHQL -> "GraphQL"
+        //             },
+        //             fontSize = 12.sp,
+        //             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        //             color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceVariant,
+        //             modifier = Modifier
+        //                 .clip(RoundedCornerShape(6.dp))
+        //                 .background(if (selected) ReqLabColors.Primary.copy(alpha = 0.12f) else Color.Transparent)
+        //                 .clickable { state.workspaceMode = mode }
+        //                 .padding(horizontal = 12.dp, vertical = 6.dp)
+        //                 .testTag("workspace-mode-${mode.name.lowercase()}"),
+        //         )
+        //     }
+        // }
 
         Spacer(Modifier.weight(1f))
 

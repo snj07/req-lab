@@ -169,10 +169,11 @@ Production bundle:
 
 ### CI
 
-GitHub Actions runs on every push and pull request. See [`.github/workflows/`](.github/workflows/) for the pipeline definition.
+GitHub Actions release packaging is defined in [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-- **macOS job** — network, storage, integration, and desktop UI tests
-- **Ubuntu job** — compile and build validation for all modules
+- **Push to `main`** — builds desktop artifacts for macOS/Linux/Windows.
+- **Push tag `v*`** — builds artifacts and publishes a GitHub release.
+- **Manual dispatch** — allows on-demand artifact builds.
 
 ---
 

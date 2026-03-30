@@ -85,6 +85,7 @@ private enum class SettingsSection(val label: String, val icon: ImageVector) {
     LANGUAGE("Language", Icons.Default.Language),
     NETWORK("Network",   Icons.Default.NetworkCheck),
     PROXY("Proxy",       Icons.Default.SettingsApplications),
+    SCRIPTING("Scripts", Icons.Default.DataObject),
     DATA("Data",         Icons.Default.Storage),
 }
 
@@ -95,6 +96,7 @@ private fun settingsSectionLabel(section: SettingsSection): String = when (secti
     SettingsSection.LANGUAGE -> Strings.language
     SettingsSection.NETWORK -> Strings.network
     SettingsSection.PROXY -> Strings.proxy
+    SettingsSection.SCRIPTING -> "Scripts"
     SettingsSection.DATA -> "Data"
 }
 
@@ -214,6 +216,7 @@ fun SettingsDialog(state: AppState) {
                         SettingsSection.LANGUAGE -> LanguageSettings(settings)
                         SettingsSection.NETWORK  -> NetworkSettings(settings)
                         SettingsSection.PROXY    -> ProxySettings(settings)
+                        SettingsSection.SCRIPTING -> ScriptingSettings(settings)
                         SettingsSection.DATA     -> DataSettings(state)
                     }
                 }
@@ -361,6 +364,45 @@ private fun ProxySettings(s: AppSettings) {
     SettingTextField("HTTP proxy", s.httpProxy, { s.httpProxy = it }, "http://proxy:8080")
     SettingsDivider()
     SettingTextField("HTTPS proxy", s.httpsProxy, { s.httpsProxy = it }, "https://proxy:8443")
+}
+
+@Composable
+private fun ScriptingSettings(s: AppSettings) {
+    SettingTextField(
+        label = "Script namespace prefix",
+        value = s.scriptPrefix,
+        onValueChange = { v ->
+            val clean = v.trim().filter { it.isLetterOrDigit() || it == '_' }
+            if (clean.isNotEmpty()) s.scriptPrefix = clean
+        },
+        placeholder = "reqlab",
+    )
+    SettingsDivider()
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "The namespace used in pre-request and post-response scripts.",
+            color = ReqLabColors.OnSurfaceVariant,
+            fontSize = 12.sp,
+        )
+        Text(
+            "Example with prefix \"${s.scriptPrefix}\":",
+            color = ReqLabColors.OnSurfaceDim,
+            fontSize = 12.sp,
+        )
+        Text(
+            "${s.scriptPrefix}.test(\"status\", () => {\n" +
+            "  ${s.scriptPrefix}.expect(${s.scriptPrefix}.response.code).to.equal(200)\n" +
+            "})",
+            color = ReqLabColors.Primary,
+            fontSize = 11.sp,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+        )
+        Text(
+            "Default: reqlab — compatible with the ReqLab scripting API.",
+            color = ReqLabColors.OnSurfaceDim,
+            fontSize = 11.sp,
+        )
+    }
 }
 
 @Composable

@@ -44,6 +44,8 @@ object SettingsRepository {
         settings.proxyEnabled = getBool("proxyEnabled", settings.proxyEnabled)
         settings.httpProxy    = PlatformStorage.getString(PREFIX + "httpProxy") ?: settings.httpProxy
         settings.httpsProxy   = PlatformStorage.getString(PREFIX + "httpsProxy") ?: settings.httpsProxy
+
+        settings.scriptPrefix = PlatformStorage.getString(PREFIX + "scriptPrefix") ?: settings.scriptPrefix
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
@@ -63,6 +65,8 @@ object SettingsRepository {
         putBool("proxyEnabled", settings.proxyEnabled)
         PlatformStorage.putString(PREFIX + "httpProxy", settings.httpProxy)
         PlatformStorage.putString(PREFIX + "httpsProxy", settings.httpsProxy)
+
+        PlatformStorage.putString(PREFIX + "scriptPrefix", settings.scriptPrefix)
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

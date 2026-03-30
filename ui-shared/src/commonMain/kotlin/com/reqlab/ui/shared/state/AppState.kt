@@ -164,6 +164,10 @@ class AppSettings {
     var httpProxy            by mutableStateOf("")
     var httpsProxy           by mutableStateOf("")
     var proxyEnabled         by mutableStateOf(false)
+
+    // Scripting
+    /** Namespace prefix for scripts (default "reqlab"). Change to e.g. "api". */
+    var scriptPrefix         by mutableStateOf("reqlab")
 }
 
 // ── Per-tab state (one per open request tab) ────────────────────
@@ -431,18 +435,20 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             it.addAll(AppStateDemoData.globalVariables())
         }
     }
+    val collectionVariables = mutableStateMapOf<String, String>()
     var showGlobalVariablesDialog by mutableStateOf(false)
 
     val selectedEnvironment: EnvState? get() = environments.getOrNull(selectedEnvIndex)
 
     /**
      * Variable layers for the active environment (used in request variable resolution).
-     * Resolution priority (first match wins): Environment → Global.
-     * Environment variables override global variables.
+        * Resolution priority (first match wins): Environment → Collection → Global.
+        * Environment variables override collection and global variables.
      */
     fun activeVariableLayers(): List<Map<String, String>> =
         listOf(
             selectedEnvironment?.toVariableMap().orEmpty(),
+            collectionVariables.toMap(),
             globalVariables.filter { it.enabled }.associate { it.key to it.value },
         )
 
@@ -459,6 +465,23 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             } else {
                 env.variables.add(MutableKeyValue(key = key, value = value))
             }
+        }
+    }
+
+    fun mergeGlobalScriptVariables(vars: Map<String, String>) {
+        vars.forEach { (key, value) ->
+            val existing = globalVariables.firstOrNull { it.key == key }
+            if (existing != null) {
+                existing.value = value
+            } else {
+                globalVariables.add(MutableKeyValue(key = key, value = value))
+            }
+        }
+    }
+
+    fun mergeCollectionScriptVariables(vars: Map<String, String>) {
+        vars.forEach { (key, value) ->
+            collectionVariables[key] = value
         }
     }
 
@@ -543,6 +566,48 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             if (node.isFolder) findNodeById(node.children, id)?.let { return it }
         }
         return null
+    }
+
+    private fun findRequestBySignature(
+        nodes: List<CollectionNode>,
+        name: String,
+        method: HttpMethodType,
+        url: String,
+    ): CollectionNode? {
+        for (node in nodes) {
+            if (!node.isFolder && node.name == name && node.method == method && node.url == url) return node
+            if (node.isFolder) findRequestBySignature(node.children, name, method, url)?.let { return it }
+        }
+        return null
+    }
+
+    private fun resolveSidebarRequestId(requestId: String): String {
+        if (findNodeById(collections, requestId) != null) return requestId
+
+        val tab = openTabs.firstOrNull { it.id == requestId } ?: return requestId
+
+        val collectionName = tab.collectionName
+        if (collectionName != null) {
+            val root = collections.firstOrNull { it.isFolder && it.name == collectionName }
+            if (root != null) {
+                var cursor: CollectionNode = root
+                tab.folderPath.forEach { folderName ->
+                    val next = cursor.children.firstOrNull { it.isFolder && it.name == folderName }
+                    if (next != null) cursor = next
+                }
+                val byName = cursor.children.firstOrNull { !it.isFolder && it.name == tab.name }
+                if (byName != null) return byName.id
+            }
+        }
+
+        val bySignature = findRequestBySignature(
+            nodes = collections,
+            name = tab.name,
+            method = tab.method,
+            url = tab.url,
+        )
+
+        return bySignature?.id ?: requestId
     }
 
     fun closeTab(index: Int) {
@@ -650,14 +715,16 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     }
 
     fun revealRequestInSidebar(requestId: String) {
+        val resolvedRequestId = resolveSidebarRequestId(requestId)
+
         // Always select the request in the sidebar, even if it isn't
         // currently visible inside a collection (Issue 2 fix).
-        selectedRequestId = requestId
+        selectedRequestId = resolvedRequestId
 
         // Also switch the active tab to this request so the sidebar
         // selection stays in sync with the tab bar (the LaunchedEffect
         // in MainScreen sets selectedRequestId = activeTab?.id).
-        val tabIdx = openTabs.indexOfFirst { it.id == requestId }
+        val tabIdx = openTabs.indexOfFirst { it.id == requestId || it.id == resolvedRequestId }
         if (tabIdx >= 0) activeTabIndex = tabIdx
 
         val tab = openTabs.getOrNull(tabIdx)
@@ -674,8 +741,8 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             )
         }
 
-        if (expandAncestorsForRequest(collections, requestId)) {
-            sidebarScrollToRequestId = requestId
+        if (expandAncestorsForRequest(collections, resolvedRequestId)) {
+            sidebarScrollToRequestId = resolvedRequestId
             notifyCollectionsChanged()
         } else {
             historyExpanded = true
@@ -705,9 +772,10 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
      */
     fun syncSidebarToActiveTab() {
         val tab = activeTab ?: return
-        selectedRequestId = tab.id
-        if (expandAncestorsForRequest(collections, tab.id)) {
-            sidebarScrollToRequestId = tab.id
+        val resolvedRequestId = resolveSidebarRequestId(tab.id)
+        selectedRequestId = resolvedRequestId
+        if (expandAncestorsForRequest(collections, resolvedRequestId)) {
+            sidebarScrollToRequestId = resolvedRequestId
         }
     }
 

@@ -11,6 +11,7 @@ serialization = "1.8.1"
 datetime = "0.6.2"
 koin = "4.0.2"
 sqldelight = "2.0.2"
+graalvm = "24.1.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -42,6 +43,9 @@ koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
+
+graalvm-polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "graalvm" }
+graalvm-js = { module = "org.graalvm.polyglot:js-community", version.ref = "graalvm" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

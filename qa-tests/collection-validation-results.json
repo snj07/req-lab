@@ -5,7 +5,7 @@
     "method": "GET",
     "url": "http://localhost:8080/",
     "status": 200,
-    "responseTimeMs": 15.71,
+    "responseTimeMs": 84.39,
     "responseSizeBytes": 64,
     "passed": true,
     "issues": []
@@ -16,7 +16,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/time",
     "status": 200,
-    "responseTimeMs": 3.09,
+    "responseTimeMs": 30.01,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -27,7 +27,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 1.1,
+    "responseTimeMs": 3.84,
     "responseSizeBytes": 376,
     "passed": true,
     "issues": []
@@ -38,7 +38,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/users",
     "status": 201,
-    "responseTimeMs": 2.71,
+    "responseTimeMs": 12.63,
     "responseSizeBytes": 156,
     "passed": true,
     "issues": []
@@ -49,7 +49,7 @@
     "method": "PUT",
     "url": "http://localhost:8080/api/users/1",
     "status": 200,
-    "responseTimeMs": 1.31,
+    "responseTimeMs": 3.13,
     "responseSizeBytes": 167,
     "passed": true,
     "issues": []
@@ -60,7 +60,7 @@
     "method": "PATCH",
     "url": "http://localhost:8080/api/users/2",
     "status": 200,
-    "responseTimeMs": 1.43,
+    "responseTimeMs": 1.73,
     "responseSizeBytes": 125,
     "passed": true,
     "issues": []
@@ -71,7 +71,7 @@
     "method": "DELETE",
     "url": "http://localhost:8080/api/users/3",
     "status": 200,
-    "responseTimeMs": 1.09,
+    "responseTimeMs": 1.21,
     "responseSizeBytes": 59,
     "passed": true,
     "issues": []
@@ -82,7 +82,7 @@
     "method": "OPTIONS",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 1.04,
+    "responseTimeMs": 1.02,
     "responseSizeBytes": 88,
     "passed": true,
     "issues": []
@@ -93,7 +93,7 @@
     "method": "HEAD",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 3.04,
+    "responseTimeMs": 3.65,
     "responseSizeBytes": 0,
     "passed": true,
     "issues": []
@@ -104,7 +104,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=test&page=1&limit=10",
     "status": 200,
-    "responseTimeMs": 1.67,
+    "responseTimeMs": 1.82,
     "responseSizeBytes": 340,
     "passed": true,
     "issues": []
@@ -115,7 +115,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=hello&page=2&limit=25",
     "status": 200,
-    "responseTimeMs": 2.49,
+    "responseTimeMs": 2.83,
     "responseSizeBytes": 344,
     "passed": true,
     "issues": []
@@ -126,7 +126,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search",
     "status": 200,
-    "responseTimeMs": 1.03,
+    "responseTimeMs": 1.17,
     "responseSizeBytes": 259,
     "passed": true,
     "issues": []
@@ -137,7 +137,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=&page=1&limit=5",
     "status": 200,
-    "responseTimeMs": 0.8,
+    "responseTimeMs": 1.05,
     "responseSizeBytes": 322,
     "passed": true,
     "issues": []
@@ -148,7 +148,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=kotlin&page=1&limit=3&sort=name&order=asc",
     "status": 200,
-    "responseTimeMs": 0.77,
+    "responseTimeMs": 0.93,
     "responseSizeBytes": 394,
     "passed": true,
     "issues": []
@@ -159,7 +159,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-headers",
     "status": 200,
-    "responseTimeMs": 0.76,
+    "responseTimeMs": 1.73,
     "responseSizeBytes": 316,
     "passed": true,
     "issues": []
@@ -170,7 +170,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-headers",
     "status": 200,
-    "responseTimeMs": 0.71,
+    "responseTimeMs": 0.91,
     "responseSizeBytes": 360,
     "passed": true,
     "issues": []
@@ -181,7 +181,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-headers",
     "status": 200,
-    "responseTimeMs": 0.91,
+    "responseTimeMs": 0.87,
     "responseSizeBytes": 404,
     "passed": true,
     "issues": []
@@ -192,7 +192,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/json",
     "status": 200,
-    "responseTimeMs": 1.32,
+    "responseTimeMs": 1.17,
     "responseSizeBytes": 166,
     "passed": true,
     "issues": []
@@ -203,7 +203,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/json",
     "status": 200,
-    "responseTimeMs": 0.9,
+    "responseTimeMs": 1.14,
     "responseSizeBytes": 209,
     "passed": true,
     "issues": []
@@ -214,7 +214,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/raw",
     "status": 200,
-    "responseTimeMs": 0.77,
+    "responseTimeMs": 1.27,
     "responseSizeBytes": 143,
     "passed": true,
     "issues": []
@@ -225,7 +225,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/form-data",
     "status": 200,
-    "responseTimeMs": 3.25,
+    "responseTimeMs": 19.59,
     "responseSizeBytes": 176,
     "passed": true,
     "issues": []
@@ -236,7 +236,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/urlencoded",
     "status": 200,
-    "responseTimeMs": 1.16,
+    "responseTimeMs": 1.67,
     "responseSizeBytes": 158,
     "passed": true,
     "issues": []
@@ -247,8 +247,8 @@
     "method": "POST",
     "url": "http://localhost:8080/api/upload",
     "status": 200,
-    "responseTimeMs": 0.98,
-    "responseSizeBytes": 108,
+    "responseTimeMs": 1.03,
+    "responseSizeBytes": 168,
     "passed": true,
     "issues": []
   },
@@ -258,7 +258,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/basic",
     "status": 200,
-    "responseTimeMs": 0.7,
+    "responseTimeMs": 1.25,
     "responseSizeBytes": 55,
     "passed": true,
     "issues": []
@@ -269,7 +269,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/basic",
     "status": 401,
-    "responseTimeMs": 0.62,
+    "responseTimeMs": 0.85,
     "responseSizeBytes": 91,
     "passed": true,
     "issues": []
@@ -280,7 +280,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/basic",
     "status": 401,
-    "responseTimeMs": 0.49,
+    "responseTimeMs": 0.71,
     "responseSizeBytes": 97,
     "passed": true,
     "issues": []
@@ -291,7 +291,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/bearer",
     "status": 200,
-    "responseTimeMs": 0.54,
+    "responseTimeMs": 0.76,
     "responseSizeBytes": 62,
     "passed": true,
     "issues": []
@@ -302,7 +302,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/bearer",
     "status": 401,
-    "responseTimeMs": 0.63,
+    "responseTimeMs": 0.74,
     "responseSizeBytes": 142,
     "passed": true,
     "issues": []
@@ -313,7 +313,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/bearer",
     "status": 401,
-    "responseTimeMs": 0.81,
+    "responseTimeMs": 0.66,
     "responseSizeBytes": 124,
     "passed": true,
     "issues": []
@@ -324,7 +324,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/apikey",
     "status": 200,
-    "responseTimeMs": 0.65,
+    "responseTimeMs": 0.75,
     "responseSizeBytes": 63,
     "passed": true,
     "issues": []
@@ -335,7 +335,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/apikey",
     "status": 401,
-    "responseTimeMs": 0.57,
+    "responseTimeMs": 0.64,
     "responseSizeBytes": 119,
     "passed": true,
     "issues": []
@@ -346,7 +346,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/apikey",
     "status": 401,
-    "responseTimeMs": 0.47,
+    "responseTimeMs": 0.56,
     "responseSizeBytes": 110,
     "passed": true,
     "issues": []
@@ -357,7 +357,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/cookies",
     "status": 200,
-    "responseTimeMs": 0.73,
+    "responseTimeMs": 3.07,
     "responseSizeBytes": 91,
     "passed": true,
     "issues": []
@@ -368,7 +368,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/cookies",
     "status": 200,
-    "responseTimeMs": 1.94,
+    "responseTimeMs": 1.93,
     "responseSizeBytes": 157,
     "passed": true,
     "issues": []
@@ -379,7 +379,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/redirect",
     "status": 302,
-    "responseTimeMs": 0.56,
+    "responseTimeMs": 0.6,
     "responseSizeBytes": 0,
     "passed": true,
     "issues": []
@@ -390,7 +390,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/final",
     "status": 200,
-    "responseTimeMs": 0.52,
+    "responseTimeMs": 0.65,
     "responseSizeBytes": 100,
     "passed": true,
     "issues": []
@@ -401,7 +401,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/400",
     "status": 400,
-    "responseTimeMs": 0.53,
+    "responseTimeMs": 1.65,
     "responseSizeBytes": 114,
     "passed": true,
     "issues": []
@@ -412,7 +412,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/401",
     "status": 401,
-    "responseTimeMs": 0.56,
+    "responseTimeMs": 0.74,
     "responseSizeBytes": 115,
     "passed": true,
     "issues": []
@@ -423,7 +423,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/403",
     "status": 403,
-    "responseTimeMs": 0.48,
+    "responseTimeMs": 0.68,
     "responseSizeBytes": 112,
     "passed": true,
     "issues": []
@@ -434,7 +434,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/404",
     "status": 404,
-    "responseTimeMs": 0.44,
+    "responseTimeMs": 1.01,
     "responseSizeBytes": 112,
     "passed": true,
     "issues": []
@@ -445,7 +445,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/405",
     "status": 405,
-    "responseTimeMs": 0.56,
+    "responseTimeMs": 0.81,
     "responseSizeBytes": 121,
     "passed": true,
     "issues": []
@@ -456,7 +456,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/422",
     "status": 422,
-    "responseTimeMs": 0.43,
+    "responseTimeMs": 0.66,
     "responseSizeBytes": 123,
     "passed": true,
     "issues": []
@@ -467,7 +467,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/429",
     "status": 429,
-    "responseTimeMs": 0.48,
+    "responseTimeMs": 0.57,
     "responseSizeBytes": 120,
     "passed": true,
     "issues": []
@@ -478,7 +478,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/500",
     "status": 500,
-    "responseTimeMs": 0.43,
+    "responseTimeMs": 0.54,
     "responseSizeBytes": 124,
     "passed": true,
     "issues": []
@@ -489,7 +489,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/502",
     "status": 502,
-    "responseTimeMs": 0.43,
+    "responseTimeMs": 0.53,
     "responseSizeBytes": 114,
     "passed": true,
     "issues": []
@@ -500,7 +500,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/503",
     "status": 503,
-    "responseTimeMs": 0.45,
+    "responseTimeMs": 1.12,
     "responseSizeBytes": 122,
     "passed": true,
     "issues": []
@@ -511,7 +511,7 @@
     "method": "GET",
     "url": "ws://localhost:8080/ws",
     "status": 101,
-    "responseTimeMs": 2.12,
+    "responseTimeMs": 24.72,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -522,7 +522,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/slow",
     "status": 200,
-    "responseTimeMs": 3008.24,
+    "responseTimeMs": 3010.56,
     "responseSizeBytes": 84,
     "passed": true,
     "issues": []
@@ -533,7 +533,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/slow?ms=1000",
     "status": 200,
-    "responseTimeMs": 1006.92,
+    "responseTimeMs": 1007.9,
     "responseSizeBytes": 84,
     "passed": true,
     "issues": []
@@ -544,7 +544,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/slow?ms=100",
     "status": 200,
-    "responseTimeMs": 107.39,
+    "responseTimeMs": 108.47,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -555,7 +555,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/timestamp",
     "status": 200,
-    "responseTimeMs": 2.36,
+    "responseTimeMs": 2.76,
     "responseSizeBytes": 110,
     "passed": true,
     "issues": []
@@ -566,7 +566,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/token",
     "status": 200,
-    "responseTimeMs": 1.98,
+    "responseTimeMs": 8.17,
     "responseSizeBytes": 123,
     "passed": true,
     "issues": []
@@ -577,7 +577,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/protected",
     "status": 200,
-    "responseTimeMs": 1.17,
+    "responseTimeMs": 1.61,
     "responseSizeBytes": 169,
     "passed": true,
     "issues": []
@@ -588,7 +588,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/validate",
     "status": 200,
-    "responseTimeMs": 1.65,
+    "responseTimeMs": 3.7,
     "responseSizeBytes": 107,
     "passed": true,
     "issues": []
@@ -599,8 +599,8 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-full",
     "status": 200,
-    "responseTimeMs": 1.72,
-    "responseSizeBytes": 503,
+    "responseTimeMs": 1.83,
+    "responseSizeBytes": 504,
     "passed": true,
     "issues": []
   },
@@ -610,8 +610,316 @@
     "method": "GET",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 1.1,
+    "responseTimeMs": 1.22,
     "responseSizeBytes": 376,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "01 Pre-request header/query mutation + scope set",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/headers?seed=1",
+    "status": 200,
+    "responseTimeMs": 1.15,
+    "responseSizeBytes": 84,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "02 Cross-request environment variable usage",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/headers",
+    "status": 200,
+    "responseTimeMs": 0.88,
+    "responseSizeBytes": 98,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "03 Request body mutation in pre-request",
+    "path": "Scripting Runtime Coverage",
+    "method": "POST",
+    "url": "http://localhost:8080/echo-body",
+    "status": 200,
+    "responseTimeMs": 1.28,
+    "responseSizeBytes": 71,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "04 JSON user validation and schema-like checks",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/user",
+    "status": 200,
+    "responseTimeMs": 1.04,
+    "responseSizeBytes": 98,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "05 JSON array and nested object assertions",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/array",
+    "status": 200,
+    "responseTimeMs": 1.1,
+    "responseSizeBytes": 313,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "06 Object type matrix validation",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/object",
+    "status": 200,
+    "responseTimeMs": 1.34,
+    "responseSizeBytes": 327,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "07 Response time and body size checks",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/response-time?ms=120",
+    "status": 200,
+    "responseTimeMs": 127.37,
+    "responseSizeBytes": 38,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "08 Plain string body match",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/string-body",
+    "status": 200,
+    "responseTimeMs": 1.75,
+    "responseSizeBytes": 49,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "09 Headers and cookies validation",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/cookies",
+    "status": 200,
+    "responseTimeMs": 2.6,
+    "responseSizeBytes": 83,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "10 Status 201 validation",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/status/201",
+    "status": 201,
+    "responseTimeMs": 1.56,
+    "responseSizeBytes": 82,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "11 Async capability probe",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/status/200",
+    "status": 200,
+    "responseTimeMs": 1.08,
+    "responseSizeBytes": 82,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "11b Undefined and empty variable handling",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/status/200",
+    "status": 200,
+    "responseTimeMs": 1.11,
+    "responseSizeBytes": 82,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "12 Negative-path status assertion (expected 201)",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/status/201",
+    "status": 201,
+    "responseTimeMs": 1.12,
+    "responseSizeBytes": 82,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "13 Negative-path missing header handled",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/headers",
+    "status": 200,
+    "responseTimeMs": 1.21,
+    "responseSizeBytes": 84,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "14 Negative-path schema-like mismatch guard",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/user",
+    "status": 200,
+    "responseTimeMs": 1.39,
+    "responseSizeBytes": 98,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "15 Assertion syntax matrix",
+    "path": "Scripting Runtime Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/object",
+    "status": 200,
+    "responseTimeMs": 0.97,
+    "responseSizeBytes": 327,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC01 Empty response body handling",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/string-body",
+    "status": 200,
+    "responseTimeMs": 0.67,
+    "responseSizeBytes": 49,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC02 Large JSON payload parsing",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/api/users",
+    "status": 200,
+    "responseTimeMs": 0.91,
+    "responseSizeBytes": 376,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC03 Error status 400",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/api/error/400",
+    "status": 400,
+    "responseTimeMs": 0.92,
+    "responseSizeBytes": 114,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC04 Error status 500",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/api/error/500",
+    "status": 500,
+    "responseTimeMs": 0.87,
+    "responseSizeBytes": 124,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC05 Response time under threshold",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/response-time?ms=50",
+    "status": 200,
+    "responseTimeMs": 52.53,
+    "responseSizeBytes": 37,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC06 POST echo body validation",
+    "path": "Edge Case Coverage",
+    "method": "POST",
+    "url": "http://localhost:8080/echo-body",
+    "status": 200,
+    "responseTimeMs": 1.5,
+    "responseSizeBytes": 94,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC07 Assertion alias coverage",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/user",
+    "status": 200,
+    "responseTimeMs": 0.97,
+    "responseSizeBytes": 98,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC08 Boolean getter assertions",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/user",
+    "status": 200,
+    "responseTimeMs": 0.81,
+    "responseSizeBytes": 98,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC09 Null and undefined getters",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/object",
+    "status": 200,
+    "responseTimeMs": 0.99,
+    "responseSizeBytes": 327,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC10 All variable scopes in one request",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/status/200",
+    "status": 200,
+    "responseTimeMs": 1.33,
+    "responseSizeBytes": 82,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC11 Mixed pass-fail assertion handling",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/json/user",
+    "status": 200,
+    "responseTimeMs": 1.98,
+    "responseSizeBytes": 98,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "EC12 Console logging edge cases",
+    "path": "Edge Case Coverage",
+    "method": "GET",
+    "url": "http://localhost:8080/status/200",
+    "status": 200,
+    "responseTimeMs": 1.11,
+    "responseSizeBytes": 82,
     "passed": true,
     "issues": []
   }
