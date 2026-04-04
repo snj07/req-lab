@@ -89,4 +89,31 @@ class VariableResolverTest {
         )
         assertEquals("https://api.example.com/v2/users", resolved)
     }
+
+    @Test
+    fun keeps_random_int_token_when_range_is_invalid() {
+        val resolved = VariableResolver.resolve(
+            value = "{{\$randomInt(20, 10)}}",
+            variableLayers = emptyList(),
+        )
+
+        assertEquals("{{\$randomInt(20, 10)}}", resolved)
+    }
+
+    @Test
+    fun resolves_random_int_without_dollar_prefix() {
+        val resolved = VariableResolver.resolve(
+            value = "{{randomInt(1, 3)}}",
+            variableLayers = emptyList(),
+        )
+
+        val value = resolved.toIntOrNull()
+        assertTrue(value != null && value in 1..3)
+    }
+
+    @Test
+    fun blank_value_is_returned_as_is() {
+        assertEquals("", VariableResolver.resolve("", emptyList()))
+        assertEquals("   ", VariableResolver.resolve("   ", emptyList()))
+    }
 }

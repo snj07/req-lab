@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.core.model.BodyType
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.core.model.GraphQlBody
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
@@ -341,12 +342,12 @@ private fun GraphQLUrlBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Execute",
+                    contentDescription = Strings.t("execute"),
                     tint = Color.White,
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
-                    text = if (isLoading) "Running…" else "Execute",
+                    text = if (isLoading) Strings.t("running") else Strings.t("execute"),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
@@ -426,7 +427,7 @@ private fun GraphQLQueryEditor(
             ) {
                 Icon(
                     Icons.Default.FormatAlignLeft,
-                    contentDescription = "Format",
+                    contentDescription = Strings.format,
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier.size(16.dp),
                 )

@@ -201,6 +201,21 @@
           ]
         },
         {
+          "name": "GraphQL",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST GraphQL Query - user by id",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/graphql",
+              "body": {
+                "type": "GRAPHQL",
+                "content": "{\n  \"query\": \"query GetUser($id: ID!) { user(id: $id) { id name type } }\",\n  \"variables\": { \"id\": \"{{graphqlUserId}}\" },\n  \"operationName\": \"GetUser\"\n}"
+              }
+            }
+          ]
+        },
+        {
           "name": "File Upload",
           "folders": [],
           "requests": [

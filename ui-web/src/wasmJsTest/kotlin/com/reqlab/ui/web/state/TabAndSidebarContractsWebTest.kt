@@ -71,10 +71,11 @@ class TabAndSidebarContractsWebTest {
     @Test
     fun revealRequestInSidebar_sets_selectedRequestId_for_orphan_request_on_web() {
         val state = AppState()
-        // "orphan-xyz" exists in no collection — selectedRequestId must still be set.
-        state.revealRequestInSidebar("orphan-xyz")
+        // "orphan-xyz" exists in no collection — request should not be revealed.
+        val revealed = state.revealRequestInSidebar("orphan-xyz")
 
-        assertEquals("orphan-xyz", state.selectedRequestId)
+        assertFalse(revealed)
+        assertNull(state.selectedRequestId)
     }
 
     @Test

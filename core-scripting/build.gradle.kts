@@ -60,3 +60,12 @@ tasks.matching { it.name == "jsBrowserTest" || it.name == "wasmJsBrowserTest" }
     .configureEach {
         enabled = false
     }
+
+val runAppleSimulatorTests = providers.gradleProperty("runAppleSimulatorTests")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+
+tasks.matching { it.name == "iosSimulatorArm64Test" || it.name == "iosX64Test" }
+    .configureEach {
+        enabled = runAppleSimulatorTests.get()
+    }

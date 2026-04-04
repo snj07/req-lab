@@ -35,4 +35,10 @@ class FirstLaunchStateTest {
         assertFalse(state.environmentsExpanded)
         assertFalse(state.historyExpanded)
     }
+
+    @Test
+    fun auto_save_requests_is_disabled_by_default() {
+        val state = AppState(openDefaultTab = false)
+        assertFalse(state.settings.autoSaveRequests)
+    }
 }

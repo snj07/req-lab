@@ -5,10 +5,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import com.reqlab.ui.shared.MainScreen
 import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -55,5 +57,20 @@ class FirstLaunchUiTest {
 
         composeRule.onNodeWithTag("collection-import-icon", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithTag("environment-import-icon", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun create_request_from_empty_state_creates_default_collection_and_request() {
+        val state = AppState(openDefaultTab = false)
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("empty-create-request").performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(1, state.collections.size)
+        assertEquals("Default Collection", state.collections.first().name)
+        assertEquals(1, state.collections.first().children.size)
+        assertEquals(1, state.openTabs.size)
+        composeRule.onNodeWithTag("request-editor").assertIsDisplayed()
     }
 }

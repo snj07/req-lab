@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.core.model.ResponseDefinition
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.RequestTabState
 import com.reqlab.ui.shared.state.ResponseTab
 import com.reqlab.ui.shared.theme.CodeFontFamily
@@ -130,7 +131,7 @@ private fun EmptyResponseState(tab: RequestTabState) {
                         modifier = Modifier.size(32.dp),
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text("Sending request…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+                    Text(Strings.sendingRequest, color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
                 }
                 error != null -> {
                     Icon(
@@ -140,7 +141,7 @@ private fun EmptyResponseState(tab: RequestTabState) {
                         modifier = Modifier.size(36.dp),
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text("Request failed", color = ReqLabColors.Error, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(Strings.requestFailed, color = ReqLabColors.Error, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         error,
@@ -155,10 +156,10 @@ private fun EmptyResponseState(tab: RequestTabState) {
                     )
                 }
                 else -> {
-                    Text("Response", color = ReqLabColors.OnSurfaceDim, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(Strings.response, color = ReqLabColors.OnSurfaceDim, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Enter a URL and click Send to see the response here",
+                        Strings.sendToSeeResponse,
                         color = ReqLabColors.OnSurfaceDim,
                         fontSize = 13.sp,
                     )
@@ -421,7 +422,7 @@ private fun ResponseBodyToolbar(
         // Format / beautify toggle
         ToolbarIconButton(
             icon = Icons.Default.FormatAlignLeft,
-            contentDescription = if (isFormatted) "Raw view" else "Format",
+            contentDescription = if (isFormatted) Strings.raw else Strings.format,
             active = isFormatted,
             onClick = onToggleFormat,
             testTag = "format-toggle",
@@ -430,7 +431,7 @@ private fun ResponseBodyToolbar(
         // Word wrap toggle
         ToolbarIconButton(
             icon = Icons.Default.WrapText,
-            contentDescription = if (wordWrap) "Disable word wrap" else "Enable word wrap",
+            contentDescription = if (wordWrap) Strings.t("disable_word_wrap") else Strings.t("enable_word_wrap"),
             active = wordWrap,
             onClick = onToggleWordWrap,
             testTag = "word-wrap-toggle",
@@ -439,7 +440,7 @@ private fun ResponseBodyToolbar(
         // Search toggle
         ToolbarIconButton(
             icon = Icons.Default.Search,
-            contentDescription = "Search",
+            contentDescription = Strings.search,
             active = showSearch,
             onClick = onToggleSearch,
             testTag = "search-toggle",
@@ -455,7 +456,7 @@ private fun ResponseBodyToolbar(
         // Copy body
         ToolbarIconButton(
             icon = Icons.Default.ContentCopy,
-            contentDescription = "Copy body",
+            contentDescription = Strings.copyBody,
             onClick = onCopyBody,
             testTag = "copy-body-button",
         )
@@ -463,7 +464,7 @@ private fun ResponseBodyToolbar(
         // Download
         ToolbarIconButton(
             icon = Icons.Default.Download,
-            contentDescription = "Download response",
+            contentDescription = Strings.downloadResponse,
             onClick = onDownload,
             testTag = "download-body-button",
         )
@@ -538,7 +539,7 @@ private fun SearchBar(
                 Box {
                     if (query.isEmpty()) {
                         Text(
-                            "Search in response…",
+                            Strings.searchInResponse,
                             color = ReqLabColors.OnSurfaceDim,
                             fontSize = 12.sp,
                             fontFamily = CodeFontFamily,
@@ -552,7 +553,7 @@ private fun SearchBar(
         // Match count
         if (query.isNotEmpty()) {
             Text(
-                text = if (matchCount > 0) "${activeIndex + 1}/$matchCount" else "0 results",
+                text = if (matchCount > 0) "${activeIndex + 1}/$matchCount" else Strings.noResults,
                 color = if (matchCount > 0) ReqLabColors.OnSurfaceVariant else ReqLabColors.OnSurfaceDim,
                 fontSize = 11.sp,
                 modifier = Modifier.widthIn(min = 60.dp),
@@ -561,15 +562,15 @@ private fun SearchBar(
 
         // Navigate prev/next
         IconButton(onClick = onPrev, modifier = Modifier.size(24.dp)) {
-            Icon(Icons.Default.ArrowUpward, "Previous match", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.ArrowUpward, Strings.t("previous_match"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
         IconButton(onClick = onNext, modifier = Modifier.size(24.dp)) {
-            Icon(Icons.Default.ArrowDownward, "Next match", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.ArrowDownward, Strings.t("next_match"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
 
         // Close
         IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
-            Icon(Icons.Default.Close, "Close search", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Close, Strings.t("close_search"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }
 
@@ -731,8 +732,8 @@ private fun ResponseHeadersView(response: ResponseDefinition) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             ) {
-                Text("Key", style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(0.4f))
-                Text("Value", style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(0.6f))
+                Text(Strings.t("key_upper"), style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(0.4f))
+                Text(Strings.t("value_upper"), style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(0.6f))
             }
         }
         items(response.headers) { header ->
@@ -757,7 +758,7 @@ private fun ResponseHeadersView(response: ResponseDefinition) {
 private fun ResponseCookiesView(response: ResponseDefinition) {
     if (response.cookies.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No cookies", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+            Text(Strings.noCookies, color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
         }
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {

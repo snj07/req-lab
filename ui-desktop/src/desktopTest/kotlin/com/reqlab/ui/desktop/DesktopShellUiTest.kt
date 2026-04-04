@@ -134,6 +134,46 @@ class MainScreenUiTest {
     }
 
     @Test
+    fun retry_popup_config_is_optional_and_saved_per_request() {
+        val state = AppState().apply { settings.autoSaveRequests = false }
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("retry-menu-button").performClick()
+        composeRule.onNodeWithTag("retry-config-dialog").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("retry-enabled-checkbox").performClick()
+        composeRule.onNodeWithTag("retry-attempts-input").performTextClearance()
+        composeRule.onNodeWithTag("retry-attempts-input").performTextInput("4")
+        composeRule.onNodeWithTag("retry-delay-input").performTextClearance()
+        composeRule.onNodeWithTag("retry-delay-input").performTextInput("750")
+
+        composeRule.onNodeWithTag("retry-config-save").performClick()
+        composeRule.waitForIdle()
+
+        val tab = state.activeTab ?: error("Expected active tab")
+        kotlin.test.assertTrue(tab.retryEnabled)
+        kotlin.test.assertEquals(4, tab.retryCount)
+        kotlin.test.assertEquals(750L, tab.retryDelayMs)
+    }
+
+    @Test
+    fun editors_show_line_numbers_for_body_and_scripts() {
+        composeRule.setContent { MainScreen() }
+
+        composeRule.onNodeWithText("Body").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-line-numbers").assertIsDisplayed()
+
+        composeRule.onNodeWithText("Pre-request").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("script-line-numbers").assertIsDisplayed()
+
+        composeRule.onNodeWithText("Tests").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("script-line-numbers").assertIsDisplayed()
+    }
+
+    @Test
     fun sidebar_search_filters_collection_tree() {
         composeRule.setContent { MainScreen(AppState(withDemoData = true)) }
 

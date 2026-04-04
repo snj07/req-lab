@@ -48,6 +48,7 @@ import com.reqlab.ui.shared.components.EnvironmentEditDialog
 import com.reqlab.ui.shared.components.ErrorMessageDialog
 import com.reqlab.ui.shared.components.GlobalVariablesDialog
 import com.reqlab.ui.shared.components.GraphQLPanel
+import com.reqlab.ui.shared.components.HelpAboutDialog
 import com.reqlab.ui.shared.components.HorizontalSplitPane
 import com.reqlab.ui.shared.components.OperationProgressDialog
 import com.reqlab.ui.shared.components.RealtimePanel
@@ -229,6 +230,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         // ── Dialog overlays ─────────────────────────────────
         EnvironmentEditDialog(state)
         SettingsDialog(state)
+        HelpAboutDialog(state)
         GlobalVariablesDialog(state)
         if (state.showConfirmDialog) {
             ConfirmDeleteDialog(
@@ -427,21 +429,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                                         .padding(horizontal = 12.dp, vertical = 8.dp)
                                         .testTag("empty-create-request"),
                                 ) {
-                                    Text("Create Request", color = ReqLabColors.OnPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(ReqLabColors.SurfaceContainer)
-                                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            state.sidebarExpanded = true
-                                            state.historyExpanded = true
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                                        .testTag("empty-open-request"),
-                                ) {
-                                    Text("Open Request", color = ReqLabColors.OnSurface, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(Strings.t("create_request"), color = ReqLabColors.OnPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }

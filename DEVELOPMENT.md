@@ -27,7 +27,6 @@ req-lab/
 ├── ui-shared/           # Shared Compose UI code (jvm + wasmJs) — 95% of all UI
 ├── ui-desktop/          # Thin Compose Desktop launcher (~44 lines)
 ├── ui-web/              # Thin Compose/Wasm browser launcher (CanvasBasedWindow)
-├── test-support/        # Embedded Ktor test server used by integration tests
 ├── qa-tests/            # JVM integration + end-to-end tests
 ├── sample-server/       # Standalone Ktor server for manual/exploratory testing
 ├── buildSrc/            # Shared Gradle build logic
@@ -88,23 +87,33 @@ The `sample-server` module runs a local Ktor server that mirrors the endpoints u
 
 Default address: `http://localhost:8080`
 
-Available endpoints:
+Available endpoints (selected):
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/users` | List all users |
-| POST | `/users` | Create a user |
-| PUT | `/users/{id}` | Replace a user |
-| PATCH | `/users/{id}` | Partial update |
-| DELETE | `/users/{id}` | Delete a user |
-| OPTIONS | `/users` | CORS preflight |
-| HEAD | `/users` | Head check |
-| POST | `/graphql` | GraphQL wrapper |
-| POST | `/upload` | File upload |
-| POST | `/auth/login` | Returns a JWT |
-| POST | `/oauth/token` | OAuth token exchange |
-| GET | `/auth/protected` | Requires Bearer token |
-| GET | `/stream` | SSE / chunked stream |
+| GET | `/` | Health check |
+| GET/POST/PUT/PATCH/DELETE/OPTIONS/HEAD | `/api/users` (+ `/{id}` where applicable) | HTTP methods coverage |
+| GET | `/api/search` | Query param coverage |
+| GET | `/api/echo-headers` | Header echo |
+| POST | `/api/json` | JSON body echo |
+| POST | `/api/graphql` | GraphQL body coverage |
+| POST | `/api/raw` | Raw text body |
+| POST | `/api/form-data` | Multipart form data |
+| POST | `/api/urlencoded` | URL-encoded body |
+| POST | `/api/upload` | Upload / binary payload handling |
+| GET | `/api/auth/basic` | Basic auth checks |
+| GET | `/api/auth/bearer` | Bearer token checks |
+| GET | `/api/auth/apikey` | API key checks |
+| GET | `/api/time` / `/api/timestamp` | Time helpers |
+| GET | `/api/protected` | Script token-protected endpoint |
+| GET | `/api/cookies` | Cookies set/echo |
+| GET | `/api/redirect` → `/api/final` | Redirect flow |
+| GET | `/api/error/{code}` | Error response matrix |
+| GET | `/api/slow` | Slow response simulation |
+| GET | `/status/200`, `/status/201` | Deterministic script assertions |
+| GET | `/json/user`, `/json/array`, `/json/object` | Script/runtime payload checks |
+| GET | `/headers`, `/cookies`, `/response-time`, `/string-body` | Script-runtime support endpoints |
+| POST | `/echo-body`, `/api/validate`, `/api/token`, `/api/echo-full` | Script and validation helpers |
 | WS | `/ws` | WebSocket echo |
 
 Query string simulation modes:
@@ -163,7 +172,6 @@ Production bundle:
 |---|---|
 | `core-network` | Unit tests: HTTP method support, auth, variable interpolation, retry, WebSocket |
 | `core-storage` | Unit tests: in-memory repository behaviour, serialization round-trips |
-| `test-support` | Embedded Ktor test server (not a test module itself — depended on by qa-tests) |
 | `qa-tests` | JVM integration and E2E tests running real requests against the embedded server |
 | `ui-desktop` | Compose Desktop smoke tests: layout, panel visibility, tab behaviour |
 

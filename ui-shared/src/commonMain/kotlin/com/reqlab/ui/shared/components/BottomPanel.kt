@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.BottomTab
 import com.reqlab.ui.shared.state.ConsoleEntry
@@ -61,6 +62,13 @@ private const val MAX_BOTTOM_PANEL_HEIGHT = 560f
 
 @Composable
 fun BottomPanel(state: AppState) {
+    val noConsoleOutput = Strings.t("no_console_output")
+    val noTestResults = Strings.t("no_test_results")
+    val copyOutputLabel = Strings.t("copy_output")
+    val consoleLabel = Strings.console
+    val testResultsLabel = Strings.testResults
+    val logsLabel = Strings.logs
+
     Column(modifier = Modifier.fillMaxWidth().testTag("bottom-panel")) {
         // ── Toggle bar ──────────────────────────────────────────
         Row(
@@ -74,7 +82,7 @@ fun BottomPanel(state: AppState) {
         ) {
             Icon(
                 if (state.bottomPanelExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                contentDescription = "Toggle bottom panel",
+                contentDescription = Strings.t("toggle_bottom_panel"),
                 tint = ReqLabColors.OnSurfaceDim,
                 modifier = Modifier.size(16.dp),
             )
@@ -102,7 +110,11 @@ fun BottomPanel(state: AppState) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                tab.label,
+                                when (tab) {
+                                    BottomTab.CONSOLE -> consoleLabel
+                                    BottomTab.TEST_RESULTS -> testResultsLabel
+                                    BottomTab.LOGS -> logsLabel
+                                },
                                 fontSize = 11.sp,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim,
@@ -141,19 +153,24 @@ fun BottomPanel(state: AppState) {
                     onClick = {
                         copyToClipboard(
                             when (state.selectedBottomTab) {
-                                BottomTab.CONSOLE -> state.consoleLogs.asConsoleTextDump()
+                                BottomTab.CONSOLE -> state.consoleLogs.asConsoleTextDump(noConsoleOutput)
                                 // M-3: Logs tab copies network event logs, not console logs
-                                BottomTab.LOGS -> state.networkEventLogs.asConsoleTextDump()
-                                BottomTab.TEST_RESULTS -> state.testResults.asTestResultsTextDump()
+                                BottomTab.LOGS -> state.networkEventLogs.asConsoleTextDump(noConsoleOutput)
+                                BottomTab.TEST_RESULTS -> state.testResults.asTestResultsTextDump(noTestResults)
                             }
                         )
-                        state.log("Copied ${state.selectedBottomTab.label.lowercase()} output", LogLevel.INFO)
+                        val tabLabel = when (state.selectedBottomTab) {
+                            BottomTab.CONSOLE -> consoleLabel
+                            BottomTab.TEST_RESULTS -> testResultsLabel
+                            BottomTab.LOGS -> logsLabel
+                        }
+                        state.log("Copied ${tabLabel.lowercase()} output", LogLevel.INFO)
                     },
                     modifier = Modifier.size(24.dp),
                 ) {
                     Icon(
                         Icons.Default.ContentCopy,
-                        contentDescription = "Copy output",
+                        contentDescription = copyOutputLabel,
                         tint = ReqLabColors.OnSurfaceDim,
                         modifier = Modifier.size(14.dp),
                     )
@@ -166,7 +183,7 @@ fun BottomPanel(state: AppState) {
                         BottomTab.LOGS         -> state.networkEventLogs.clear()
                     }
                 }, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Close, contentDescription = Strings.t("clear"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -218,18 +235,18 @@ fun BottomPanel(state: AppState) {
     }
 }
 
-private fun List<ConsoleEntry>.asConsoleTextDump(): String =
+private fun List<ConsoleEntry>.asConsoleTextDump(emptyLabel: String): String =
     if (isEmpty()) {
-        "No console output"
+        emptyLabel
     } else {
         joinToString("\n") { entry ->
             "${formatTimestamp(entry.timestamp)} ${entry.level.name}: ${entry.message}"
         }
     }
 
-private fun List<TestResultEntry>.asTestResultsTextDump(): String =
+private fun List<TestResultEntry>.asTestResultsTextDump(emptyLabel: String): String =
     if (isEmpty()) {
-        "No test results"
+        emptyLabel
     } else {
         joinToString("\n") { entry ->
             "${if (entry.passed) "PASS" else "FAIL"} ${entry.name}${if (entry.message.isNotBlank()) " - ${entry.message}" else ""}"
@@ -242,7 +259,7 @@ private fun List<TestResultEntry>.asTestResultsTextDump(): String =
 private fun ConsoleView(logs: List<ConsoleEntry>) {
     if (logs.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No console output", color = ReqLabColors.OnSurfaceDim, fontSize = 12.sp)
+            Text(Strings.t("no_console_output"), color = ReqLabColors.OnSurfaceDim, fontSize = 12.sp)
         }
     } else {
         LazyColumn(
@@ -299,7 +316,7 @@ private fun ConsoleRow(entry: ConsoleEntry) {
 private fun TestResultsView(results: List<TestResultEntry>) {
     if (results.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No test results", color = ReqLabColors.OnSurfaceDim, fontSize = 12.sp)
+            Text(Strings.t("no_test_results"), color = ReqLabColors.OnSurfaceDim, fontSize = 12.sp)
         }
     } else {
         LazyColumn(

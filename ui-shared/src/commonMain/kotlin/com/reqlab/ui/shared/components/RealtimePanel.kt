@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.core.model.MessageDirection
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.core.model.RealtimeMessage
 import com.reqlab.core.model.RealtimeProtocol
 import com.reqlab.core.network.ConnectionState
@@ -215,7 +216,7 @@ private fun RealtimeUrlBar(
             decorationBox = { inner ->
                 Box {
                     if (url.isEmpty()) {
-                        Text("Enter URL…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp, fontFamily = CodeFontFamily)
+                        Text("${Strings.enterUrl}…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp, fontFamily = CodeFontFamily)
                     }
                     inner()
                 }
@@ -248,9 +249,9 @@ private fun RealtimeUrlBar(
             )
             Text(
                 text = when {
-                    isConnecting -> "Connecting…"
-                    isConnected -> "Disconnect"
-                    else -> "Connect"
+                    isConnecting -> Strings.t("connecting")
+                    isConnected -> Strings.disconnect
+                    else -> Strings.connect
                 },
                 color = if (isConnected) ReqLabColors.Error else ReqLabColors.Primary,
                 fontSize = 13.sp,
@@ -365,7 +366,7 @@ private fun CommunicationView(
                     decorationBox = { inner ->
                         Box {
                             if (messageInput.isEmpty()) {
-                                Text("Enter message…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp, fontFamily = CodeFontFamily)
+                                Text(Strings.t("enter_message"), color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp, fontFamily = CodeFontFamily)
                             }
                             inner()
                         }
@@ -384,7 +385,7 @@ private fun CommunicationView(
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send message",
+                        contentDescription = Strings.sendMessage,
                         tint = if (connectionState == ConnectionState.CONNECTED) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim,
                         modifier = Modifier.size(18.dp),
                     )
@@ -403,7 +404,7 @@ private fun CommunicationView(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Messages (${messages.size})",
+                "${Strings.t("messages")} (${messages.size})",
                 color = ReqLabColors.OnSurfaceVariant,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,

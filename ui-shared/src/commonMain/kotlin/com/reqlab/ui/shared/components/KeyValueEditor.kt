@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.HeaderKind
 import com.reqlab.ui.shared.state.MutableKeyValue
@@ -63,10 +64,10 @@ fun KeyValueEditor(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             androidx.compose.foundation.layout.Spacer(Modifier.size(32.dp))
-            Text("Key",   style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(1f))
-            Text("Value", style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(1f))
+            Text(Strings.t("key_upper"),   style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(1f))
+            Text(Strings.t("value_upper"), style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.weight(1f))
             if (isHeaderEditor) {
-                Text("Type", style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(70.dp, 20.dp))
+                Text(Strings.t("type_upper"), style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(70.dp, 20.dp))
             }
             androidx.compose.foundation.layout.Spacer(Modifier.size(32.dp))
         }
@@ -105,8 +106,8 @@ fun KeyValueEditor(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(16.dp))
-            Text("Add ${tag.replaceFirstChar { it.uppercaseChar() }}", color = ReqLabColors.OnSurfaceDim, fontSize = 12.sp)
+            Icon(Icons.Default.Add, contentDescription = Strings.add, tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(16.dp))
+            Text("${Strings.add} ${tag.replaceFirstChar { it.uppercaseChar() }}", color = ReqLabColors.OnSurfaceDim, fontSize = 12.sp)
         }
     }
 }
@@ -147,14 +148,14 @@ private fun KeyValueRow(
         InlineTextField(
             value = kv.key,
             onValueChange = { if (!isSystemHeader) { kv.key = it; onDirty() } },
-            placeholder = "Key",
+            placeholder = Strings.t("key_upper"),
             modifier = Modifier.weight(1f),
             state = state,
         )
         InlineTextField(
             value = kv.value,
             onValueChange = { kv.value = it; onDirty() },
-            placeholder = "Value",
+            placeholder = Strings.t("value_upper"),
             modifier = Modifier.weight(1f),
             state = state,
         )
@@ -166,16 +167,16 @@ private fun KeyValueRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (isSystemHeader) {
-                    Icon(Icons.Default.Lock, contentDescription = "System header", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(12.dp))
-                    Text("System", fontSize = 11.sp, color = ReqLabColors.OnSurfaceDim)
+                    Icon(Icons.Default.Lock, contentDescription = Strings.t("system_header"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(12.dp))
+                    Text(Strings.t("system"), fontSize = 11.sp, color = ReqLabColors.OnSurfaceDim)
                 } else {
-                    Text("User", fontSize = 11.sp, color = ReqLabColors.OnSurfaceDim)
+                    Text(Strings.t("user"), fontSize = 11.sp, color = ReqLabColors.OnSurfaceDim)
                 }
             }
         }
 
         IconButton(onClick = onDelete, modifier = Modifier.size(24.dp), enabled = !isSystemHeader) {
-            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Delete, contentDescription = Strings.t("remove"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }
 }

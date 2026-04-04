@@ -1,66 +1,79 @@
 # ReqLab
 
-> A lightweight, open-source API client for macOS, Windows, and Linux — built with Kotlin and Compose Multiplatform.
+A lightweight API client built with Kotlin and Compose Multiplatform for desktop and web workflows.
 
-ReqLab lets you craft, send, and inspect HTTP requests right from your desktop, without telemetry, accounts, or cloud sync required.
+## What is ReqLab?
 
----
+ReqLab helps you build, send, inspect, and validate HTTP requests without accounts, telemetry lock-in, or mandatory cloud sync.
 
-## Features
+## Core Features
 
-### Request Editor
-- **HTTP methods** — GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD
-- **URL bar** — live two-way sync between the URL and the Params table
-- **Query Parameters** — inline key-value editor, toggle individual params on/off
-- **Headers** — key-value editor with system-header detection and user/system labels
-- **Request Body** — JSON, GraphQL, Form Data, URL-encoded, Raw Text, Binary
-- **Authentication** — None, Basic, Bearer token, API Key, JWT, OAuth 2.0
-- **Pre-request Scripts** — run code before a request fires
-- **Test Scripts** — assert conditions after a response arrives
-- **Retry Controls** — configure attempt count and delay between retries
-- **Copy as cURL** — one-click cURL command generation
-- **Save requests** — persist edits between sessions
+- HTTP request editor with methods, URL, params, headers, auth, and multiple body types.
+- Pre-request and test scripting with variable access and assertions.
+- Collections and history with multi-tab request workflow.
+- Environment and global variables with `{{variable}}` interpolation.
+- Response viewer plus request lifecycle logs and test results.
 
-### Collections & Workspaces
-- Organise requests into named collections with nested folders
-- Drag-and-drop reordering
-- Workspace state persisted automatically on close
+## In-app Help & About
 
-### Environments & Variables
-- Multiple named environments (Local, Staging, Production, …)
-- Variable interpolation using `{{variableName}}` syntax anywhere in URL, headers, body, or auth fields
-- Secret variables masked in the UI
+ReqLab includes an in-app **Help & About** panel with:
 
-### Tabs
-- Open multiple requests simultaneously in independent tabs
-- Unsaved indicator (●) per tab
-- Per-tab close button; right-click context menu for close/close others/close all
-- Keyboard shortcuts: `⌘↵` Send · `⌘S` Save · `⌘W` Close tab · `⌘N` New tab
+- About / feature overview
+- How-to usage flow
+- Keyboard shortcuts reference
+- Scripting overview
+- Version and build information
 
-### Response Viewer
-- Status code, status text, response time, and payload size at a glance
-- Pretty-printed and raw response body views
-- Response headers panel
+You can open it from:
 
-### Network Log
-- Live event stream showing request lifecycle (started, retries, success, errors)
-- Colour-coded log levels (info, warning, error, success)
+- Top toolbar (`Help` icon)
+- Settings dialog (`Open Help & About`)
 
-### Settings
-- Configurable request timeout
-- HTTP proxy support (HTTP and HTTPS)
-- Follow/ignore redirects toggle
-- Auto-save on edit
-- Confirm-before-delete prompt
-- Light and dark theme
+## Keyboard Shortcuts
 
----
+These shortcuts are mapped in `MainScreen` and reflect current behavior:
 
-## Getting Started
+| Shortcut | Action |
+|---|---|
+| `⌘ + Enter` / `Ctrl + Enter` | Send request (or cancel in-flight request) |
+| `⌘ + Shift + [` / `Ctrl + Shift + [` | Move active tab left |
+| `⌘ + Shift + ]` / `Ctrl + Shift + ]` | Move active tab right |
+| `⌘ + S` / `Ctrl + S` | Save active request |
+| `⌘ + W` / `Ctrl + W` | Close active tab |
+| `⌘ + N` / `Ctrl + N` | Create a new request tab |
+| `⌘ + ,` / `Ctrl + ,` | Open Settings |
 
-### Run from source
+## Scripting
 
-ReqLab currently runs from source. See [DEVELOPMENT.md](DEVELOPMENT.md) for prerequisites.
+ReqLab supports JavaScript pre-request and test scripts through a configurable namespace (default: `reqlab`).
+
+- Pre-request scripts: mutate request URL/headers/body/query/variables before dispatch.
+- Test scripts: assert status/body/headers/timing and persist extracted values.
+
+See the full guide: [docs/scripts.md](docs/scripts.md)
+
+## Testing
+
+ReqLab uses layered validation across core modules, integration tests, and UI checks.
+
+- Core module tests (`core-network`, `core-storage`, `core-scripting`)
+- Integration and E2E API tests (`qa-tests`)
+- Desktop UI automation smoke tests (`ui-desktop`)
+
+See the full guide: [docs/tests.md](docs/tests.md)
+
+## Documentation Index
+
+- Setup and development: [DEVELOPMENT.md](DEVELOPMENT.md)
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- Testing guide: [docs/testing.md](docs/testing.md)
+- Scripting guide: [docs/scripts.md](docs/scripts.md)
+- Test execution reference: [docs/tests.md](docs/tests.md)
+- Shortcut reference: [docs/shortcuts.md](docs/shortcuts.md)
+
+## Run from Source
+
+Requirements: JDK 17+ (JDK 21 recommended).
 
 ```bash
 git clone https://github.com/snj07/req-lab.git
@@ -68,49 +81,10 @@ cd req-lab
 ./gradlew :ui-desktop:run
 ```
 
-> **Requirements:** JDK 17 or later (JDK 21 recommended).
-
-### Pre-built binaries
-
-Packaged releases are planned. Watch the [Releases](https://github.com/snj07/req-lab/releases) page for updates.
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `⌘↵` / `Ctrl+Enter` | Send request |
-| `⌘S` / `Ctrl+S` | Save request |
-| `⌘W` / `Ctrl+W` | Close current tab |
-| `⌘N` / `Ctrl+N` | New tab |
-| `⌘,` / `Ctrl+,` | Open Settings |
-| `⌘⇧[` / `Ctrl+Shift+[` | Move tab left |
-| `⌘⇧]` / `Ctrl+Shift+]` | Move tab right |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Kotlin 2.1 (Multiplatform) |
-| UI | Compose Multiplatform 1.8 |
-| HTTP engine | Ktor Client 3.1 |
-| Serialization | kotlinx.serialization |
-| Async | Kotlin Coroutines + Flow |
-| Build | Gradle with Kotlin DSL |
-
----
-
 ## Contributing
 
-Bug reports and pull requests are welcome. Please open an issue first for significant changes so the approach can be discussed.
-
-Developer setup, module layout, build commands, and testing instructions are in [DEVELOPMENT.md](DEVELOPMENT.md).
-
----
+Issues and pull requests are welcome. For larger changes, open an issue first to align approach and scope.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE) for details.
+Apache 2.0 — see [LICENSE](LICENSE).

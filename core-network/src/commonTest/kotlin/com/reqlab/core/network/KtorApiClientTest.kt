@@ -199,4 +199,41 @@ class KtorApiClientTest {
             "Multipart payload should contain form fields, got '$capturedBody'",
         )
     }
+
+    @Test
+    fun emits_retry_scheduled_and_failure_when_retries_exhausted() = runTest {
+        val mockEngine = MockEngine {
+            throw IllegalStateException("timeout-like failure")
+        }
+
+        val client = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+            expectSuccess = false
+        }
+
+        val apiClient = KtorApiClient(
+            httpClient = client,
+            retryPolicy = RetryPolicy(maxAttempts = 2, baseDelayMs = 0L, maxDelayMs = 0L),
+        )
+
+        val request = RequestDefinition(
+            id = "req-failure",
+            name = "Failure path",
+            method = HttpMethodType.GET,
+            url = "https://api.test/fail",
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+
+        val events = apiClient.execute(request).toList()
+
+        assertTrue(events.first() is NetworkEvent.Started)
+        assertEquals(1, events.count { it is NetworkEvent.RetryScheduled })
+        assertTrue(events.last() is NetworkEvent.Failure)
+        val failure = events.last() as NetworkEvent.Failure
+        assertTrue(failure.error.isRetryExhausted)
+        assertTrue(failure.error.message.contains("failed", ignoreCase = true) || failure.error.message.contains("timeout", ignoreCase = true))
+    }
 }

@@ -28,6 +28,9 @@ kotlin {
                 implementation(libs.kotlin.test)
                 implementation(libs.junit4)
                 implementation("org.jetbrains.compose.ui:ui-test-junit4-desktop:1.8.1")
+                implementation(project(":sample-server"))
+                implementation(libs.ktor.server.core)
+                implementation(libs.ktor.server.netty)
             }
         }
     }

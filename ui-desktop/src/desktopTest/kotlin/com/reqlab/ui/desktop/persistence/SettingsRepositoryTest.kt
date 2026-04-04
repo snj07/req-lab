@@ -28,6 +28,7 @@ class SettingsRepositoryTest {
         "settings.proxyEnabled",
         "settings.httpProxy",
         "settings.httpsProxy",
+        "settings.scriptPrefix",
     )
 
     @Before
@@ -47,7 +48,7 @@ class SettingsRepositoryTest {
         val settings = AppSettings()
         SettingsRepository.load(settings)
 
-        assertTrue(settings.autoSaveRequests)
+        assertFalse(settings.autoSaveRequests)
         assertTrue(settings.confirmBeforeDelete)
         assertEquals(30, settings.defaultTimeoutSec)
         assertEquals(ResponseLayout.RIGHT, settings.responseLayout)
@@ -80,6 +81,7 @@ class SettingsRepositoryTest {
             proxyEnabled        = true
             httpProxy           = "http://proxy.example.com:8080"
             httpsProxy          = "https://proxy.example.com:8443"
+            scriptPrefix        = "api"
         }
 
         SettingsRepository.save(original)
@@ -100,6 +102,7 @@ class SettingsRepositoryTest {
         assertTrue(loaded.proxyEnabled)
         assertEquals("http://proxy.example.com:8080", loaded.httpProxy)
         assertEquals("https://proxy.example.com:8443", loaded.httpsProxy)
+        assertEquals("api", loaded.scriptPrefix)
     }
 
     // ── Theme enum ──────────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ class SettingsRepositoryTest {
         val original = AppSettings().apply { autoSaveRequests = false }
         SettingsRepository.save(original)
 
-        val loaded = AppSettings() // default is true
+        val loaded = AppSettings() // default is false
         SettingsRepository.load(loaded)
 
         assertFalse(loaded.autoSaveRequests)
@@ -148,5 +151,16 @@ class SettingsRepositoryTest {
         SettingsRepository.load(loaded)
 
         assertEquals(120, loaded.requestTimeoutSec)
+    }
+
+    @Test
+    fun script_prefix_round_trips_when_only_script_setting_changes() {
+        val original = AppSettings().apply { scriptPrefix = "customPrefix" }
+        SettingsRepository.save(original)
+
+        val loaded = AppSettings()
+        SettingsRepository.load(loaded)
+
+        assertEquals("customPrefix", loaded.scriptPrefix)
     }
 }

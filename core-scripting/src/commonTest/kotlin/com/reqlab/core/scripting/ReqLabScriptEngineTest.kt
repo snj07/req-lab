@@ -1453,4 +1453,116 @@ class ReqLabScriptEngineTest {
         assertTrue(mutationsJson.contains("\"method\":\"POST\""))
         assertTrue(resultJson.contains("\"success\":true"))
     }
+
+    @Test
+    fun response_statusIs_pass_and_fail_behaviour() = runTest {
+        val pass = engine.executeTestScript(
+            """
+            reqlab.test("statusIs pass", function() {
+                reqlab.response.statusIs(200)
+                reqlab.expect(true).to.be.true
+            })
+            """.trimIndent(),
+            ctx(status = 200),
+        )
+        assertTrue(pass.success)
+
+        val fail = engine.executeTestScript(
+            """
+            reqlab.test("statusIs fail", function() {
+                reqlab.response.statusIs(201)
+            })
+            """.trimIndent(),
+            ctx(status = 200),
+        )
+        assertFalse(fail.success)
+        assertTrue(fail.assertions.isNotEmpty())
+        assertFalse(fail.assertions.first().passed)
+    }
+
+    @Test
+    fun scope_clear_methods_remove_all_values() = runTest {
+        val r = engine.executePreRequestScript(
+            """
+            reqlab.environment.clear()
+            reqlab.globals.clear()
+            reqlab.collectionVariables.clear()
+
+            reqlab.test("env cleared", function() {
+                reqlab.expect(Object.keys(reqlab.environment.toObject()).length).to.equal(0)
+            })
+            reqlab.test("globals cleared", function() {
+                reqlab.expect(Object.keys(reqlab.globals.toObject()).length).to.equal(0)
+            })
+            reqlab.test("collection cleared", function() {
+                reqlab.expect(Object.keys(reqlab.collectionVariables.toObject()).length).to.equal(0)
+            })
+            """.trimIndent(),
+            ctx(
+                variables = mapOf("e1" to "v1"),
+                globalVariables = mapOf("g1" to "v1"),
+                collectionVariables = mapOf("c1" to "v1"),
+            ),
+        )
+
+        assertTrue(r.success)
+        assertTrue(r.assertions.all { it.passed })
+        assertTrue(r.newVariables.isEmpty())
+        assertTrue(r.newGlobalVariables.isEmpty())
+        assertTrue(r.newCollectionVariables.isEmpty())
+    }
+
+    @Test
+    fun request_setHeader_and_headers_get_use_mutated_value() = runTest {
+        val r = engine.executePreRequestScript(
+            """
+            reqlab.request.setHeader("X-Trace", "new-trace")
+            reqlab.test("headers.get returns mutated", function() {
+                reqlab.expect(reqlab.request.headers.get("X-Trace")).to.equal("new-trace")
+            })
+            """.trimIndent(),
+            ctx(requestHeaders = mapOf("X-Trace" to "old-trace")),
+        )
+
+        assertTrue(r.success)
+        assertEquals("new-trace", r.requestMutations.headers["X-Trace"])
+        assertTrue(r.assertions.all { it.passed })
+    }
+
+    @Test
+    fun request_params_alias_get_reads_query_values() = runTest {
+        val r = engine.executeTestScript(
+            """
+            reqlab.test("params alias get", function() {
+                reqlab.expect(reqlab.request.params.get("page")).to.equal("3")
+            })
+            """.trimIndent(),
+            ctx(requestQueryParams = mapOf("page" to "3")),
+        )
+
+        assertTrue(r.success)
+        assertTrue(r.assertions.first().passed)
+    }
+
+    @Test
+    fun global_aliases_for_global_and_collection_scopes_work() = runTest {
+        val r = engine.executePreRequestScript(
+            """
+            global.set("gAlias", "gVal")
+            collection.set("cAlias", "cVal")
+            reqlab.test("global alias read", function() {
+                reqlab.expect(global.get("gAlias")).to.equal("gVal")
+            })
+            reqlab.test("collection alias read", function() {
+                reqlab.expect(collection.get("cAlias")).to.equal("cVal")
+            })
+            """.trimIndent(),
+            ctx(),
+        )
+
+        assertTrue(r.success)
+        assertEquals("gVal", r.newGlobalVariables["gAlias"])
+        assertEquals("cVal", r.newCollectionVariables["cAlias"])
+        assertTrue(r.assertions.all { it.passed })
+    }
 }

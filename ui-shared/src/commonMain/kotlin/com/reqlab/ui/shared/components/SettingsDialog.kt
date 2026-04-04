@@ -79,14 +79,14 @@ import com.reqlab.ui.shared.platform.ioDispatcher
 import com.reqlab.ui.shared.platform.pickFileForImport
 import com.reqlab.ui.shared.platform.saveFileForExport
 
-private enum class SettingsSection(val label: String, val icon: ImageVector) {
-    GENERAL("General",   Icons.Default.Settings),
-    THEME("Theme",       Icons.Default.LightMode),
-    LANGUAGE("Language", Icons.Default.Language),
-    NETWORK("Network",   Icons.Default.NetworkCheck),
-    PROXY("Proxy",       Icons.Default.SettingsApplications),
-    SCRIPTING("Scripts", Icons.Default.DataObject),
-    DATA("Data",         Icons.Default.Storage),
+private enum class SettingsSection(val icon: ImageVector) {
+    GENERAL(Icons.Default.Settings),
+    THEME(Icons.Default.LightMode),
+    LANGUAGE(Icons.Default.Language),
+    NETWORK(Icons.Default.NetworkCheck),
+    PROXY(Icons.Default.SettingsApplications),
+    SCRIPTING(Icons.Default.DataObject),
+    DATA(Icons.Default.Storage),
 }
 
 @Composable
@@ -96,8 +96,8 @@ private fun settingsSectionLabel(section: SettingsSection): String = when (secti
     SettingsSection.LANGUAGE -> Strings.language
     SettingsSection.NETWORK -> Strings.network
     SettingsSection.PROXY -> Strings.proxy
-    SettingsSection.SCRIPTING -> "Scripts"
-    SettingsSection.DATA -> "Data"
+    SettingsSection.SCRIPTING -> Strings.t("scripts")
+    SettingsSection.DATA -> Strings.t("data")
 }
 
 @Composable
@@ -219,6 +219,23 @@ fun SettingsDialog(state: AppState) {
                         SettingsSection.SCRIPTING -> ScriptingSettings(settings)
                         SettingsSection.DATA     -> DataSettings(state)
                     }
+
+                    Spacer(Modifier.height(20.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ReqLabColors.SurfaceContainer)
+                            .clickable { state.showHelpDialog = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("settings-help-about-button"),
+                    ) {
+                        Text(
+                            text = "Open Help & About",
+                            color = ReqLabColors.Primary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                 }
             }
 
@@ -233,7 +250,7 @@ fun SettingsDialog(state: AppState) {
                     .padding(horizontal = 12.dp, vertical = 6.dp)
                     .testTag("settings-close-button"),
             ) {
-                Text("Done", color = ReqLabColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(Strings.t("done"), color = ReqLabColors.OnSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }  // closes settings card Box
         }  // closes full-screen backdrop Box
@@ -245,30 +262,30 @@ fun SettingsDialog(state: AppState) {
 @Composable
 private fun GeneralSettings(s: AppSettings) {
     SettingToggle(
-        label = "Auto-save requests",
-        description = "Automatically save request changes before switching tabs",
+        label = Strings.autoSave,
+        description = Strings.t("settings_auto_save_desc"),
         checked = s.autoSaveRequests,
         onCheckedChange = { s.autoSaveRequests = it },
         tag = "auto-save-toggle",
     )
     SettingsDivider()
     SettingToggle(
-        label = "Confirm before deleting",
-        description = "Show confirmation dialog when deleting requests or collections",
+        label = Strings.t("confirm_before_deleting"),
+        description = Strings.t("settings_confirm_delete_desc"),
         checked = s.confirmBeforeDelete,
         onCheckedChange = { s.confirmBeforeDelete = it },
     )
     SettingsDivider()
     SettingNumberField(
-        label = "Default request timeout (seconds)",
+        label = Strings.t("default_request_timeout_seconds"),
         value = s.defaultTimeoutSec,
         onValueChange = { s.defaultTimeoutSec = it },
     )
     SettingsDivider()
     SettingChoice(
-        label = "Response layout",
-        description = "Choose where response panel appears",
-        options = listOf(ResponseLayout.RIGHT to "Right side", ResponseLayout.BOTTOM to "Bottom panel"),
+        label = Strings.responseLayout,
+        description = Strings.t("settings_response_layout_desc"),
+        options = listOf(ResponseLayout.RIGHT to Strings.t("right_side"), ResponseLayout.BOTTOM to Strings.t("bottom_panel")),
         selected = s.responseLayout,
         onSelected = { s.responseLayout = it },
         tagPrefix = "response-layout",
@@ -277,13 +294,13 @@ private fun GeneralSettings(s: AppSettings) {
 
 @Composable
 private fun ThemeSettings(s: AppSettings) {
-    Text("Theme", style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+    Text(Strings.theme, style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
-            Triple(AppTheme.DARK,   "Dark",   Icons.Default.DarkMode),
-            Triple(AppTheme.LIGHT,  "Light",  Icons.Default.LightMode),
-            Triple(AppTheme.SYSTEM, "System", Icons.Default.SettingsApplications),
+            Triple(AppTheme.DARK, Strings.darkMode, Icons.Default.DarkMode),
+            Triple(AppTheme.LIGHT, Strings.lightMode, Icons.Default.LightMode),
+            Triple(AppTheme.SYSTEM, Strings.systemTheme, Icons.Default.SettingsApplications),
         ).forEach { (theme, label, icon) ->
             val isSelected = s.theme == theme
             Column(
@@ -310,7 +327,7 @@ private fun ThemeSettings(s: AppSettings) {
 
 @Composable
 private fun LanguageSettings(s: AppSettings) {
-    Text("Language", style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+    Text(Strings.language, style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AppLanguage.entries.forEach { lang ->
@@ -338,7 +355,7 @@ private fun LanguageSettings(s: AppSettings) {
 
     Spacer(Modifier.height(8.dp))
     Text(
-        "Changes take effect immediately. The UI language will update when you close this dialog.",
+        Strings.t("settings_language_change_hint"),
         color = ReqLabColors.OnSurfaceDim,
         fontSize = 11.sp,
     )
@@ -346,11 +363,11 @@ private fun LanguageSettings(s: AppSettings) {
 
 @Composable
 private fun NetworkSettings(s: AppSettings) {
-    SettingNumberField("Request timeout (seconds)", s.requestTimeoutSec) { s.requestTimeoutSec = it }
+    SettingNumberField(Strings.t("request_timeout_seconds"), s.requestTimeoutSec) { s.requestTimeoutSec = it }
     SettingsDivider()
     SettingToggle(
-        "Follow redirects",
-        "Automatically follow HTTP 3xx redirect responses",
+        Strings.followRedirects,
+        Strings.t("settings_follow_redirects_desc"),
         s.followRedirects,
         { s.followRedirects = it },
         tag = "follow-redirects-toggle",
@@ -359,17 +376,17 @@ private fun NetworkSettings(s: AppSettings) {
 
 @Composable
 private fun ProxySettings(s: AppSettings) {
-    SettingToggle("Enable proxy", "Route requests through a proxy server", s.proxyEnabled, { s.proxyEnabled = it })
+    SettingToggle(Strings.t("enable_proxy"), Strings.t("settings_enable_proxy_desc"), s.proxyEnabled, { s.proxyEnabled = it })
     SettingsDivider()
-    SettingTextField("HTTP proxy", s.httpProxy, { s.httpProxy = it }, "http://proxy:8080")
+    SettingTextField(Strings.t("http_proxy"), s.httpProxy, { s.httpProxy = it }, "http://proxy:8080")
     SettingsDivider()
-    SettingTextField("HTTPS proxy", s.httpsProxy, { s.httpsProxy = it }, "https://proxy:8443")
+    SettingTextField(Strings.t("https_proxy"), s.httpsProxy, { s.httpsProxy = it }, "https://proxy:8443")
 }
 
 @Composable
 private fun ScriptingSettings(s: AppSettings) {
     SettingTextField(
-        label = "Script namespace prefix",
+        label = Strings.t("script_namespace_prefix"),
         value = s.scriptPrefix,
         onValueChange = { v ->
             val clean = v.trim().filter { it.isLetterOrDigit() || it == '_' }
@@ -380,12 +397,12 @@ private fun ScriptingSettings(s: AppSettings) {
     SettingsDivider()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            "The namespace used in pre-request and post-response scripts.",
+            Strings.t("script_namespace_desc"),
             color = ReqLabColors.OnSurfaceVariant,
             fontSize = 12.sp,
         )
         Text(
-            "Example with prefix \"${s.scriptPrefix}\":",
+            Strings.t("example_with_prefix") + " \"${s.scriptPrefix}\":",
             color = ReqLabColors.OnSurfaceDim,
             fontSize = 12.sp,
         )
@@ -398,7 +415,7 @@ private fun ScriptingSettings(s: AppSettings) {
             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
         )
         Text(
-            "Default: reqlab — compatible with the ReqLab scripting API.",
+            Strings.t("script_namespace_default_hint"),
             color = ReqLabColors.OnSurfaceDim,
             fontSize = 11.sp,
         )
@@ -408,13 +425,33 @@ private fun ScriptingSettings(s: AppSettings) {
 @Composable
 private fun DataSettings(state: AppState) {
     val scope = rememberCoroutineScope()
+    val importExportError = Strings.t("import_export_error")
+    val unknownError = Strings.t("unknown_error")
+    val exportWorkspace = Strings.t("export_workspace")
+    val exportWorkspaceDesc = Strings.t("export_workspace_desc")
+    val exportLabel = Strings.t("export")
+    val exportingWorkspace = Strings.t("exporting_workspace")
+    val exportingWorkspaceMessage = Strings.t("exporting_workspace_message")
+    val workspaceExported = Strings.t("workspace_exported")
+    val importWorkspace = Strings.t("import_workspace")
+    val importWorkspaceDesc = Strings.t("import_workspace_desc")
+    val importLabel = Strings.t("import")
+    val importingWorkspace = Strings.t("importing_workspace")
+    val importingWorkspaceMessage = Strings.t("importing_workspace_message")
+    val clearHistoryDesc = Strings.t("clear_history_desc")
+    val clearLabel = Strings.t("clear")
+    val clearHistoryTitle = Strings.t("clear_history_title")
+    val clearHistoryConfirmMessage = Strings.t("clear_history_confirm_message")
+    val historyCleared = Strings.t("history_cleared")
+    val clearConsoleLogs = Strings.t("clear_console_logs")
+    val clearConsoleLogsDesc = Strings.t("clear_console_logs_desc")
 
     fun runTracked(title: String, message: String, block: suspend () -> Unit) {
         val job: Job = scope.launch(ioDispatcher) {
             runCatching { block() }
                 .onFailure { e ->
                     withContext(Dispatchers.Main) {
-                        state.showError("Import/Export error", e.message ?: "Unknown error")
+                        state.showError(importExportError, e.message ?: unknownError)
                         state.log("$title failed: ${e.message}", LogLevel.ERROR)
                     }
                 }
@@ -423,22 +460,22 @@ private fun DataSettings(state: AppState) {
         state.startOperation(title, message, job)
     }
 
-    SettingAction("Export workspace", "Save all collections and environments to a JSON backup", actionLabel = "Export") {
+    SettingAction(exportWorkspace, exportWorkspaceDesc, actionLabel = exportLabel) {
         scope.launch {
-            runTracked("Exporting workspace", "Exporting workspace...") {
+            runTracked(exportingWorkspace, exportingWorkspaceMessage) {
                 val jsonStr = ImportExportRepository.exportWorkspaceToString(state)
                 withContext(Dispatchers.Main) {
                     saveFileForExport(jsonStr, "workspace-backup.json")
-                    state.log("Workspace exported → workspace-backup.json", LogLevel.SUCCESS)
+                    state.log(workspaceExported, LogLevel.SUCCESS)
                 }
             }
         }
     }
     SettingsDivider()
-    SettingAction("Import workspace", "Load collections and environments from a JSON backup", actionLabel = "Import") {
+    SettingAction(importWorkspace, importWorkspaceDesc, actionLabel = importLabel) {
         pickFileForImport { content ->
             scope.launch {
-                runTracked("Importing workspace", "Importing workspace...") {
+                runTracked(importingWorkspace, importingWorkspaceMessage) {
                     val result = ImportExportRepository.importWorkspaceFromString(state, content)
                     WorkspaceRepository.save(state)
                     withContext(Dispatchers.Main) {
@@ -453,26 +490,26 @@ private fun DataSettings(state: AppState) {
     }
     SettingsDivider()
     SettingAction(
-        "Clear history",
-        "Remove all request history entries",
-        actionLabel = "Clear",
+        Strings.clearHistory,
+        clearHistoryDesc,
+        actionLabel = clearLabel,
         actionColor = ReqLabColors.Error,
         tag = "clear-history",
     ) {
         state.showConfirm(
-            title = "Clear history?",
-            message = "Are you sure you want to clear request history?",
+            title = clearHistoryTitle,
+            message = clearHistoryConfirmMessage,
             action = {
                 state.clearHistory()
-                state.log("History cleared", LogLevel.INFO)
+                state.log(historyCleared, LogLevel.INFO)
             },
         )
     }
     SettingsDivider()
     SettingAction(
-        "Clear console logs",
-        "Remove all console log entries",
-        actionLabel = "Clear",
+        clearConsoleLogs,
+        clearConsoleLogsDesc,
+        actionLabel = clearLabel,
         actionColor = ReqLabColors.Error,
         tag = "clear-console",
     ) {

@@ -63,6 +63,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.SolidColor
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestTabState
 import com.reqlab.ui.shared.theme.ReqLabColors
@@ -148,7 +149,7 @@ fun RequestTabsBar(
             ) {
                 Icon(
                     Icons.Default.Add,
-                    contentDescription = "New tab",
+                    contentDescription = Strings.t("new_tab"),
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier.size(16.dp),
                 )
@@ -246,7 +247,7 @@ private fun RequestTabChip(
                         .testTag("tab-rename-input-${tab.id}"),
                 )
                 Text(
-                    text = "Save",
+                    text = Strings.save,
                     color = ReqLabColors.Primary,
                     fontSize = 11.sp,
                     modifier = Modifier
@@ -270,7 +271,7 @@ private fun RequestTabChip(
             if (showClose && (isActive || isHovered)) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "Close tab",
+                    contentDescription = Strings.t("close_tab"),
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier
                         .size(14.dp)
@@ -298,12 +299,12 @@ private fun RequestTabChip(
             onDismissRequest = { showContextMenu = false },
         ) {
             if (showClose) DropdownMenuItem(
-                text = { Text("Close") },
+                text = { Text(Strings.close) },
                 onClick = { showContextMenu = false; onClose() },
                 modifier = Modifier.testTag("tab-ctx-close"),
             )
             DropdownMenuItem(
-                text = { Text("Rename") },
+                text = { Text(Strings.t("rename")) },
                 onClick = {
                     showContextMenu = false
                     renameText = TextFieldValue(tab.name)
@@ -312,27 +313,27 @@ private fun RequestTabChip(
                 modifier = Modifier.testTag("tab-ctx-rename"),
             )
             DropdownMenuItem(
-                text = { Text("Show in Sidebar") },
+                text = { Text(Strings.t("show_in_sidebar")) },
                 onClick = { showContextMenu = false; onShowInSidebar() },
                 modifier = Modifier.testTag("tab-ctx-show-sidebar"),
             )
             DropdownMenuItem(
-                text = { Text("Close Others") },
+                text = { Text(Strings.t("close_others")) },
                 onClick = { showContextMenu = false; onCloseOthers() },
                 modifier = Modifier.testTag("tab-ctx-close-others"),
             )
             DropdownMenuItem(
-                text = { Text("Close Tabs to the Left") },
+                text = { Text(Strings.t("close_tabs_to_left")) },
                 onClick = { showContextMenu = false; onCloseToLeft() },
                 modifier = Modifier.testTag("tab-ctx-close-left"),
             )
             DropdownMenuItem(
-                text = { Text("Close Tabs to the Right") },
+                text = { Text(Strings.t("close_tabs_to_right")) },
                 onClick = { showContextMenu = false; onCloseToRight() },
                 modifier = Modifier.testTag("tab-ctx-close-right"),
             )
             DropdownMenuItem(
-                text = { Text("Close All") },
+                text = { Text(Strings.t("close_all")) },
                 onClick = { showContextMenu = false; onCloseAll() },
                 modifier = Modifier.testTag("tab-ctx-close-all"),
             )

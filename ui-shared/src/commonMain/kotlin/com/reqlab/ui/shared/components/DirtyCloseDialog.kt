@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlin.math.roundToInt
 
@@ -87,7 +88,7 @@ fun DirtyCloseDialog(
                     color = ReqLabColors.OnSurface,
                 )
                 Text(
-                    text = "Request has unsaved changes. Save before closing?",
+                    text = Strings.t("request_unsaved_changes_message"),
                     fontSize = 13.sp,
                     color = ReqLabColors.OnSurfaceVariant,
                 )
@@ -107,7 +108,7 @@ fun DirtyCloseDialog(
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                             .testTag("dirty-close-cancel"),
                     ) {
-                        Text("Cancel", fontSize = 13.sp, color = ReqLabColors.OnSurface)
+                        Text(Strings.cancel, fontSize = 13.sp, color = ReqLabColors.OnSurface)
                     }
 
                     Box(
@@ -119,7 +120,7 @@ fun DirtyCloseDialog(
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                             .testTag("dirty-close-discard"),
                     ) {
-                        Text("Discard", fontSize = 13.sp, color = ReqLabColors.Tertiary)
+                        Text(Strings.t("discard"), fontSize = 13.sp, color = ReqLabColors.Tertiary)
                     }
 
                     Box(
@@ -130,7 +131,7 @@ fun DirtyCloseDialog(
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                             .testTag("dirty-close-save"),
                     ) {
-                        Text("Save", fontSize = 13.sp, color = ReqLabColors.OnPrimary, fontWeight = FontWeight.Medium)
+                        Text(Strings.save, fontSize = 13.sp, color = ReqLabColors.OnPrimary, fontWeight = FontWeight.Medium)
                     }
                 }
             }

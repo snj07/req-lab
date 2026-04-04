@@ -76,8 +76,10 @@ fun RequestEditor(
             onCancel = onCancel,
             onSave = onSave,
             copyFormats = buildCopyFormats(tab, state),
+            retryEnabled = tab.retryEnabled,
             retryCount = tab.retryCount,
             retryDelayMs = tab.retryDelayMs,
+            onRetryEnabledChanged = { tab.retryEnabled = it; markDirty() },
             onRetryCountChanged = { tab.retryCount = it; markDirty() },
             onRetryDelayChanged = { tab.retryDelayMs = it; markDirty() },
             state = state,
@@ -162,10 +164,8 @@ private fun copyToClipboard(text: String) {
 private fun buildCopyFormats(tab: RequestTabState, state: AppState): List<Pair<String, () -> Unit>> {
     val layers = state.activeVariableLayers()
     return listOf(
-        "cURL (resolved)"        to { copyToClipboard(buildCurlCommand(tab, layers)) },
-        "cURL (raw template)"    to { copyToClipboard(buildCurlCommandRaw(tab)) },
-        "Python requests"        to { copyToClipboard(buildPythonCommand(tab, layers)) },
-        "HTTPie"                 to { copyToClipboard(buildHTTPieCommand(tab, layers)) },
+        "cURL"                   to { copyToClipboard(buildCurlCommand(tab, layers)) },
+        "Python"                 to { copyToClipboard(buildPythonCommand(tab, layers)) },
         "PowerShell"             to { copyToClipboard(buildPowerShellCommand(tab, layers)) },
     )
 }

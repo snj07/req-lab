@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import kotlin.math.roundToInt
 import com.reqlab.ui.shared.state.MutableKeyValue
@@ -360,7 +361,7 @@ fun VariableEditorPopup(
                     ) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "Variable: $cleanName",
+                                text = "${Strings.t("variable")}: $cleanName",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = VariableHighlightColor,
@@ -368,7 +369,7 @@ fun VariableEditorPopup(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "Environment: ${env?.name ?: "None"}",
+                                text = "${Strings.environments}: ${env?.name ?: Strings.t("none")}",
                                 fontSize = 11.sp,
                                 color = ReqLabColors.OnSurfaceDim,
                                 maxLines = 1,
@@ -381,7 +382,7 @@ fun VariableEditorPopup(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Close variable editor",
+                                contentDescription = Strings.t("close_variable_editor"),
                                 tint = ReqLabColors.OnSurfaceDim,
                                 modifier = Modifier.size(16.dp),
                             )
@@ -398,13 +399,13 @@ fun VariableEditorPopup(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Text(
-                            text = "Current Value",
+                            text = Strings.t("current_value"),
                             fontSize = 11.sp,
                             color = ReqLabColors.OnSurfaceVariant,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            text = resolved ?: "Not defined",
+                            text = resolved ?: Strings.t("not_defined"),
                             fontSize = 12.sp,
                             color = if (resolved == null) ReqLabColors.Error else ReqLabColors.OnSurface,
                             maxLines = 2,
@@ -417,7 +418,7 @@ fun VariableEditorPopup(
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "Value",
+                            text = Strings.value,
                             fontSize = 11.sp,
                             color = ReqLabColors.OnSurfaceVariant,
                             fontWeight = FontWeight.Medium,
@@ -441,7 +442,7 @@ fun VariableEditorPopup(
                                 .testTag("variable-popup-value-input"),
                             decorationBox = { inner ->
                                 if (editValue.text.isEmpty()) {
-                                    Text("Enter value…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+                                    Text(Strings.t("enter_value"), color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
                                 }
                                 inner()
                             },
@@ -454,7 +455,7 @@ fun VariableEditorPopup(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "Open in Environments",
+                            text = Strings.t("open_in_environments"),
                             fontSize = 12.sp,
                             color = ReqLabColors.Primary,
                             modifier = Modifier

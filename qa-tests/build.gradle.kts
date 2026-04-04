@@ -13,6 +13,7 @@ kotlin {
             kotlin.srcDir("src/test/kotlin")
             dependencies {
                 implementation(project(":core-model"))
+                implementation(project(":core-scripting"))
                 implementation(project(":core-network"))
                 implementation(project(":feature-requests"))
                 implementation(project(":sample-server"))

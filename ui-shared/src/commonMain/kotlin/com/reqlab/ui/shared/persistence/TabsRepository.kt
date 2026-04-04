@@ -56,6 +56,7 @@ object TabsRepository {
                         put("authApiValue", tab.authApiValue)
                         put("preRequestScript", tab.preRequestScript)
                         put("testScript", tab.testScript)
+                        put("retryEnabled", tab.retryEnabled)
                         put("retryCount", tab.retryCount)
                         put("retryDelayMs", tab.retryDelayMs)
                         tab.lastSavedTimestamp?.let { put("lastSavedTimestamp", it) }
@@ -133,6 +134,7 @@ object TabsRepository {
                 tab.authApiValue = obj["authApiValue"]?.jsonPrimitive?.content ?: ""
                 tab.preRequestScript = obj["preRequestScript"]?.jsonPrimitive?.content ?: ""
                 tab.testScript = obj["testScript"]?.jsonPrimitive?.content ?: ""
+                tab.retryEnabled = obj["retryEnabled"]?.jsonPrimitive?.booleanOrNull ?: false
                 tab.retryCount = obj["retryCount"]?.jsonPrimitive?.intOrNull ?: 1
                 tab.retryDelayMs = obj["retryDelayMs"]?.jsonPrimitive?.content?.toLongOrNull() ?: 250L
                 tab.lastSavedTimestamp = obj["lastSavedTimestamp"]?.jsonPrimitive?.content?.toLongOrNull()

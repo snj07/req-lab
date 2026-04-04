@@ -143,7 +143,7 @@ class EnvState(
 
 class AppSettings {
     // General
-    var autoSaveRequests     by mutableStateOf(true)
+    var autoSaveRequests     by mutableStateOf(false)
     var confirmBeforeDelete  by mutableStateOf(true)
     var defaultTimeoutSec    by mutableStateOf(30)
     var responseLayout       by mutableStateOf(ResponseLayout.RIGHT)
@@ -213,6 +213,7 @@ class RequestTabState(
     var preRequestScript by mutableStateOf("")
     var testScript       by mutableStateOf("")
 
+    var retryEnabled by mutableStateOf(false)
     var retryCount by mutableStateOf(1)
     var retryDelayMs by mutableStateOf(250L)
 
@@ -258,6 +259,7 @@ class RequestTabState(
             authApiValue,
             preRequestScript,
             testScript,
+            retryEnabled.toString(),
             retryCount.toString(),
             retryDelayMs.toString(),
             paramsSnapshot,
@@ -363,6 +365,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     // ── dialogs / overlays ──
     var showSettingsDialog   by mutableStateOf(false)
+    var showHelpDialog       by mutableStateOf(false)
     var showEnvEditDialog    by mutableStateOf(false)
     var editingEnvIndex      by mutableStateOf(-1)      // index into environments
 
@@ -704,23 +707,30 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         addTab(requestId = requestId, name = name, method = HttpMethodType.GET, url = "")
     }
 
-    /** Create a request in the currently selected collection, or as an orphan tab if none selected. */
+    /** Create a request in the selected collection, ensuring a default collection exists when needed. */
     fun addTabInSelectedCollection() {
         val collId = selectedCollectionId
         val folder = if (collId != null) collections.firstOrNull { it.id == collId && it.isFolder } else null
         if (folder != null) {
             addRequestToCollection(folder.id)
-        } else if (collections.isNotEmpty()) {
-            // Default to first collection
-            val first = collections.first()
-            if (first.isFolder) {
-                addRequestToCollection(first.id)
-            } else {
-                addTab()
-            }
         } else {
-            addTab()
+            val firstFolder = collections.firstOrNull { it.isFolder }
+            if (firstFolder != null) {
+                addRequestToCollection(firstFolder.id)
+            } else {
+                val defaultFolder = ensureDefaultCollectionFolder()
+                addRequestToCollection(defaultFolder.id)
+            }
         }
+    }
+
+    fun pruneEmptyGlobalVariables() {
+        globalVariables.removeAll { it.key.isBlank() && it.value.isBlank() }
+    }
+
+    fun pruneEmptyVariablesForEnvironment(index: Int) {
+        val env = environments.getOrNull(index) ?: return
+        env.variables.removeAll { it.key.isBlank() && it.value.isBlank() }
     }
 
     fun renameRequestEverywhere(requestId: String, newName: String) {
@@ -819,7 +829,21 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     fun goToCollectionFromHistory(item: HistoryItem): Boolean {
         val resolvedRequestId = resolveHistoryRequestId(item)
-        return revealRequestInSidebar(resolvedRequestId)
+        val revealed = revealRequestInSidebar(resolvedRequestId)
+        if (!revealed) return false
+
+        if (openTabs.none { it.id == resolvedRequestId }) {
+            val target = findNodeById(collections, resolvedRequestId)
+            if (target != null && !target.isFolder) {
+                openRequest(
+                    requestId = target.id,
+                    name = target.name,
+                    method = target.method ?: item.method,
+                    url = target.url ?: item.url,
+                )
+            }
+        }
+        return true
     }
 
     fun clearHistory() {
@@ -954,6 +978,22 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         var index = 2
         while ("$base $index" in existingNames) index++
         return "$base $index"
+    }
+
+    private fun ensureDefaultCollectionFolder(): CollectionNode {
+        collections.firstOrNull { it.isFolder }?.let { return it }
+
+        val existingNames = collections.map { it.name }.toSet()
+        val folder = CollectionNode(
+            id = generateUuid(),
+            name = generateUniqueName("Default Collection", existingNames),
+            isFolder = true,
+            children = mutableStateListOf(),
+        )
+        collections.add(folder)
+        notifyCollectionsChanged()
+        selectedCollectionId = folder.id
+        return folder
     }
 
     /** Open a history / collection request as a new tab. */

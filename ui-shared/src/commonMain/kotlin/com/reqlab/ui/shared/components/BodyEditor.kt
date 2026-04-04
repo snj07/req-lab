@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -21,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,6 +36,7 @@ import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
 
 private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
+private val EditorLineHeight = 20.sp
 
 /**
  * Editor panel for the request body. Shows a body-type selector at the top and
@@ -39,6 +44,20 @@ private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
  */
 @Composable
 fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
+    val editorTextStyle = TextStyle(
+        color = ReqLabColors.OnSurface,
+        fontSize = 13.sp,
+        lineHeight = EditorLineHeight,
+        fontFamily = CodeFontFamily,
+    )
+    val editorLineNumberTextStyle = TextStyle(
+        color = ReqLabColors.OnSurfaceDim.copy(alpha = 0.55f),
+        fontSize = 13.sp,
+        lineHeight = EditorLineHeight,
+        fontFamily = CodeFontFamily,
+        textAlign = TextAlign.End,
+    )
+
     Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         // Body-type selector chips – horizontally scrollable so they never wrap
         Row(
@@ -106,26 +125,57 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
         }
 
         // Body content editor
-        VariableAwareTextField(
-            value = tab.bodyContent,
-            onValueChange = { tab.bodyContent = it; onDirty() },
-            singleLine = false,
-            textStyle = TextStyle(color = ReqLabColors.OnSurface, fontSize = 13.sp, fontFamily = CodeFontFamily),
-            state = state,
+        val lines = (tab.bodyContent.ifEmpty { "\n" }).lines()
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(8.dp))
                 .background(ReqLabColors.SurfaceContainer)
-                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
-                .padding(12.dp)
-                .testTag("body-editor"),
-            placeholder = when (tab.bodyType) {
-                BodyType.JSON    -> "{\n  \n}"
-                BodyType.GRAPHQL -> "query {\n  \n}"
-                BodyType.BINARY  -> "Attach a file, or paste raw/base64 content…"
-                else             -> "Enter request body…"
-            },
-        )
+                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp)),
+        ) {
+            BasicTextField(
+                value = buildString {
+                    lines.forEachIndexed { idx, _ ->
+                        append(idx + 1)
+                        if (idx < lines.lastIndex) append('\n')
+                    }
+                },
+                onValueChange = {},
+                readOnly = true,
+                textStyle = editorLineNumberTextStyle,
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Transparent),
+                modifier = Modifier
+                    .width(48.dp)
+                    .fillMaxHeight()
+                    .padding(start = 4.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)
+                    .testTag("body-line-numbers"),
+            )
+
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(ReqLabColors.Border),
+            )
+
+            VariableAwareTextField(
+                value = tab.bodyContent,
+                onValueChange = { tab.bodyContent = it; onDirty() },
+                singleLine = false,
+                textStyle = editorTextStyle,
+                state = state,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .testTag("body-editor"),
+                placeholder = when (tab.bodyType) {
+                    BodyType.JSON    -> "{\n  \n}"
+                    BodyType.GRAPHQL -> "query {\n  \n}"
+                    BodyType.BINARY  -> "Attach a file, or paste raw/base64 content…"
+                    else             -> "Enter request body…"
+                },
+            )
+        }
     }
 }
 

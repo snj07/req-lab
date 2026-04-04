@@ -5,6 +5,60 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+val generatedI18nDir = layout.buildDirectory.dir("generated/source/i18n/commonMain/kotlin")
+
+val generateI18nBundles by tasks.registering {
+    val inputDir = layout.projectDirectory.dir("src/commonMain/resources/i18n")
+    val outputDir = generatedI18nDir
+
+    inputs.dir(inputDir)
+    outputs.dir(outputDir)
+
+    doLast {
+        val outFile = outputDir.get().file("com/reqlab/ui/shared/i18n/GeneratedTranslationBundles.kt").asFile
+        outFile.parentFile.mkdirs()
+
+        fun encodeKotlinString(raw: String): String {
+            val builder = StringBuilder(raw.length + 32)
+            builder.append('"')
+            raw.forEach { ch ->
+                when (ch) {
+                    '\\' -> builder.append("\\\\")
+                    '"' -> builder.append("\\\"")
+                    '\n' -> builder.append("\\n")
+                    '\r' -> Unit
+                    '$' -> builder.append("\\$")
+                    else -> builder.append(ch)
+                }
+            }
+            builder.append('"')
+            return builder.toString()
+        }
+
+        val en = inputDir.file("en.json").asFile.readText()
+        val es = inputDir.file("es.json").asFile.readText()
+        val fr = inputDir.file("fr.json").asFile.readText()
+        val de = inputDir.file("de.json").asFile.readText()
+
+        outFile.writeText(
+            """
+            package com.reqlab.ui.shared.i18n
+
+            internal object GeneratedTranslationBundles {
+                private val bundles: Map<String, String> = mapOf(
+                    "en" to ${encodeKotlinString(en)},
+                    "es" to ${encodeKotlinString(es)},
+                    "fr" to ${encodeKotlinString(fr)},
+                    "de" to ${encodeKotlinString(de)},
+                )
+
+                fun forCode(code: String): String? = bundles[code]
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+}
+
 kotlin {
     jvm("desktop")
 
@@ -14,7 +68,9 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies {
+        val commonMain by getting {
+            kotlin.srcDir(generatedI18nDir)
+            dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
@@ -31,6 +87,7 @@ kotlin {
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.ktor.client.logging)
+            }
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -48,4 +105,8 @@ kotlin {
             }
         }
     }
+}
+
+tasks.matching { it.name.startsWith("compileKotlin") }.configureEach {
+    dependsOn(generateI18nBundles)
 }

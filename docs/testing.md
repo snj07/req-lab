@@ -11,7 +11,6 @@ ReqLab uses a layered validation strategy:
 
 ## Test Modules
 
-- `test-support`: local Ktor dummy API server used by tests
 - `qa-tests`: JVM integration and E2E tests
 - `core-network`: protocol behavior and request mapping tests
 - `core-storage`: repository and persistence behavior tests
@@ -19,26 +18,35 @@ ReqLab uses a layered validation strategy:
 
 ## Dummy Server Endpoints
 
-- `GET /users`
-- `POST /users`
-- `PUT /users/{id}`
-- `PATCH /users/{id}`
-- `DELETE /users/{id}`
-- `OPTIONS /users`
-- `HEAD /users`
-- `POST /graphql`
-- `POST /upload`
-- `POST /auth/login`
-- `POST /oauth/token`
-- `GET /auth/protected`
-- `GET /stream`
+- `GET /`
+- `GET/POST/PUT/PATCH/DELETE/OPTIONS/HEAD /api/users` (+ `/{id}` where applicable)
+- `GET /api/search`
+- `GET /api/echo-headers`
+- `POST /api/json`
+- `POST /api/graphql`
+- `POST /api/raw`
+- `POST /api/form-data`
+- `POST /api/urlencoded`
+- `POST /api/upload`
+- `GET /api/auth/basic`
+- `GET /api/auth/bearer`
+- `GET /api/auth/apikey`
+- `GET /api/time`, `GET /api/timestamp`
+- `GET /api/protected`
+- `GET /api/cookies`
+- `GET /api/redirect`, `GET /api/final`
+- `GET /api/error/{code}`
+- `GET /api/slow`
+- `GET /status/200`, `GET /status/201`
+- `GET /json/user`, `GET /json/array`, `GET /json/object`
+- `GET /headers`, `GET /cookies`, `GET /response-time`, `GET /string-body`
+- `POST /echo-body`, `POST /api/token`, `POST /api/validate`, `GET /api/echo-full`
 - `WS /ws`
 
-Simulation modes:
+Simulation parameters used by current endpoints:
 
-- `?mode=slow` (latency)
-- `?mode=error` (server error)
-- `?large=true` (large payload)
+- `GET /api/slow?ms=<delay>`
+- `GET /response-time?ms=<delay>`
 
 ## Run Tests Locally
 
@@ -62,11 +70,12 @@ Implemented and tested:
 - HTTP methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`
 - Auth: Basic, Bearer, API Key
 - Variables: URL, headers, auth token interpolation (`{{var}}`)
-- Body types currently testable with implemented engine paths:
+- Body types covered in current suites:
   - JSON
   - x-www-form-urlencoded
   - Raw text
-  - GraphQL payload wrapper
+  - GraphQL
+  - Form-data and binary upload flows
 - Retry behavior and server error handling
 - Scripting runtime (pre-request scripts, post-response tests, assertions, variable scopes)
 - WebSocket connect/send/receive/disconnect

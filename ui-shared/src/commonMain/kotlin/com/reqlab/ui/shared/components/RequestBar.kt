@@ -3,14 +3,18 @@ package com.reqlab.ui.shared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,7 +30,9 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,17 +42,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.theme.httpMethodColor
+import kotlin.math.roundToInt
 
 /**
  * The top bar of the request editor: method selector, URL field, Send, Save,
@@ -65,8 +78,10 @@ fun RequestBar(
     onSave: () -> Unit,
     /** Each pair is a label (e.g. "cURL (resolved)") and the action to copy that format. */
     copyFormats: List<Pair<String, () -> Unit>> = emptyList(),
+    retryEnabled: Boolean,
     retryCount: Int,
     retryDelayMs: Long,
+    onRetryEnabledChanged: (Boolean) -> Unit,
     onRetryCountChanged: (Int) -> Unit,
     onRetryDelayChanged: (Long) -> Unit,
     state: AppState? = null,
@@ -108,9 +123,11 @@ fun RequestBar(
         SendButton(isLoading, onSend, onCancel)
         SaveButton(isLoading = isLoading, onClick = onSave)
         RetryControlsButton(
+            retryEnabled = retryEnabled,
             retryCount = retryCount,
             retryDelayMs = retryDelayMs,
             isLoading = isLoading,
+            onRetryEnabledChanged = onRetryEnabledChanged,
             onRetryCountChanged = onRetryCountChanged,
             onRetryDelayChanged = onRetryDelayChanged,
         )
@@ -179,12 +196,12 @@ private fun SendButton(isLoading: Boolean, onClick: () -> Unit, onCancel: () -> 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Icon(
                     Icons.Default.Stop,
-                    contentDescription = "Stop request",
+                    contentDescription = Strings.t("stop_request"),
                     tint = ReqLabColors.OnPrimary,
                     modifier = Modifier.size(16.dp),
                 )
                 Text(
-                    text = "Stop",
+                    text = Strings.t("stop"),
                     color = ReqLabColors.OnPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
@@ -207,7 +224,7 @@ private fun SendButton(isLoading: Boolean, onClick: () -> Unit, onCancel: () -> 
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Send",
+                    text = Strings.send,
                     color = ReqLabColors.OnPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
@@ -238,7 +255,7 @@ private fun SaveButton(isLoading: Boolean, onClick: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = "Save",
+                text = Strings.save,
                 color = ReqLabColors.OnSurface,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
@@ -271,7 +288,7 @@ private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<Pair<String, ()
                 .testTag("copy-curl-button"),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.ContentCopy, contentDescription = "Copy as…", tint = ReqLabColors.OnSurface, modifier = Modifier.size(15.dp))
+            Icon(Icons.Default.ContentCopy, contentDescription = Strings.t("copy_as"), tint = ReqLabColors.OnSurface, modifier = Modifier.size(15.dp))
         }
 
         if (copyFormats.isNotEmpty()) {
@@ -289,15 +306,25 @@ private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<Pair<String, ()
 
 @Composable
 private fun RetryControlsButton(
+    retryEnabled: Boolean,
     retryCount: Int,
     retryDelayMs: Long,
     isLoading: Boolean,
+    onRetryEnabledChanged: (Boolean) -> Unit,
     onRetryCountChanged: (Int) -> Unit,
     onRetryDelayChanged: (Long) -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    var expanded by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+    var dialogOffsetX by remember { mutableStateOf(0f) }
+    var dialogOffsetY by remember { mutableStateOf(0f) }
+    var dialogViewportSize by remember { mutableStateOf(IntSize.Zero) }
+    var dialogCardSize by remember { mutableStateOf(IntSize.Zero) }
+
+    var localRetryEnabled by remember(showDialog, retryEnabled) { mutableStateOf(retryEnabled) }
+    var localRetryCount by remember(showDialog, retryCount) { mutableStateOf(retryCount.toString()) }
+    var localRetryDelayMs by remember(showDialog, retryDelayMs) { mutableStateOf(retryDelayMs.toString()) }
 
     Box {
         Row(
@@ -305,31 +332,127 @@ private fun RetryControlsButton(
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (isHovered) ReqLabColors.SurfaceHigh else ReqLabColors.SurfaceContainer)
                 .hoverable(interactionSource)
-                .clickable(enabled = !isLoading) { expanded = true }
+                .clickable(enabled = !isLoading) { showDialog = true }
                 .padding(horizontal = 7.dp, vertical = 8.dp)
                 .testTag("retry-menu-button"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 Icons.Default.Refresh,
-                contentDescription = "Retry ($retryCount)",
+                contentDescription = if (retryEnabled) {
+                    "${Strings.retry} ($retryCount, ${retryDelayMs}ms)"
+                } else {
+                    Strings.retry
+                },
                 tint = ReqLabColors.OnSurface,
                 modifier = Modifier.size(15.dp),
             )
         }
 
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            listOf(1, 2, 3, 5).forEach { attempts ->
-                DropdownMenuItem(
-                    text = { Text("Attempts: $attempts") },
-                    onClick = { onRetryCountChanged(attempts); expanded = false },
-                )
-            }
-            listOf(100L, 250L, 500L, 1000L).forEach { delay ->
-                DropdownMenuItem(
-                    text = { Text("Delay: ${delay}ms") },
-                    onClick = { onRetryDelayChanged(delay); expanded = false },
-                )
+        if (showDialog) {
+            Dialog(onDismissRequest = { showDialog = false }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onSizeChanged { dialogViewportSize = it }
+                        .pointerInput(Unit) { detectTapGestures { showDialog = false } },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .offset { IntOffset(dialogOffsetX.roundToInt(), dialogOffsetY.roundToInt()) }
+                            .widthIn(min = 420.dp, max = 560.dp)
+                            .onSizeChanged { dialogCardSize = it }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ReqLabColors.Surface)
+                            .border(1.dp, ReqLabColors.Border, RoundedCornerShape(12.dp))
+                            .draggableNoSlop { dx, dy ->
+                                val (cx, cy) = clampDialogOffsetFromCenter(
+                                    offsetX = dialogOffsetX + dx,
+                                    offsetY = dialogOffsetY + dy,
+                                    cardSize = dialogCardSize,
+                                    viewportSize = dialogViewportSize,
+                                )
+                                dialogOffsetX = cx
+                                dialogOffsetY = cy
+                            }
+                            .pointerInput(Unit) { detectTapGestures { } }
+                            .padding(20.dp)
+                            .testTag("retry-config-dialog"),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = Strings.retry,
+                            color = ReqLabColors.OnSurface,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 18.sp,
+                        )
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = localRetryEnabled,
+                                onCheckedChange = { localRetryEnabled = it },
+                                modifier = Modifier.testTag("retry-enabled-checkbox"),
+                            )
+                            Text(Strings.t("retry_enable"), color = ReqLabColors.OnSurface)
+                        }
+
+                        OutlinedTextField(
+                            value = localRetryCount,
+                            onValueChange = { localRetryCount = it.filter { ch -> ch.isDigit() } },
+                            singleLine = true,
+                            enabled = localRetryEnabled,
+                            label = { Text(Strings.t("attempts")) },
+                            modifier = Modifier.fillMaxWidth().testTag("retry-attempts-input"),
+                        )
+
+                        OutlinedTextField(
+                            value = localRetryDelayMs,
+                            onValueChange = { localRetryDelayMs = it.filter { ch -> ch.isDigit() } },
+                            singleLine = true,
+                            enabled = localRetryEnabled,
+                            label = { Text("${Strings.t("delay")} (ms)") },
+                            modifier = Modifier.fillMaxWidth().testTag("retry-delay-input"),
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(ReqLabColors.SurfaceContainer)
+                                    .clickable { showDialog = false }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .testTag("retry-config-cancel"),
+                            ) {
+                                Text(Strings.cancel, color = ReqLabColors.OnSurface, fontWeight = FontWeight.Medium)
+                            }
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(ReqLabColors.Primary)
+                                    .clickable {
+                                        val attempts = localRetryCount.toIntOrNull()?.coerceAtLeast(1) ?: retryCount
+                                        val delayMs = localRetryDelayMs.toLongOrNull()?.coerceAtLeast(0L) ?: retryDelayMs
+                                        onRetryEnabledChanged(localRetryEnabled)
+                                        onRetryCountChanged(attempts)
+                                        onRetryDelayChanged(delayMs)
+                                        showDialog = false
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .testTag("retry-config-save"),
+                            ) {
+                                Text(Strings.save, color = ReqLabColors.OnPrimary, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

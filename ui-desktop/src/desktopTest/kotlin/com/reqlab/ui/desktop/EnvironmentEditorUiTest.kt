@@ -58,6 +58,25 @@ class EnvironmentEditorUiTest {
         assertEquals("baseUrlUpdated", state.environments.first().variables.first().key)
     }
 
+    @Test
+    fun environment_editor_does_not_save_empty_variable_rows() {
+        val state = AppState(withDemoData = true).apply {
+            environments.first().variables.clear()
+            openEnvEdit(0)
+        }
+
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("env-add-variable").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("env-save-button").performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(state.environments.first().variables.isEmpty())
+    }
+
     /**
      * Dragging the title-bar of the environment editor dialog must move the
      * card to a new position on screen.

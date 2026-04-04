@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
@@ -71,7 +72,7 @@ fun TopToolbar(state: AppState) {
         IconButton(onClick = { state.sidebarExpanded = !state.sidebarExpanded }) {
             Icon(
                 Icons.Default.Menu,
-                contentDescription = "Toggle sidebar",
+                contentDescription = Strings.t("toggle_sidebar"),
                 tint = ReqLabColors.OnSurfaceVariant,
             )
         }
@@ -136,7 +137,7 @@ fun TopToolbar(state: AppState) {
                 } else {
                     Icons.Default.ViewWeek
                 },
-                contentDescription = "Toggle response layout",
+                contentDescription = Strings.t("toggle_response_layout"),
                 tint = ReqLabColors.OnSurfaceVariant,
             )
         }
@@ -152,6 +153,15 @@ fun TopToolbar(state: AppState) {
                 Icons.Default.Public,
                 contentDescription = Strings.globalVariables,
                 tint = ReqLabColors.OnSurfaceVariant,
+            )
+        }
+
+        IconButton(onClick = { state.showHelpDialog = true }) {
+            Icon(
+                Icons.Default.HelpOutline,
+                contentDescription = "Help and About",
+                tint = ReqLabColors.OnSurfaceVariant,
+                modifier = Modifier.testTag("help-about-button"),
             )
         }
 
@@ -180,6 +190,8 @@ private fun EnvironmentChip(state: AppState) {
     var menuExpanded by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    val newEnvironmentLabel = Strings.t("new_environment")
+    val editEnvironmentLabel = Strings.t("edit_environment")
 
     val selectedEnvironment = state.selectedEnvironment
 
@@ -223,7 +235,7 @@ private fun EnvironmentChip(state: AppState) {
                 DropdownMenuItem(
                     text = { Text(Strings.createEnvironment) },
                     onClick = {
-                        val created = EnvState("New Environment")
+                        val created = EnvState(newEnvironmentLabel)
                         state.environments.add(created)
                         state.selectedEnvIndex = state.environments.lastIndex
                         state.openEnvEdit(state.selectedEnvIndex)
@@ -243,7 +255,7 @@ private fun EnvironmentChip(state: AppState) {
             }
             HorizontalDivider()
             DropdownMenuItem(
-                text = { Text("Edit environment…") },
+                text = { Text("$editEnvironmentLabel…") },
                 onClick = {
                     if (state.selectedEnvIndex in state.environments.indices) {
                         state.openEnvEdit(state.selectedEnvIndex)

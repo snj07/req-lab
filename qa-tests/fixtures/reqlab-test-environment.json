@@ -9,6 +9,7 @@
         "basicPassword": "password",
         "X-Request-Id": "req-env-default",
         "X-Client": "ReqLab-Env-Client",
+        "graphqlUserId": "1",
         "scriptToken": "",
         "lastRunId": "run-env-default"
     }

@@ -39,6 +39,7 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -126,7 +127,7 @@ fun Application.module() {
                     put("title", "ReqLab")
                     put("count", 3)
                     put("enabled", true)
-                    put("nullable", null)
+                    put("nullable", JsonNull)
                     put("nested", buildJsonObject {
                         put("code", "OBJ-1")
                     })
@@ -291,6 +292,27 @@ fun Application.module() {
                 put("message", "JSON body received")
                 put("contentType", call.request.header("Content-Type") ?: "")
                 put("body", body)
+            })
+        }
+
+        post("/api/graphql") {
+            val body = call.receiveText()
+            val userId = Regex(""""id"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1) ?: "1"
+            val operationName = Regex(""""operationName"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)
+                ?: if (body.contains("user", ignoreCase = true)) "user" else "query"
+            call.respond(buildJsonObject {
+                put("message", "GraphQL request received")
+                put("contentType", call.request.header("Content-Type") ?: "")
+                put("data", buildJsonObject {
+                    put("user", buildJsonObject {
+                        put("id", userId)
+                        put("name", "GraphQL User")
+                        put("type", "Subscriber")
+                    })
+                })
+                put("extensions", buildJsonObject {
+                    put("receivedOperation", operationName)
+                })
             })
         }
 

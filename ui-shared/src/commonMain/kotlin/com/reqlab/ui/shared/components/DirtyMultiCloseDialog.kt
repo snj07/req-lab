@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlin.math.roundToInt
 
@@ -92,8 +93,7 @@ fun DirtyMultiCloseDialog(
                     color = ReqLabColors.OnSurface,
                 )
                 Text(
-                    text = "$dirtyCount request${if (dirtyCount == 1) "" else "s"} " +
-                        "have unsaved changes. What would you like to do?",
+                    text = "$dirtyCount ${Strings.t("requests_unsaved_changes_suffix")}",
                     fontSize = 13.sp,
                     color = ReqLabColors.OnSurfaceVariant,
                 )
@@ -114,7 +114,7 @@ fun DirtyMultiCloseDialog(
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("dirty-multi-cancel"),
                     ) {
-                        Text("Cancel", fontSize = 13.sp, color = ReqLabColors.OnSurfaceVariant)
+                        Text(Strings.cancel, fontSize = 13.sp, color = ReqLabColors.OnSurfaceVariant)
                     }
 
                     // Discard All
@@ -127,7 +127,7 @@ fun DirtyMultiCloseDialog(
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("dirty-multi-discard"),
                     ) {
-                        Text("Discard All", fontSize = 13.sp, color = ReqLabColors.Error, fontWeight = FontWeight.Medium)
+                        Text(Strings.t("discard_all"), fontSize = 13.sp, color = ReqLabColors.Error, fontWeight = FontWeight.Medium)
                     }
 
                     // Save All
@@ -139,7 +139,7 @@ fun DirtyMultiCloseDialog(
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("dirty-multi-save-all"),
                     ) {
-                        Text("Save All", fontSize = 13.sp, color = ReqLabColors.OnPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(Strings.t("save_all"), fontSize = 13.sp, color = ReqLabColors.OnPrimary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

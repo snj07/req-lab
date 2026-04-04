@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlin.math.roundToInt
 
@@ -119,7 +120,7 @@ fun ConfirmDeleteDialog(
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("confirm-cancel-button"),
                     ) {
-                        Text("Cancel", fontSize = 13.sp, color = ReqLabColors.OnSurface)
+                        Text(Strings.cancel, fontSize = 13.sp, color = ReqLabColors.OnSurface)
                     }
 
                     // Confirm (destructive)

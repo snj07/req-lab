@@ -54,6 +54,7 @@ class TabsRepositoryTest {
         tab.authApiValue = "secret"
         tab.preRequestScript = "env.set('k','v')"
         tab.testScript = "test('ok', function() { expect(response.status).to.equal(200) })"
+        tab.retryEnabled = true
         tab.retryCount = 3
         tab.retryDelayMs = 500L
 
@@ -81,6 +82,7 @@ class TabsRepositoryTest {
         assertEquals("secret", loaded.authApiValue)
         assertEquals("env.set('k','v')", loaded.preRequestScript)
         assertEquals("test('ok', function() { expect(response.status).to.equal(200) })", loaded.testScript)
+        assertEquals(true, loaded.retryEnabled)
         assertEquals(3, loaded.retryCount)
         assertEquals(500L, loaded.retryDelayMs)
         assertEquals(123456789L, loaded.lastSavedTimestamp)

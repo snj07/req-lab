@@ -256,7 +256,7 @@ fun Sidebar(state: AppState) {
                             ) {
                                 Icon(
                                     Icons.Default.Input,
-                                    contentDescription = "Import collection",
+                                    contentDescription = Strings.importCollection,
                                     tint = ReqLabColors.OnSurfaceDim,
                                     modifier = Modifier.size(14.dp).testTag("collection-import-icon"),
                                 )
@@ -278,7 +278,7 @@ fun Sidebar(state: AppState) {
                                 },
                                 modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "New collection", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Add, contentDescription = Strings.t("new_collection"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(16.dp))
                             }
                         }
                     },
@@ -485,7 +485,7 @@ fun Sidebar(state: AppState) {
                             ) {
                                 Icon(
                                     Icons.Default.Input,
-                                    contentDescription = "Import environment",
+                                    contentDescription = Strings.t("import_environment"),
                                     tint = ReqLabColors.OnSurfaceDim,
                                     modifier = Modifier.size(14.dp).testTag("environment-import-icon"),
                                 )
@@ -497,7 +497,7 @@ fun Sidebar(state: AppState) {
                                 },
                                 modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "New environment", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Add, contentDescription = Strings.t("new_environment"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(16.dp))
                             }
                         }
                     },
@@ -870,7 +870,7 @@ private fun HistoryRow(state: AppState, item: HistoryItem, onClick: () -> Unit) 
             ) {
                 Icon(
                     Icons.Default.MoreVert,
-                    contentDescription = "History actions",
+                    contentDescription = Strings.t("history_actions"),
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier.size(14.dp),
                 )
@@ -880,28 +880,28 @@ private fun HistoryRow(state: AppState, item: HistoryItem, onClick: () -> Unit) 
                 onDismissRequest = { showMenu = false },
             ) {
                 DropdownMenuItem(
-                    text = { Text("Open") },
+                    text = { Text(Strings.t("open")) },
                     onClick = {
                         showMenu = false
                         onClick()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Open in Sidebar") },
+                    text = { Text(Strings.t("open_in_sidebar")) },
                     onClick = {
                         showMenu = false
                         state.goToCollectionFromHistory(item)
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Go to Collection") },
+                    text = { Text(Strings.t("go_to_collection")) },
                     onClick = {
                         showMenu = false
                         state.goToCollectionFromHistory(item)
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Remove from History") },
+                    text = { Text(Strings.t("remove_from_history")) },
                     onClick = {
                         showMenu = false
                         state.removeHistoryItem(item.requestId)
@@ -1089,7 +1089,7 @@ private fun CollectionTreeNode(
             } else if (node.method != null) {
                 Icon(
                     Icons.Default.DragIndicator,
-                    contentDescription = "Drag to reorder",
+                    contentDescription = Strings.t("drag_to_reorder"),
                     tint = ReqLabColors.OnSurfaceDim.copy(alpha = 0.4f),
                     modifier = Modifier.size(12.dp),
                 )
@@ -1121,7 +1121,7 @@ private fun CollectionTreeNode(
                 ) {
                     Icon(
                         Icons.Default.Add,
-                        contentDescription = "Add request",
+                        contentDescription = Strings.t("add_request"),
                         tint = ReqLabColors.OnSurfaceDim,
                         modifier = Modifier.size(14.dp),
                     )
@@ -1134,7 +1134,7 @@ private fun CollectionTreeNode(
                 ) {
                     Icon(
                         Icons.Default.MoreVert,
-                        contentDescription = if (isCollectionRoot) "Collection actions" else "Request actions",
+                        contentDescription = if (isCollectionRoot) Strings.t("collection_actions") else Strings.t("request_actions"),
                         tint = ReqLabColors.OnSurfaceDim,
                         modifier = Modifier.size(14.dp),
                     )
@@ -1142,12 +1142,12 @@ private fun CollectionTreeNode(
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     if (isFolderNode) {
                         DropdownMenuItem(
-                            text = { Text("Add Folder") },
+                            text = { Text(Strings.t("add_folder")) },
                             leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onAddFolder(node) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Expand") },
+                            text = { Text(Strings.t("expand")) },
                             leadingIcon = { Icon(Icons.Default.UnfoldMore, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1155,7 +1155,7 @@ private fun CollectionTreeNode(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Collapse") },
+                            text = { Text(Strings.t("collapse")) },
                             leadingIcon = { Icon(Icons.Default.UnfoldLess, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1163,7 +1163,7 @@ private fun CollectionTreeNode(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Expand All") },
+                            text = { Text(Strings.expandAll) },
                             leadingIcon = { Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1171,7 +1171,7 @@ private fun CollectionTreeNode(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Collapse All") },
+                            text = { Text(Strings.collapseAll) },
                             leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
@@ -1179,55 +1179,55 @@ private fun CollectionTreeNode(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Add Request") },
+                            text = { Text(Strings.t("add_request")) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onAddRequest(node) },
                         )
                         if (isCollectionRoot) {
                             DropdownMenuItem(
-                                text = { Text("Export Collection") },
+                                text = { Text(Strings.exportCollection) },
                                 leadingIcon = { Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                 onClick = { showMenu = false; onExportCollection(node) },
                             )
                             DropdownMenuItem(
-                                text = { Text("Duplicate Collection") },
+                                text = { Text(Strings.t("duplicate_collection")) },
                                 leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                 onClick = { showMenu = false; onDuplicateCollection(node) },
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text("Rename") },
+                            text = { Text(Strings.t("rename")) },
                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onRenameCollection(node) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete") },
+                            text = { Text(Strings.delete) },
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onDeleteCollection(node) },
                         )
                     } else if (isRequest) {
                         DropdownMenuItem(
-                            text = { Text("Duplicate Request") },
+                            text = { Text(Strings.t("duplicate_request")) },
                             leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onDuplicateRequest(node) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Rename Request") },
+                            text = { Text(Strings.t("rename_request")) },
                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onRenameRequest(node) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Move Up") },
+                            text = { Text(Strings.t("move_up")) },
                             leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onMoveRequest(node.id, -1) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Move Down") },
+                            text = { Text(Strings.t("move_down")) },
                             leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onMoveRequest(node.id, 1) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete Request") },
+                            text = { Text(Strings.t("delete_request")) },
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onDeleteRequest(node) },
                         )
@@ -1381,42 +1381,42 @@ private fun EnvironmentRow(
             ) {
                 Icon(
                     Icons.Default.MoreVert,
-                    contentDescription = "Environment actions",
+                    contentDescription = Strings.t("environment_actions"),
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier.size(14.dp),
                 )
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 DropdownMenuItem(
-                    text = { Text("Edit Environment") },
+                    text = { Text(Strings.t("edit_environment")) },
                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
                     onEdit()
                 })
                 DropdownMenuItem(
-                    text = { Text("Export Environment") },
+                    text = { Text(Strings.t("export_environment")) },
                     leadingIcon = { Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
                     onExport()
                 })
                 DropdownMenuItem(
-                    text = { Text("Duplicate Environment") },
+                    text = { Text(Strings.t("duplicate_environment")) },
                     leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
                     onDuplicate()
                 })
                 DropdownMenuItem(
-                    text = { Text("Rename Environment") },
+                    text = { Text(Strings.t("rename_environment")) },
                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
                     onRename()
                 })
                 DropdownMenuItem(
-                    text = { Text("Delete Environment") },
+                    text = { Text(Strings.t("delete_environment")) },
                     leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
@@ -1463,7 +1463,7 @@ private fun RenameItemDialog(
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 Text(
-                    text = "Cancel",
+                    text = Strings.cancel,
                     color = ReqLabColors.OnSurfaceVariant,
                     fontSize = 13.sp,
                     modifier = Modifier

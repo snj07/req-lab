@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.MutableKeyValue
 import org.junit.Rule
@@ -101,6 +102,12 @@ class GlobalVariablesUiTest {
 
         composeRule.onNodeWithTag("add-global-variable").performClick()
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("global-var-key-0").performTextReplacement("apiKey")
+
+        // Working copy only until Save
+        assertEquals(0, state.globalVariables.size)
+        composeRule.onNodeWithTag("global-vars-save").performClick()
+        composeRule.waitForIdle()
 
         assertEquals(1, state.globalVariables.size)
     }
@@ -113,9 +120,63 @@ class GlobalVariablesUiTest {
         repeat(3) {
             composeRule.onNodeWithTag("add-global-variable").performClick()
             composeRule.waitForIdle()
+            composeRule.onNodeWithTag("global-var-key-$it").performTextReplacement("key$it")
         }
 
+        composeRule.onNodeWithTag("global-vars-save").performClick()
+        composeRule.waitForIdle()
+
         assertEquals(3, state.globalVariables.size)
+    }
+
+    @Test
+    fun cancel_discards_unsaved_global_variable_changes() {
+        val state = AppState().apply { showGlobalVariablesDialog = true }
+        composeRule.setContent { MainScreen(state) }
+
+        repeat(2) {
+            composeRule.onNodeWithTag("add-global-variable").performClick()
+        }
+        composeRule.waitForIdle()
+        assertEquals(0, state.globalVariables.size)
+
+        composeRule.onNodeWithContentDescription("Close", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(state.globalVariables.isEmpty())
+        assertFalse(state.showGlobalVariablesDialog)
+    }
+
+    @Test
+    fun save_filters_blank_global_rows() {
+        val state = AppState().apply { showGlobalVariablesDialog = true }
+        composeRule.setContent { MainScreen(state) }
+
+        repeat(2) { composeRule.onNodeWithTag("add-global-variable").performClick() }
+        composeRule.onNodeWithTag("global-var-key-0").performTextReplacement("apiKey")
+        composeRule.onNodeWithTag("global-vars-save").performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(1, state.globalVariables.size)
+        assertEquals("apiKey", state.globalVariables.first().key)
+    }
+
+    @Test
+    fun type_toggle_sets_secret_and_eye_toggles_visibility() {
+        val state = AppState().apply {
+            globalVariables.add(MutableKeyValue("token", "abc"))
+            showGlobalVariablesDialog = true
+        }
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("global-var-type-0").performClick()
+        composeRule.onNodeWithTag("global-var-eye-0").assertIsDisplayed()
+        composeRule.onNodeWithTag("global-var-eye-0").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("global-vars-save").performClick()
+        composeRule.waitForIdle()
+        assertTrue(state.globalVariables.first().secret)
     }
 
     // ── Variable properties (state-level) ──

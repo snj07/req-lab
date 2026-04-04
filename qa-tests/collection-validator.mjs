@@ -3,8 +3,9 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 const rootDir = process.cwd();
-const collectionPath = path.join(rootDir, 'reqlab-test-collection.json');
-const environmentPath = path.join(rootDir, 'reqlab-test-environment.json');
+const fixturesDir = path.join(rootDir, 'qa-tests', 'fixtures');
+const collectionPath = path.join(fixturesDir, 'reqlab-test-collection.json');
+const environmentPath = path.join(fixturesDir, 'reqlab-test-environment.json');
 const reportPath = path.join(rootDir, 'test-validation-report.txt');
 const resultsPath = path.join(rootDir, 'qa-tests', 'collection-validation-results.json');
 
@@ -102,6 +103,13 @@ function validateSchema(req, status, headers, bodyText, bodyJson) {
 
   if (url.includes('/api/validate')) {
     if (!bodyJson || bodyJson.valid !== true) errors.push('Validate endpoint did not confirm valid=true');
+  }
+
+  if (url.includes('/api/graphql')) {
+    if (!bodyJson || typeof bodyJson.data !== 'object') errors.push('GraphQL response missing data object');
+    if (!bodyJson?.data?.user || typeof bodyJson.data.user.id !== 'string') {
+      errors.push('GraphQL response missing data.user.id');
+    }
   }
 
   if (req.method === 'HEAD' && url.includes('/api/users')) {
@@ -209,6 +217,9 @@ async function main() {
 
     let body = undefined;
     if (req.body?.type === 'JSON') {
+      requestHeaders.set('Content-Type', requestHeaders.get('Content-Type') ?? 'application/json');
+      body = resolveTemplate(req.body.content ?? '', runtimeVars);
+    } else if (req.body?.type === 'GRAPHQL') {
       requestHeaders.set('Content-Type', requestHeaders.get('Content-Type') ?? 'application/json');
       body = resolveTemplate(req.body.content ?? '', runtimeVars);
     } else if (req.body?.type === 'RAW_TEXT') {

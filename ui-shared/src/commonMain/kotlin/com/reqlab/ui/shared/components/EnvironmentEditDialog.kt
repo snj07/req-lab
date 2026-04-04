@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.EnvState
 import com.reqlab.ui.shared.state.MutableKeyValue
@@ -136,7 +137,7 @@ fun EnvironmentEditDialog(state: AppState) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Edit Environment",
+                        Strings.t("edit_environment"),
                         style = MaterialTheme.typography.titleLarge,
                         color = ReqLabColors.OnSurface,
                         fontWeight = FontWeight.SemiBold,
@@ -145,18 +146,18 @@ fun EnvironmentEditDialog(state: AppState) {
                 }
 
                 // ── Environment Name ─────────────────────────
-                Text("Name", style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant)
+                Text(Strings.t("name"), style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 EnvTextField(
                     value = workingName.value,
                     onValueChange = { workingName.value = it },
-                    placeholder = "Environment name",
+                    placeholder = Strings.t("environment_name"),
                     tag = "env-name-field",
                 )
                 Spacer(Modifier.height(20.dp))
 
                 // ── Variables table header ────────────────────
-                Text("Variables", style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant)
+                Text(Strings.variables, style = MaterialTheme.typography.labelMedium, color = ReqLabColors.OnSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
 
                 Row(
@@ -167,9 +168,9 @@ fun EnvironmentEditDialog(state: AppState) {
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                 ) {
                     Spacer(Modifier.width(32.dp))
-                    TableHeader("KEY",   Modifier.weight(1.0f))
-                    TableHeader("VALUE", Modifier.weight(1.0f))
-                    TableHeader("TYPE",  Modifier.width(90.dp))
+                    TableHeader(Strings.t("key_upper"),   Modifier.weight(1.0f))
+                    TableHeader(Strings.t("value_upper"), Modifier.weight(1.0f))
+                    TableHeader(Strings.t("type_upper"),  Modifier.width(90.dp))
                     Spacer(Modifier.width(36.dp))
                 }
 
@@ -201,12 +202,13 @@ fun EnvironmentEditDialog(state: AppState) {
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .clickable { workingVars.add(MutableKeyValue()) }
+                        .testTag("env-add-variable")
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, tint = ReqLabColors.Primary, modifier = Modifier.size(16.dp))
-                    Text("Add Variable", color = ReqLabColors.Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(Strings.addVariable, color = ReqLabColors.Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -227,7 +229,7 @@ fun EnvironmentEditDialog(state: AppState) {
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("env-cancel-button"),
                     ) {
-                        Text("Cancel", color = ReqLabColors.OnSurface, fontSize = 13.sp)
+                        Text(Strings.cancel, color = ReqLabColors.OnSurface, fontSize = 13.sp)
                     }
 
                     Spacer(Modifier.width(8.dp))
@@ -242,15 +244,18 @@ fun EnvironmentEditDialog(state: AppState) {
                                 env.name = workingName.value
                                 env.variables.clear()
                                 workingVars.forEach { v ->
-                                    env.variables.add(MutableKeyValue(v.key, v.value, v.enabled, v.secret))
+                                    if (v.key.isNotBlank() || v.value.isNotBlank()) {
+                                        env.variables.add(MutableKeyValue(v.key, v.value, v.enabled, v.secret))
+                                    }
                                 }
+                                state.pruneEmptyVariablesForEnvironment(envIndex)
                                 state.showEnvEditDialog = false
                                 state.log("✓ Environment '${env.name}' saved (${env.variables.size} variables)", com.reqlab.ui.shared.state.LogLevel.SUCCESS)
                             }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .testTag("env-save-button"),
                     ) {
-                        Text("Save", color = ReqLabColors.OnPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(Strings.save, color = ReqLabColors.OnPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -309,7 +314,7 @@ private fun EnvVariableRow(kv: MutableKeyValue, index: Int, onDelete: () -> Unit
         EnvTextField(
             value = kv.key,
             onValueChange = { kv.key = it },
-            placeholder = "variable_name",
+            placeholder = Strings.variableName,
             tag = "env-var-key-$index",
             modifier = Modifier.weight(1f),
         )
@@ -318,7 +323,7 @@ private fun EnvVariableRow(kv: MutableKeyValue, index: Int, onDelete: () -> Unit
         EnvTextField(
             value = kv.value,
             onValueChange = { kv.value = it },
-            placeholder = if (kv.secret) "••••••••" else "value",
+            placeholder = if (kv.secret) "••••••••" else Strings.value,
             masked = kv.secret && !showValue,
             tag = "env-var-value-$index",
             modifier = Modifier.weight(1f),
@@ -331,7 +336,7 @@ private fun EnvVariableRow(kv: MutableKeyValue, index: Int, onDelete: () -> Unit
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                if (kv.secret) "Secret" else "Normal",
+                if (kv.secret) Strings.t("secret") else Strings.t("normal"),
                 fontSize = 11.sp,
                 color = if (kv.secret) ReqLabColors.Tertiary else ReqLabColors.OnSurfaceDim,
                 modifier = Modifier
@@ -358,7 +363,7 @@ private fun EnvVariableRow(kv: MutableKeyValue, index: Int, onDelete: () -> Unit
 
         // Delete
         IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Delete, contentDescription = Strings.delete, tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }
 }

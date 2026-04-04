@@ -85,7 +85,7 @@ Pre-request scripts can mutate outgoing request values:
 
 ### Collections and Test Automation
 
-- Collection import/export using `reqlab-test-collection.json`
+- Collection import/export using `qa-tests/fixtures/reqlab-test-collection.json`
 - Request-level pre-request and test scripts in collection items
 - Automated collection validation via `qa-tests/collection-validator.mjs`
 - Deterministic sample-server endpoints for reproducible test runs

@@ -5,7 +5,7 @@
     "method": "GET",
     "url": "http://localhost:8080/",
     "status": 200,
-    "responseTimeMs": 84.39,
+    "responseTimeMs": 86.92,
     "responseSizeBytes": 64,
     "passed": true,
     "issues": []
@@ -16,7 +16,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/time",
     "status": 200,
-    "responseTimeMs": 30.01,
+    "responseTimeMs": 23.9,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -27,7 +27,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 3.84,
+    "responseTimeMs": 3.09,
     "responseSizeBytes": 376,
     "passed": true,
     "issues": []
@@ -38,7 +38,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/users",
     "status": 201,
-    "responseTimeMs": 12.63,
+    "responseTimeMs": 13.22,
     "responseSizeBytes": 156,
     "passed": true,
     "issues": []
@@ -49,7 +49,7 @@
     "method": "PUT",
     "url": "http://localhost:8080/api/users/1",
     "status": 200,
-    "responseTimeMs": 3.13,
+    "responseTimeMs": 3.84,
     "responseSizeBytes": 167,
     "passed": true,
     "issues": []
@@ -60,7 +60,7 @@
     "method": "PATCH",
     "url": "http://localhost:8080/api/users/2",
     "status": 200,
-    "responseTimeMs": 1.73,
+    "responseTimeMs": 1.71,
     "responseSizeBytes": 125,
     "passed": true,
     "issues": []
@@ -71,7 +71,7 @@
     "method": "DELETE",
     "url": "http://localhost:8080/api/users/3",
     "status": 200,
-    "responseTimeMs": 1.21,
+    "responseTimeMs": 1.44,
     "responseSizeBytes": 59,
     "passed": true,
     "issues": []
@@ -82,7 +82,7 @@
     "method": "OPTIONS",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 1.02,
+    "responseTimeMs": 1.06,
     "responseSizeBytes": 88,
     "passed": true,
     "issues": []
@@ -93,7 +93,7 @@
     "method": "HEAD",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 3.65,
+    "responseTimeMs": 3.09,
     "responseSizeBytes": 0,
     "passed": true,
     "issues": []
@@ -104,7 +104,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=test&page=1&limit=10",
     "status": 200,
-    "responseTimeMs": 1.82,
+    "responseTimeMs": 1.8,
     "responseSizeBytes": 340,
     "passed": true,
     "issues": []
@@ -115,7 +115,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=hello&page=2&limit=25",
     "status": 200,
-    "responseTimeMs": 2.83,
+    "responseTimeMs": 2.87,
     "responseSizeBytes": 344,
     "passed": true,
     "issues": []
@@ -126,7 +126,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search",
     "status": 200,
-    "responseTimeMs": 1.17,
+    "responseTimeMs": 0.95,
     "responseSizeBytes": 259,
     "passed": true,
     "issues": []
@@ -137,7 +137,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=&page=1&limit=5",
     "status": 200,
-    "responseTimeMs": 1.05,
+    "responseTimeMs": 1.12,
     "responseSizeBytes": 322,
     "passed": true,
     "issues": []
@@ -148,7 +148,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/search?q=kotlin&page=1&limit=3&sort=name&order=asc",
     "status": 200,
-    "responseTimeMs": 0.93,
+    "responseTimeMs": 1.15,
     "responseSizeBytes": 394,
     "passed": true,
     "issues": []
@@ -159,7 +159,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-headers",
     "status": 200,
-    "responseTimeMs": 1.73,
+    "responseTimeMs": 1.58,
     "responseSizeBytes": 316,
     "passed": true,
     "issues": []
@@ -170,7 +170,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-headers",
     "status": 200,
-    "responseTimeMs": 0.91,
+    "responseTimeMs": 0.93,
     "responseSizeBytes": 360,
     "passed": true,
     "issues": []
@@ -181,7 +181,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-headers",
     "status": 200,
-    "responseTimeMs": 0.87,
+    "responseTimeMs": 1.24,
     "responseSizeBytes": 404,
     "passed": true,
     "issues": []
@@ -192,7 +192,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/json",
     "status": 200,
-    "responseTimeMs": 1.17,
+    "responseTimeMs": 1.19,
     "responseSizeBytes": 166,
     "passed": true,
     "issues": []
@@ -203,7 +203,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/json",
     "status": 200,
-    "responseTimeMs": 1.14,
+    "responseTimeMs": 0.94,
     "responseSizeBytes": 209,
     "passed": true,
     "issues": []
@@ -214,7 +214,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/raw",
     "status": 200,
-    "responseTimeMs": 1.27,
+    "responseTimeMs": 1.35,
     "responseSizeBytes": 143,
     "passed": true,
     "issues": []
@@ -225,7 +225,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/form-data",
     "status": 200,
-    "responseTimeMs": 19.59,
+    "responseTimeMs": 20.75,
     "responseSizeBytes": 176,
     "passed": true,
     "issues": []
@@ -236,8 +236,19 @@
     "method": "POST",
     "url": "http://localhost:8080/api/urlencoded",
     "status": 200,
-    "responseTimeMs": 1.67,
+    "responseTimeMs": 2.02,
     "responseSizeBytes": 158,
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "POST GraphQL Query - user by id",
+    "path": "Body Types / GraphQL",
+    "method": "POST",
+    "url": "http://localhost:8080/api/graphql",
+    "status": 200,
+    "responseTimeMs": 2.15,
+    "responseSizeBytes": 291,
     "passed": true,
     "issues": []
   },
@@ -247,7 +258,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/upload",
     "status": 200,
-    "responseTimeMs": 1.03,
+    "responseTimeMs": 1.19,
     "responseSizeBytes": 168,
     "passed": true,
     "issues": []
@@ -258,7 +269,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/basic",
     "status": 200,
-    "responseTimeMs": 1.25,
+    "responseTimeMs": 1.32,
     "responseSizeBytes": 55,
     "passed": true,
     "issues": []
@@ -269,7 +280,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/basic",
     "status": 401,
-    "responseTimeMs": 0.85,
+    "responseTimeMs": 0.7,
     "responseSizeBytes": 91,
     "passed": true,
     "issues": []
@@ -280,7 +291,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/basic",
     "status": 401,
-    "responseTimeMs": 0.71,
+    "responseTimeMs": 0.66,
     "responseSizeBytes": 97,
     "passed": true,
     "issues": []
@@ -291,7 +302,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/bearer",
     "status": 200,
-    "responseTimeMs": 0.76,
+    "responseTimeMs": 0.74,
     "responseSizeBytes": 62,
     "passed": true,
     "issues": []
@@ -302,7 +313,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/bearer",
     "status": 401,
-    "responseTimeMs": 0.74,
+    "responseTimeMs": 0.88,
     "responseSizeBytes": 142,
     "passed": true,
     "issues": []
@@ -313,7 +324,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/bearer",
     "status": 401,
-    "responseTimeMs": 0.66,
+    "responseTimeMs": 0.76,
     "responseSizeBytes": 124,
     "passed": true,
     "issues": []
@@ -324,7 +335,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/apikey",
     "status": 200,
-    "responseTimeMs": 0.75,
+    "responseTimeMs": 0.87,
     "responseSizeBytes": 63,
     "passed": true,
     "issues": []
@@ -335,7 +346,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/apikey",
     "status": 401,
-    "responseTimeMs": 0.64,
+    "responseTimeMs": 0.82,
     "responseSizeBytes": 119,
     "passed": true,
     "issues": []
@@ -346,7 +357,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/auth/apikey",
     "status": 401,
-    "responseTimeMs": 0.56,
+    "responseTimeMs": 0.7,
     "responseSizeBytes": 110,
     "passed": true,
     "issues": []
@@ -357,7 +368,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/cookies",
     "status": 200,
-    "responseTimeMs": 3.07,
+    "responseTimeMs": 2.97,
     "responseSizeBytes": 91,
     "passed": true,
     "issues": []
@@ -368,7 +379,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/cookies",
     "status": 200,
-    "responseTimeMs": 1.93,
+    "responseTimeMs": 1.88,
     "responseSizeBytes": 157,
     "passed": true,
     "issues": []
@@ -379,7 +390,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/redirect",
     "status": 302,
-    "responseTimeMs": 0.6,
+    "responseTimeMs": 0.71,
     "responseSizeBytes": 0,
     "passed": true,
     "issues": []
@@ -390,7 +401,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/final",
     "status": 200,
-    "responseTimeMs": 0.65,
+    "responseTimeMs": 0.86,
     "responseSizeBytes": 100,
     "passed": true,
     "issues": []
@@ -401,7 +412,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/400",
     "status": 400,
-    "responseTimeMs": 1.65,
+    "responseTimeMs": 1.83,
     "responseSizeBytes": 114,
     "passed": true,
     "issues": []
@@ -412,7 +423,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/401",
     "status": 401,
-    "responseTimeMs": 0.74,
+    "responseTimeMs": 0.75,
     "responseSizeBytes": 115,
     "passed": true,
     "issues": []
@@ -423,7 +434,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/403",
     "status": 403,
-    "responseTimeMs": 0.68,
+    "responseTimeMs": 0.65,
     "responseSizeBytes": 112,
     "passed": true,
     "issues": []
@@ -434,7 +445,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/404",
     "status": 404,
-    "responseTimeMs": 1.01,
+    "responseTimeMs": 0.63,
     "responseSizeBytes": 112,
     "passed": true,
     "issues": []
@@ -445,7 +456,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/405",
     "status": 405,
-    "responseTimeMs": 0.81,
+    "responseTimeMs": 0.57,
     "responseSizeBytes": 121,
     "passed": true,
     "issues": []
@@ -456,7 +467,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/422",
     "status": 422,
-    "responseTimeMs": 0.66,
+    "responseTimeMs": 0.56,
     "responseSizeBytes": 123,
     "passed": true,
     "issues": []
@@ -467,7 +478,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/429",
     "status": 429,
-    "responseTimeMs": 0.57,
+    "responseTimeMs": 0.59,
     "responseSizeBytes": 120,
     "passed": true,
     "issues": []
@@ -478,7 +489,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/500",
     "status": 500,
-    "responseTimeMs": 0.54,
+    "responseTimeMs": 0.6,
     "responseSizeBytes": 124,
     "passed": true,
     "issues": []
@@ -489,7 +500,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/502",
     "status": 502,
-    "responseTimeMs": 0.53,
+    "responseTimeMs": 0.73,
     "responseSizeBytes": 114,
     "passed": true,
     "issues": []
@@ -500,7 +511,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/503",
     "status": 503,
-    "responseTimeMs": 1.12,
+    "responseTimeMs": 0.7,
     "responseSizeBytes": 122,
     "passed": true,
     "issues": []
@@ -511,7 +522,7 @@
     "method": "GET",
     "url": "ws://localhost:8080/ws",
     "status": 101,
-    "responseTimeMs": 24.72,
+    "responseTimeMs": 25.98,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -522,7 +533,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/slow",
     "status": 200,
-    "responseTimeMs": 3010.56,
+    "responseTimeMs": 3009.6,
     "responseSizeBytes": 84,
     "passed": true,
     "issues": []
@@ -533,7 +544,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/slow?ms=1000",
     "status": 200,
-    "responseTimeMs": 1007.9,
+    "responseTimeMs": 1010.53,
     "responseSizeBytes": 84,
     "passed": true,
     "issues": []
@@ -544,7 +555,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/slow?ms=100",
     "status": 200,
-    "responseTimeMs": 108.47,
+    "responseTimeMs": 110.99,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -555,7 +566,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/timestamp",
     "status": 200,
-    "responseTimeMs": 2.76,
+    "responseTimeMs": 3.1,
     "responseSizeBytes": 110,
     "passed": true,
     "issues": []
@@ -566,7 +577,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/token",
     "status": 200,
-    "responseTimeMs": 8.17,
+    "responseTimeMs": 6.31,
     "responseSizeBytes": 123,
     "passed": true,
     "issues": []
@@ -577,7 +588,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/protected",
     "status": 200,
-    "responseTimeMs": 1.61,
+    "responseTimeMs": 1.43,
     "responseSizeBytes": 169,
     "passed": true,
     "issues": []
@@ -588,7 +599,7 @@
     "method": "POST",
     "url": "http://localhost:8080/api/validate",
     "status": 200,
-    "responseTimeMs": 3.7,
+    "responseTimeMs": 3.71,
     "responseSizeBytes": 107,
     "passed": true,
     "issues": []
@@ -599,7 +610,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/echo-full",
     "status": 200,
-    "responseTimeMs": 1.83,
+    "responseTimeMs": 1.65,
     "responseSizeBytes": 504,
     "passed": true,
     "issues": []
@@ -610,7 +621,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 1.22,
+    "responseTimeMs": 1.25,
     "responseSizeBytes": 376,
     "passed": true,
     "issues": []
@@ -621,7 +632,7 @@
     "method": "GET",
     "url": "http://localhost:8080/headers?seed=1",
     "status": 200,
-    "responseTimeMs": 1.15,
+    "responseTimeMs": 1.4,
     "responseSizeBytes": 84,
     "passed": true,
     "issues": []
@@ -632,7 +643,7 @@
     "method": "GET",
     "url": "http://localhost:8080/headers",
     "status": 200,
-    "responseTimeMs": 0.88,
+    "responseTimeMs": 1.21,
     "responseSizeBytes": 98,
     "passed": true,
     "issues": []
@@ -643,7 +654,7 @@
     "method": "POST",
     "url": "http://localhost:8080/echo-body",
     "status": 200,
-    "responseTimeMs": 1.28,
+    "responseTimeMs": 1.4,
     "responseSizeBytes": 71,
     "passed": true,
     "issues": []
@@ -654,7 +665,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/user",
     "status": 200,
-    "responseTimeMs": 1.04,
+    "responseTimeMs": 0.86,
     "responseSizeBytes": 98,
     "passed": true,
     "issues": []
@@ -665,7 +676,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/array",
     "status": 200,
-    "responseTimeMs": 1.1,
+    "responseTimeMs": 1.14,
     "responseSizeBytes": 313,
     "passed": true,
     "issues": []
@@ -676,7 +687,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/object",
     "status": 200,
-    "responseTimeMs": 1.34,
+    "responseTimeMs": 1.37,
     "responseSizeBytes": 327,
     "passed": true,
     "issues": []
@@ -687,7 +698,7 @@
     "method": "GET",
     "url": "http://localhost:8080/response-time?ms=120",
     "status": 200,
-    "responseTimeMs": 127.37,
+    "responseTimeMs": 128.59,
     "responseSizeBytes": 38,
     "passed": true,
     "issues": []
@@ -698,7 +709,7 @@
     "method": "GET",
     "url": "http://localhost:8080/string-body",
     "status": 200,
-    "responseTimeMs": 1.75,
+    "responseTimeMs": 1.77,
     "responseSizeBytes": 49,
     "passed": true,
     "issues": []
@@ -709,7 +720,7 @@
     "method": "GET",
     "url": "http://localhost:8080/cookies",
     "status": 200,
-    "responseTimeMs": 2.6,
+    "responseTimeMs": 1.69,
     "responseSizeBytes": 83,
     "passed": true,
     "issues": []
@@ -720,7 +731,7 @@
     "method": "GET",
     "url": "http://localhost:8080/status/201",
     "status": 201,
-    "responseTimeMs": 1.56,
+    "responseTimeMs": 1.35,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -731,7 +742,7 @@
     "method": "GET",
     "url": "http://localhost:8080/status/200",
     "status": 200,
-    "responseTimeMs": 1.08,
+    "responseTimeMs": 1.38,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -742,7 +753,7 @@
     "method": "GET",
     "url": "http://localhost:8080/status/200",
     "status": 200,
-    "responseTimeMs": 1.11,
+    "responseTimeMs": 1.49,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -753,7 +764,7 @@
     "method": "GET",
     "url": "http://localhost:8080/status/201",
     "status": 201,
-    "responseTimeMs": 1.12,
+    "responseTimeMs": 1.37,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -764,7 +775,7 @@
     "method": "GET",
     "url": "http://localhost:8080/headers",
     "status": 200,
-    "responseTimeMs": 1.21,
+    "responseTimeMs": 1.17,
     "responseSizeBytes": 84,
     "passed": true,
     "issues": []
@@ -775,7 +786,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/user",
     "status": 200,
-    "responseTimeMs": 1.39,
+    "responseTimeMs": 1.18,
     "responseSizeBytes": 98,
     "passed": true,
     "issues": []
@@ -786,7 +797,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/object",
     "status": 200,
-    "responseTimeMs": 0.97,
+    "responseTimeMs": 1.18,
     "responseSizeBytes": 327,
     "passed": true,
     "issues": []
@@ -797,7 +808,7 @@
     "method": "GET",
     "url": "http://localhost:8080/string-body",
     "status": 200,
-    "responseTimeMs": 0.67,
+    "responseTimeMs": 0.99,
     "responseSizeBytes": 49,
     "passed": true,
     "issues": []
@@ -808,7 +819,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/users",
     "status": 200,
-    "responseTimeMs": 0.91,
+    "responseTimeMs": 1.06,
     "responseSizeBytes": 376,
     "passed": true,
     "issues": []
@@ -819,7 +830,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/400",
     "status": 400,
-    "responseTimeMs": 0.92,
+    "responseTimeMs": 1.16,
     "responseSizeBytes": 114,
     "passed": true,
     "issues": []
@@ -830,7 +841,7 @@
     "method": "GET",
     "url": "http://localhost:8080/api/error/500",
     "status": 500,
-    "responseTimeMs": 0.87,
+    "responseTimeMs": 0.88,
     "responseSizeBytes": 124,
     "passed": true,
     "issues": []
@@ -841,7 +852,7 @@
     "method": "GET",
     "url": "http://localhost:8080/response-time?ms=50",
     "status": 200,
-    "responseTimeMs": 52.53,
+    "responseTimeMs": 55.04,
     "responseSizeBytes": 37,
     "passed": true,
     "issues": []
@@ -852,7 +863,7 @@
     "method": "POST",
     "url": "http://localhost:8080/echo-body",
     "status": 200,
-    "responseTimeMs": 1.5,
+    "responseTimeMs": 1.22,
     "responseSizeBytes": 94,
     "passed": true,
     "issues": []
@@ -863,7 +874,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/user",
     "status": 200,
-    "responseTimeMs": 0.97,
+    "responseTimeMs": 0.85,
     "responseSizeBytes": 98,
     "passed": true,
     "issues": []
@@ -874,7 +885,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/user",
     "status": 200,
-    "responseTimeMs": 0.81,
+    "responseTimeMs": 0.78,
     "responseSizeBytes": 98,
     "passed": true,
     "issues": []
@@ -885,7 +896,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/object",
     "status": 200,
-    "responseTimeMs": 0.99,
+    "responseTimeMs": 1.24,
     "responseSizeBytes": 327,
     "passed": true,
     "issues": []
@@ -896,7 +907,7 @@
     "method": "GET",
     "url": "http://localhost:8080/status/200",
     "status": 200,
-    "responseTimeMs": 1.33,
+    "responseTimeMs": 0.83,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []
@@ -907,7 +918,7 @@
     "method": "GET",
     "url": "http://localhost:8080/json/user",
     "status": 200,
-    "responseTimeMs": 1.98,
+    "responseTimeMs": 0.83,
     "responseSizeBytes": 98,
     "passed": true,
     "issues": []
@@ -918,7 +929,7 @@
     "method": "GET",
     "url": "http://localhost:8080/status/200",
     "status": 200,
-    "responseTimeMs": 1.11,
+    "responseTimeMs": 0.92,
     "responseSizeBytes": 82,
     "passed": true,
     "issues": []

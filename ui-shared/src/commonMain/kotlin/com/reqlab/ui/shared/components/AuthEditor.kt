@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.core.model.AuthType
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestTabState
 import com.reqlab.ui.shared.theme.CodeFontFamily
@@ -96,22 +97,22 @@ fun AuthEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
         // Type-specific fields
         when (tab.authType) {
             AuthType.NONE -> {
-                Text("No authentication", color = ReqLabColors.OnSurfaceDim, style = MaterialTheme.typography.bodySmall)
+                Text(Strings.t("no_authentication"), color = ReqLabColors.OnSurfaceDim, style = MaterialTheme.typography.bodySmall)
             }
             AuthType.BASIC -> {
-                LabeledTextField("Username", tab.authUsername, state = state) { tab.authUsername = it; onDirty() }
+                LabeledTextField(Strings.t("username"), tab.authUsername, state = state) { tab.authUsername = it; onDirty() }
                 // H-4: Use a password field with show/hide toggle so the password is masked
-                PasswordLabeledTextField("Password", tab.authPassword, state = state) { tab.authPassword = it; onDirty() }
+                PasswordLabeledTextField(Strings.t("password"), tab.authPassword, state = state) { tab.authPassword = it; onDirty() }
             }
             AuthType.BEARER, AuthType.JWT -> {
-                LabeledTextField("Token", tab.authToken, state = state) { tab.authToken = it; onDirty() }
+                LabeledTextField(Strings.t("token"), tab.authToken, state = state) { tab.authToken = it; onDirty() }
             }
             AuthType.API_KEY -> {
-                LabeledTextField("Key",   tab.authApiKey, state = state)   { tab.authApiKey   = it; onDirty() }
-                LabeledTextField("Value", tab.authApiValue, state = state) { tab.authApiValue = it; onDirty() }
+                LabeledTextField(Strings.t("key_upper"), tab.authApiKey, state = state) { tab.authApiKey = it; onDirty() }
+                LabeledTextField(Strings.value, tab.authApiValue, state = state) { tab.authApiValue = it; onDirty() }
             }
             AuthType.OAUTH2 -> {
-                Text("OAuth 2.0 configuration (coming soon)", color = ReqLabColors.OnSurfaceDim, style = MaterialTheme.typography.bodySmall)
+                Text(Strings.t("oauth2_coming_soon"), color = ReqLabColors.OnSurfaceDim, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

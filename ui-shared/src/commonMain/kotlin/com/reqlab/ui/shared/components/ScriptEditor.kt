@@ -3,7 +3,11 @@ package com.reqlab.ui.shared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -13,11 +17,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
+
+private val ScriptEditorLineHeight = 20.sp
 
 /**
  * A simple multi-line script editor used for Pre-request and Test script tabs.
@@ -32,6 +40,22 @@ fun ScriptEditor(
     onScriptChanged: (String) -> Unit,
     title: String,
 ) {
+    val scriptEditorTextStyle = TextStyle(
+        color = ReqLabColors.OnSurface,
+        fontSize = 13.sp,
+        lineHeight = ScriptEditorLineHeight,
+        fontFamily = CodeFontFamily,
+    )
+    val scriptEditorLineNumberTextStyle = TextStyle(
+        color = ReqLabColors.OnSurfaceDim.copy(alpha = 0.55f),
+        fontSize = 13.sp,
+        lineHeight = ScriptEditorLineHeight,
+        fontFamily = CodeFontFamily,
+        textAlign = TextAlign.End,
+    )
+
+    val lines = (script.ifEmpty { "\n" }).lines()
+
     Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         Text(
             text = title,
@@ -39,31 +63,62 @@ fun ScriptEditor(
             color = ReqLabColors.OnSurfaceVariant,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        BasicTextField(
-            value = script,
-            onValueChange = onScriptChanged,
-            textStyle = TextStyle(color = ReqLabColors.OnSurface, fontSize = 13.sp, fontFamily = CodeFontFamily),
-            cursorBrush = SolidColor(ReqLabColors.Primary),
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(8.dp))
                 .background(ReqLabColors.SurfaceContainer)
-                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp))
-                .padding(12.dp),
-            decorationBox = { inner ->
-                if (script.isEmpty()) {
-                    val hint = if (title.contains("Pre-request", ignoreCase = true))
-                        PRE_REQUEST_HINT else TEST_HINT
-                    Text(
-                        text = hint,
-                        color = ReqLabColors.OnSurfaceDim,
-                        fontSize = 12.sp,
-                        fontFamily = CodeFontFamily,
-                    )
-                }
-                inner()
-            },
-        )
+                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(8.dp)),
+        ) {
+            BasicTextField(
+                value = buildString {
+                    lines.forEachIndexed { idx, _ ->
+                        append(idx + 1)
+                        if (idx < lines.lastIndex) append('\n')
+                    }
+                },
+                onValueChange = {},
+                readOnly = true,
+                textStyle = scriptEditorLineNumberTextStyle,
+                cursorBrush = SolidColor(androidx.compose.ui.graphics.Color.Transparent),
+                modifier = Modifier
+                    .width(48.dp)
+                    .fillMaxHeight()
+                    .padding(start = 4.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)
+                    .testTag("script-line-numbers"),
+            )
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(ReqLabColors.Border),
+            )
+
+            BasicTextField(
+                value = script,
+                onValueChange = onScriptChanged,
+                textStyle = scriptEditorTextStyle,
+                cursorBrush = SolidColor(ReqLabColors.Primary),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .testTag("script-editor"),
+                decorationBox = { inner ->
+                    if (script.isEmpty()) {
+                        val hint = if (title.contains("Pre-request", ignoreCase = true))
+                            PRE_REQUEST_HINT else TEST_HINT
+                        Text(
+                            text = hint,
+                            color = ReqLabColors.OnSurfaceDim,
+                            fontSize = 12.sp,
+                            fontFamily = CodeFontFamily,
+                        )
+                    }
+                    inner()
+                },
+            )
+        }
     }
 }
 
