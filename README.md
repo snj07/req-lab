@@ -9,7 +9,7 @@ ReqLab helps you build, send, inspect, and validate HTTP requests without accoun
 ## Core Features
 
 - HTTP request editor with methods, URL, params, headers, auth, and multiple body types.
-- Pre-request and test scripting with variable access and assertions.
+- Pre-request and post-request scripting with variable access and assertions.
 - Collections and history with multi-tab request workflow.
 - Environment and global variables with `{{variable}}` interpolation.
 - Response viewer plus request lifecycle logs and test results.
@@ -43,12 +43,34 @@ These shortcuts are mapped in `MainScreen` and reflect current behavior:
 | `⌘ + N` / `Ctrl + N` | Create a new request tab |
 | `⌘ + ,` / `Ctrl + ,` | Open Settings |
 
+## Importing from Postman
+
+ReqLab can import **Postman Collection v2 / v2.1** and **Postman Environment** files directly — no conversion step needed.
+
+- Open the sidebar and click the **Import** button in the Collections or Environments section.
+- Select any `.json` file exported from Postman; ReqLab detects the format automatically.
+- Both ReqLab-native and Postman formats are supported by the same button.
+
+**What is imported from a Postman collection:**
+- All folders and requests (arbitrarily nested)
+- URL, method, headers (disabled headers are skipped)
+- Request body (raw JSON, raw text, form-data, x-www-form-urlencoded, GraphQL, binary)
+- Authentication (bearer token, basic, API key; `noauth` → None)
+- Pre-request and post-request (test) scripts — `pm.*` calls are automatically rewritten to `reqlab.*`
+
+**Script conversion notes:**
+- `pm.test`, `pm.expect`, `pm.response`, `pm.request`, `pm.environment.*`, `pm.globals.*`, `pm.variables.*`, `pm.collectionVariables.*` → `reqlab.*` equivalents
+- `pm.sendRequest` is commented out (not supported in ReqLab)
+
+**What is imported from a Postman environment:**
+- Environment name and all enabled variables; disabled variables are skipped
+
 ## Scripting
 
-ReqLab supports JavaScript pre-request and test scripts through a configurable namespace (default: `reqlab`).
+ReqLab supports JavaScript pre-request and post-request scripts through a configurable namespace (default: `reqlab`).
 
 - Pre-request scripts: mutate request URL/headers/body/query/variables before dispatch.
-- Test scripts: assert status/body/headers/timing and persist extracted values.
+- Post-request scripts: assert status/body/headers/timing and persist extracted values.
 
 See the full guide: [docs/scripts.md](docs/scripts.md)
 

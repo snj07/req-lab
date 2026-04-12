@@ -77,6 +77,8 @@ kotlin {
             implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
             api(project(":core-model"))
+            api(project(":editor-core"))
+            api(project(":editor-ui"))
             api(project(":core-network"))
             api(project(":feature-requests"))
             implementation(project(":core-scripting"))

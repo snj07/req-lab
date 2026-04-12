@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<!--
+  ReqLab Code Editor — standalone CodeMirror 6 page.
+
+  This page is designed to be:
+    1. Opened directly in any modern browser (file:// or http://).
+    2. Loaded inside a JCEF (Java Chromium Embedded Framework) WebView via
+       DesktopEditorBridge.openInWebView().
+
+  ── JavaScript ↔ Kotlin bridge protocol ──────────────────────────────────────
+  The host application communicates with this page via postMessage:
+
+  HOST → PAGE  (set content / config)
+    { type: "SET_TEXT",     text: "...",  language: "json" }
+    { type: "SET_LANGUAGE", language: "xml" }           // "json"|"xml"|"html"|"js"|"text"
+    { type: "SET_READONLY", readonly: true }
+
+  PAGE → HOST  (signals)
+    { type: "TEXT_CHANGED", text: "..." }               // fired on every keystroke
+    { type: "ERROR_COUNT",  count: 2 }                  // fired after each lint pass
+    { type: "READY" }                                   // fired once editor is mounted
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ReqLab Editor</title>
+
+  <!--
+    Import map: pin every CodeMirror package to the same version so there
+    is only one @codemirror/state instance (required for instanceof checks).
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@codemirror/state":          "https://esm.sh/@codemirror/state@6.6.0",
+      "@codemirror/view":           "https://esm.sh/@codemirror/view@6.38.6?deps=@codemirror/state@6.6.0",
+      "@codemirror/language":       "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.6.0",
+      "@codemirror/commands":       "https://esm.sh/@codemirror/commands@6.8.0?deps=@codemirror/state@6.6.0",
+      "@codemirror/lint":           "https://esm.sh/@codemirror/lint@6.9.0?deps=@codemirror/state@6.6.0",
+      "@codemirror/autocomplete":   "https://esm.sh/@codemirror/autocomplete@6.18.6?deps=@codemirror/state@6.6.0",
+      "@codemirror/lang-json":      "https://esm.sh/@codemirror/lang-json@6.0.2?deps=@codemirror/state@6.6.0",
+      "@codemirror/lang-xml":       "https://esm.sh/@codemirror/lang-xml@6.1.0?deps=@codemirror/state@6.6.0",
+      "@codemirror/lang-html":      "https://esm.sh/@codemirror/lang-html@6.4.9?deps=@codemirror/state@6.6.0",
+      "@codemirror/lang-javascript":"https://esm.sh/@codemirror/lang-javascript@6.2.3?deps=@codemirror/state@6.6.0",
+      "@lezer/highlight":           "https://esm.sh/@lezer/highlight@1.2.1",
+      "@replit/codemirror-indentation-markers": "https://esm.sh/@replit/codemirror-indentation-markers@6.5.0?deps=@codemirror/state@6.6.0"
+    }
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 14px;
+    }
+
+    #editor-host {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* ── CodeMirror overrides ────────────────────────────────────────────── */
+    .cm-editor {
+      height: 100%;
+      background: #1e1e1e !important;
+      color: #d4d4d4;
+    }
+
+    .cm-editor.cm-focused { outline: none; }
+
+    .cm-scroller {
+      overflow: auto !important;
+      font-family: inherit !important;
+      font-size: inherit !important;
+      line-height: 1.5 !important;
+    }
+
+    /* Line numbers — pixel-perfect alignment */
+    .cm-gutters {
+      background: #1e1e1e !important;
+      border-right: 1px solid #3c3c3c !important;
+      color: #858585 !important;
+      user-select: none;
+      position: sticky;
+      left: 0;
+      z-index: 1;
+    }
+
+    .cm-lineNumbers .cm-gutterElement {
+      padding: 0 10px 0 6px !important;
+      min-width: 3em;
+      text-align: right;
+      line-height: 1.5;
+    }
+
+    .cm-content { padding: 0 4px !important; }
+    .cm-line    { padding: 0 !important; }
+
+    /* Fold gutter */
+    .cm-foldGutter {
+      width: 16px !important;
+      cursor: pointer;
+    }
+    .cm-foldGutter .cm-gutterElement {
+      text-align: center;
+      padding: 0 !important;
+    }
+
+    /* ── Inline error diagnostics ────────────────────────────────────────── */
+    .cm-diagnostic {
+      text-decoration: underline wavy !important;
+      text-decoration-thickness: 2px !important;
+    }
+    .cm-diagnostic-error   { text-decoration-color: #f44747 !important; }
+    .cm-diagnostic-warning { text-decoration-color: #ffcc00 !important; }
+
+    /* Lint gutter dot */
+    .cm-lintRange-error   { background-image: none !important;
+                             text-decoration: underline wavy #f44747; }
+    .cm-lintRange-warning { text-decoration: underline wavy #ffcc00; }
+
+    /* ── Indentation markers (dotted vertical guides) ────────────────────── */
+    .cm-indent-markers::before {
+      border-left: 1px dotted #555 !important;
+    }
+
+    /* ── Syntax theme (VS Dark) ─────────────────────────────────────────── */
+    .ͼ1.cm-editor .cm-activeLine           { background: #2a2d2e; }
+    .ͼ1.cm-editor .cm-activeLineGutter     { background: #2a2d2e; }
+    .ͼ1.cm-editor .cm-selectionBackground  { background: #264f78 !important; }
+    .ͼ1.cm-editor ::selection              { background: #264f78 !important; }
+
+    /* Bracket matching highlight */
+    .cm-matchingBracket { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div id="editor-host"></div>
+
+<script type="module">
+  // ── Imports ──────────────────────────────────────────────────────────────
+  import { EditorState, Compartment }           from '@codemirror/state';
+  import {
+    EditorView, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
+    drawSelection, rectangularSelection, foldGutter, keymap
+  }                                              from '@codemirror/view';
+  import {
+    indentOnInput, bracketMatching, foldKeymap, codeFolding, syntaxHighlighting,
+    defaultHighlightStyle
+  }                                              from '@codemirror/language';
+  import { defaultKeymap, historyKeymap, history, indentWithTab }
+                                                 from '@codemirror/commands';
+  import { linter, lintGutter }                 from '@codemirror/lint';
+  import { json }                               from '@codemirror/lang-json';
+  import { xml }                                from '@codemirror/lang-xml';
+  import { html }                               from '@codemirror/lang-html';
+  import { javascript }                         from '@codemirror/lang-javascript';
+  import { indentationMarkers }                 from '@replit/codemirror-indentation-markers';
+
+  // ── Validate helpers (mirrors EditorEngine.kt logic) ─────────────────────
+
+  function validateJson(text) {
+    try { JSON.parse(text); return []; }
+    catch (e) {
+      // Extract offset from error message when available (V8 format:
+      //  "Unexpected token ... at position N")
+      const pos = extractJsonErrorOffset(text, e.message);
+      return [{ from: pos, to: Math.min(pos + 1, text.length),
+                severity: 'error', message: e.message }];
+    }
+  }
+
+  function extractJsonErrorOffset(text, msg) {
+    const m = msg.match(/position (\d+)/);
+    if (m) return parseInt(m[1], 10);
+    // Fallback: scan for first obviously wrong character
+    return text.length > 0 ? text.length - 1 : 0;
+  }
+
+  /** Void elements that must not have a closing tag. */
+  const VOID = new Set([
+    'area','base','br','col','embed','hr','img','input',
+    'link','meta','param','source','track','wbr'
+  ]);
+
+  function validateXml(text, isHtml) {
+    const diagnostics = [];
+    const stack = [];
+    const tagRe = /<(\/?)([A-Za-z][A-Za-z0-9_:\-]*)(?:\s[^>]*?)?(\/?)>/g;
+    let match;
+    while ((match = tagRe.exec(text)) !== null) {
+      const isClosing   = match[1] === '/';
+      const name        = match[2].toLowerCase();
+      const isSelfClose = match[3] === '/' || VOID.has(name);
+      if (isSelfClose) continue;
+      const from = match.index;
+      const to   = from + match[0].length;
+      if (!isClosing) {
+        stack.push({ name, from, to });
+      } else {
+        if (stack.length === 0) {
+          diagnostics.push({ from, to,
+            severity: 'error',
+            message:  `Unexpected closing tag </${name}>` });
+        } else if (stack[stack.length - 1].name !== name) {
+          const open = stack[stack.length - 1];
+          diagnostics.push({ from, to,
+            severity: 'error',
+            message:  `Mismatched tag: expected </${open.name}> but got </${name}>` });
+          stack.pop();
+        } else {
+          stack.pop();
+        }
+      }
+    }
+    // Unclosed tags
+    for (const { name, from, to } of stack.reverse()) {
+      diagnostics.push({ from, to,
+        severity: isHtml ? 'warning' : 'error',
+        message:  `Unclosed tag <${name}>` });
+    }
+    return diagnostics;
+  }
+
+  function validateJs(text) {
+    // Basic brace-balance check
+    const diagnostics = [];
+    const stack = [];
+    let inStr = null, inSLC = false, inBC = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === '\n') { inSLC = false; continue; }
+      if (inSLC) continue;
+      if (!inBC && !inStr && c === '/' && text[i+1] === '*') { inBC = true; i++; continue; }
+      if (inBC  && c === '*' && text[i+1] === '/') { inBC = false; i++; continue; }
+      if (inBC) continue;
+      if (!inStr && c === '/' && text[i+1] === '/') { inSLC = true; continue; }
+      if (!inStr && (c === '"' || c === "'" || c === '`')) { inStr = c; continue; }
+      if (inStr && c === inStr && (i === 0 || text[i-1] !== '\\')) { inStr = null; continue; }
+      if (inStr) continue;
+      if ('{[('.includes(c)) { stack.push({ c, i }); }
+      else if ('}])'.includes(c)) {
+        const exp = { '}': '{', ']': '[', ')': '(' }[c];
+        if (!stack.length || stack[stack.length-1].c !== exp) {
+          diagnostics.push({ from: i, to: i+1, severity: 'error',
+            message: `Unexpected '${c}'` });
+        } else { stack.pop(); }
+      }
+    }
+    for (const { c, i } of stack.reverse()) {
+      const exp = { '{': '}', '[': ']', '(': ')' }[c];
+      diagnostics.push({ from: i, to: i+1, severity: 'error',
+        message: `Unclosed '${c}' — expected '${exp}'` });
+    }
+    return diagnostics;
+  }
+
+  // ── Compartments (allow hot-swapping language / readonly) ────────────────
+  const languageConf  = new Compartment();
+  const readonlyConf  = new Compartment();
+  const linterConf    = new Compartment();
+
+  // ── Language helpers ─────────────────────────────────────────────────────
+
+  function languageExtension(lang) {
+    switch (lang) {
+      case 'json': return json();
+      case 'xml':  return xml();
+      case 'html': return html();
+      case 'js':
+      case 'javascript': return javascript();
+      default:     return [];
+    }
+  }
+
+  function linterForLang(lang) {
+    let validate;
+    switch (lang) {
+      case 'json': validate = validateJson; break;
+      case 'xml':  validate = (t) => validateXml(t, false); break;
+      case 'html': validate = (t) => validateXml(t, true);  break;
+      case 'js':
+      case 'javascript': validate = validateJs; break;
+      default: validate = () => []; break;
+    }
+    return linter((view) => validate(view.state.doc.toString()), { delay: 300 });
+  }
+
+  // ── Visual theme (VS Code Dark) ──────────────────────────────────────────
+  const vscodeDark = EditorView.theme({
+    '&': { backgroundColor: '#1e1e1e', color: '#d4d4d4' },
+    '.cm-content': { caretColor: '#aeafad' },
+    '.cm-cursor': { borderLeftColor: '#aeafad' },
+    '&.cm-focused .cm-cursor': { borderLeftColor: '#aeafad' },
+    '.cm-scroller': { fontFamily: "'JetBrains Mono','Fira Code','Cascadia Code',monospace" },
+  }, { dark: true });
+
+  // ── Build the full extension set ─────────────────────────────────────────
+  function buildExtensions(lang, readOnly) {
+    return [
+      // History (undo/redo)
+      history(),
+      // Keymaps
+      keymap.of([
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...foldKeymap,
+        indentWithTab,
+      ]),
+      // Editor chrome
+      lineNumbers(),
+      highlightActiveLine(),
+      highlightActiveLineGutter(),
+      drawSelection(),
+      // Syntax highlighting with default theme
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      // Indentation & brackets
+      indentOnInput(),
+      bracketMatching(),
+      // Code folding (ASCII markers for broad font compatibility in JCEF)
+      foldGutter({
+        markerDOM: (open) => {
+          const m = document.createElement('span');
+          m.textContent = open ? 'v' : '>';
+          m.style.fontFamily = "'JetBrains Mono','Fira Code','Cascadia Code',monospace";
+          m.style.fontSize = '10px';
+          m.style.display = 'inline-block';
+          m.style.width = '10px';
+          m.style.textAlign = 'center';
+          return m;
+        }
+      }),
+      codeFolding(),
+      // Indentation guides (dotted vertical lines for nested blocks)
+      indentationMarkers(),
+      // Diagnostic gutter (red/amber dots on the left)
+      lintGutter(),
+      // Theme
+      vscodeDark,
+      // Dynamically swappable compartments
+      languageConf.of(languageExtension(lang)),
+      linterConf.of(linterForLang(lang)),
+      readonlyConf.of(EditorState.readOnly.of(readOnly)),
+    ];
+  }
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let currentLang = 'json';
+  let currentReadOnly = false;
+  let textChangedTimer = null;
+
+  // Debounce delay for TEXT_CHANGED notifications (ms).
+  // For large documents, sending the full text on every keystroke is
+  // prohibitively expensive (10 MB serialised & transmitted per character).
+  const TEXT_CHANGED_DEBOUNCE_MS = 300;
+
+  // ── Mount ────────────────────────────────────────────────────────────────
+  const host = document.getElementById('editor-host');
+
+  const view = new EditorView({
+    state: EditorState.create({
+      doc: '',
+      extensions: buildExtensions(currentLang, currentReadOnly),
+    }),
+    parent: host,
+    dispatch(tr, v) {
+      v.update([tr]);
+      if (tr.docChanged) {
+        // Debounce: only send TEXT_CHANGED after the user pauses typing.
+        clearTimeout(textChangedTimer);
+        textChangedTimer = setTimeout(() => {
+          notifyHost({ type: 'TEXT_CHANGED', text: v.state.doc.toString() });
+        }, TEXT_CHANGED_DEBOUNCE_MS);
+      }
+    },
+  });
+
+  // ── Host communication ───────────────────────────────────────────────────
+  function notifyHost(msg) {
+    // When embedded in JCEF, window.reqlab is injected by the Kotlin host:
+    //   window.reqlab = { postMessage: (json) => kotlinHandler.onMessage(json) }
+    if (window.reqlab && typeof window.reqlab.postMessage === 'function') {
+      window.reqlab.postMessage(JSON.stringify(msg));
+    }
+    // Also use standard postMessage for iframe / test use
+    try { window.parent.postMessage(msg, '*'); } catch (_) {}
+  }
+
+  // ── Message handler ───────────────────────────────────────────────────────
+  window.addEventListener('message', (event) => {
+    const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+    if (!msg || !msg.type) return;
+
+    switch (msg.type) {
+      case 'SET_TEXT': {
+        const lang = (msg.language || currentLang).toLowerCase();
+        if (lang !== currentLang) {
+          currentLang = lang;
+          view.dispatch({ effects: [
+            languageConf.reconfigure(languageExtension(lang)),
+            linterConf.reconfigure(linterForLang(lang)),
+          ]});
+        }
+        // Replace the whole document
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: msg.text || '' }
+        });
+        break;
+      }
+      case 'SET_LANGUAGE': {
+        const lang = (msg.language || 'text').toLowerCase();
+        currentLang = lang;
+        view.dispatch({ effects: [
+          languageConf.reconfigure(languageExtension(lang)),
+          linterConf.reconfigure(linterForLang(lang)),
+        ]});
+        break;
+      }
+      case 'SET_READONLY': {
+        currentReadOnly = !!msg.readonly;
+        view.dispatch({ effects: readonlyConf.reconfigure(
+          EditorState.readOnly.of(currentReadOnly)
+        )});
+        break;
+      }
+      case 'GET_TEXT': {
+        notifyHost({ type: 'TEXT_RESPONSE', text: view.state.doc.toString() });
+        break;
+      }
+    }
+  });
+
+  // ── Expose to JCEF host via window.editor ────────────────────────────────
+  window.editor = {
+    getText()          { return view.state.doc.toString(); },
+    setText(text, lang) {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'SET_TEXT', text, language: lang || currentLang }
+      }));
+    },
+    setReadOnly(flag) {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'SET_READONLY', readonly: flag }
+      }));
+    },
+    setLanguage(lang) {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'SET_LANGUAGE', language: lang }
+      }));
+    },
+  };
+
+  // ── Signal ready ──────────────────────────────────────────────────────────
+  notifyHost({ type: 'READY' });
+</script>
+</body>
+</html>

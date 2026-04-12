@@ -229,6 +229,60 @@
               }
             }
           ]
+        },
+        {
+          "name": "XML",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST XML Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/xml",
+              "body": {
+                "type": "XML",
+                "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<user>\n  <name>Alice</name>\n  <email>alice@example.com</email>\n</user>"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "application/xml" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "HTML",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST HTML Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/html",
+              "body": {
+                "type": "HTML",
+                "content": "<!DOCTYPE html>\n<html>\n  <body><h1>Hello</h1></body>\n</html>"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "text/html" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "JavaScript",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST JavaScript Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/javascript",
+              "body": {
+                "type": "JAVASCRIPT",
+                "content": "const data = { msg: 'hello' };\nconsole.log(data);"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "application/javascript" }
+              ]
+            }
+          ]
         }
       ],
       "requests": []

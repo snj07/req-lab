@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
@@ -162,15 +163,36 @@ class MainScreenUiTest {
 
         composeRule.onNodeWithText("Body").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("body-line-numbers").assertIsDisplayed()
+        composeRule.onNodeWithTag("body-editor-line-numbers").assertIsDisplayed()
 
         composeRule.onNodeWithText("Pre-request").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("script-line-numbers").assertIsDisplayed()
+        composeRule.onNodeWithTag("script-editor-line-numbers").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Tests").performClick()
+        composeRule.onNodeWithText("Post-request").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("script-line-numbers").assertIsDisplayed()
+        composeRule.onNodeWithTag("script-editor-line-numbers").assertIsDisplayed()
+    }
+
+    @Test
+    fun body_editor_shows_fold_controls_for_multiline_json() {
+        val state = AppState().apply {
+            activeTab?.bodyType = BodyType.JSON
+            activeTab?.bodyContent = """
+                {
+                  "message": "Hello from ReqLab",
+                  "timestamp": 1711234567,
+                  "items": [1, 2, 3]
+                }
+            """.trimIndent()
+        }
+
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithText("Body").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-fold-all").assertIsDisplayed()
+        composeRule.onNodeWithTag("body-editor-unfold-all").assertIsDisplayed()
     }
 
     @Test
@@ -199,7 +221,7 @@ class MainScreenUiTest {
         )
 
         composeRule.setContent { MainScreen(state) }
-        composeRule.onNodeWithTag("download-body-button").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-download-button").assertIsDisplayed()
     }
 
     @Test
@@ -257,5 +279,49 @@ class MainScreenUiTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { !firstTab.isDirty }
 
         composeRule.onAllNodesWithText("Untitled *").assertCountEquals(0)
+    }
+
+    @Test
+    fun raw_subtype_chip_shows_correct_label_when_non_raw_active() {
+        val state = AppState().apply {
+            activeTab?.bodyType = BodyType.XML
+            activeTab?.lastRawSubtype = BodyType.XML
+        }
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithText("Body").performClick()
+        composeRule.waitForIdle()
+
+        // Switch to Form
+        composeRule.onNodeWithText("Form").performClick()
+        composeRule.waitForIdle()
+
+        // RAW chip should show "Raw ▸ XML" not "Raw ▸ FORM_DATA"
+        composeRule.onNodeWithText("Raw ▸ XML").assertIsDisplayed()
+    }
+
+    @Test
+    fun raw_subtype_preserved_after_form_roundtrip() {
+        val state = AppState().apply {
+            val tab = activeTab ?: error("Need tab")
+            tab.bodyType = BodyType.XML
+            tab.lastRawSubtype = BodyType.XML
+            tab.bodyContent = "<root>test</root>"
+        }
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithText("Body").performClick()
+        composeRule.waitForIdle()
+        // Go to Form
+        composeRule.onNodeWithText("Form").performClick()
+        composeRule.waitForIdle()
+        // Go back to Raw
+        composeRule.onNodeWithText("Raw ▸ XML").performClick()
+        composeRule.waitForIdle()
+
+        // Verify body type was restored
+        val tab = state.activeTab ?: error("Need tab")
+        kotlin.test.assertEquals(BodyType.XML, tab.bodyType, "Body type should be restored to XML")
+        kotlin.test.assertEquals("<root>test</root>", tab.bodyContent, "XML content must survive Form roundtrip")
     }
 }

@@ -85,6 +85,11 @@ actual fun copyToClipboard(text: String) {
     jsClipboard(text.toJsString())
 }
 
+// On wasm/browser, clipboard read requires an async navigator.clipboard.readText() call
+// and cannot be done synchronously. The paste interception path is desktop-only;
+// return null here so the desktop-optimised code path is never reached on web.
+actual fun readFromClipboard(): String? = null
+
 actual fun formatTimestamp(epochMillis: Long): String {
     val instant = Instant.fromEpochMilliseconds(epochMillis)
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())

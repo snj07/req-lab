@@ -600,7 +600,7 @@ fun Application.module() {
         /**
          * POST /api/validate
          * Validates any JSON body and returns the field names found.
-         * Test scripts can assert: expect(response.json().valid).to.equal(true)
+         * Post-request scripts can assert: expect(response.json().valid).to.equal(true)
          */
         post("/api/validate") {
             val body = runCatching { call.receiveText() }.getOrDefault("")
@@ -634,7 +634,184 @@ fun Application.module() {
                 put("message", "Full echo – inspect headers/params injected by your pre-request script")
             })
         }
+        // ── Raw body type endpoints (XML / HTML / JavaScript) ─────────────
 
+        /**
+         * GET /api/xml-response
+         * Returns a well-formed XML document so the body editor can display it with
+         * XML syntax highlighting and code folding.
+         */
+        get("/api/xml-response") {
+            call.respondText(
+                """<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <book id="1">
+    <title>ReqLab Guide</title>
+    <author>ReqLab Team</author>
+    <year>2024</year>
+    <tags>
+      <tag>testing</tag>
+      <tag>api</tag>
+    </tags>
+  </book>
+  <book id="2">
+    <title>Kotlin Multiplatform</title>
+    <author>JetBrains</author>
+    <year>2023</year>
+    <tags>
+      <tag>kotlin</tag>
+      <tag>multiplatform</tag>
+    </tags>
+  </book>
+</catalog>""",
+                ContentType.Application.Xml,
+                HttpStatusCode.OK,
+            )
+        }
+
+        /**
+         * POST /api/xml
+         * Accepts an XML body. Echoes the received content-type and body length.
+         */
+        post("/api/xml") {
+            val body = call.receiveText()
+            call.respond(buildJsonObject {
+                put("message", "XML body received")
+                put("contentType", call.request.header("Content-Type") ?: "")
+                put("bodyLength", body.length)
+                put("body", body)
+            })
+        }
+
+        /**
+         * GET /api/html-response
+         * Returns an HTML page so the body editor can render it with HTML highlighting.
+         */
+        get("/api/html-response") {
+            call.respondText(
+                """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ReqLab Sample</title>
+</head>
+<body>
+  <h1>ReqLab Sample Server</h1>
+  <p>This HTML response is served from the <code>/api/html-response</code> endpoint.</p>
+  <ul>
+    <li>Syntax highlighting: ✓</li>
+    <li>Code folding: ✓</li>
+    <li>Preview mode: ✓</li>
+  </ul>
+</body>
+</html>""",
+                ContentType.Text.Html,
+                HttpStatusCode.OK,
+            )
+        }
+
+        /**
+         * POST /api/html
+         * Accepts an HTML body. Echoes content-type and length.
+         */
+        post("/api/html") {
+            val body = call.receiveText()
+            call.respond(buildJsonObject {
+                put("message", "HTML body received")
+                put("contentType", call.request.header("Content-Type") ?: "")
+                put("bodyLength", body.length)
+                put("body", body)
+            })
+        }
+
+        /**
+         * GET /api/js-response
+         * Returns a JavaScript snippet so the body editor highlights it as JS.
+         */
+        get("/api/js-response") {
+            call.respondText(
+                """// ReqLab sample JavaScript response
+const api = {
+  baseUrl: "http://localhost:8080",
+  version: "1.0",
+  endpoints: [
+    "/api/xml-response",
+    "/api/html-response",
+    "/api/js-response",
+  ],
+  ping: function() {
+    return fetch(this.baseUrl + "/");
+  },
+};
+
+module.exports = api;""",
+                ContentType.parse("application/javascript"),
+                HttpStatusCode.OK,
+            )
+        }
+
+        /**
+         * POST /api/javascript
+         * Accepts a JavaScript body. Echoes content-type and length.
+         */
+        post("/api/javascript") {
+            val body = call.receiveText()
+            call.respond(buildJsonObject {
+                put("message", "JavaScript body received")
+                put("contentType", call.request.header("Content-Type") ?: "")
+                put("bodyLength", body.length)
+                put("body", body)
+            })
+        }
+
+        /**
+         * GET /api/json-valid
+         * Returns a richly-nested JSON structure to exercise JSON highlighting and folding.
+         */
+        get("/api/json-valid") {
+            call.respond(buildJsonObject {
+                put("status", "ok")
+                put("version", "1.0")
+                put("metadata", buildJsonObject {
+                    put("server", "ReqLab Sample")
+                    put("generated", Instant.now().toString())
+                    put("tags", buildJsonArray { add("json"); add("valid"); add("nested") })
+                })
+                put("users", buildJsonArray {
+                    add(buildJsonObject {
+                        put("id", 1); put("name", "Alice"); put("active", true)
+                        put("roles", buildJsonArray { add("admin"); add("user") })
+                    })
+                    add(buildJsonObject {
+                        put("id", 2); put("name", "Bob"); put("active", false)
+                        put("roles", buildJsonArray { add("user") })
+                    })
+                })
+                put("config", buildJsonObject {
+                    put("maxConnections", 100)
+                    put("timeoutMs", 30000)
+                    put("features", buildJsonObject {
+                        put("xmlSupport", true)
+                        put("htmlSupport", true)
+                        put("jsSupport", true)
+                    })
+                })
+            })
+        }
+
+        /**
+         * GET /api/json-malformed
+         * Returns a response with Content-Type: application/json but an intentionally
+         * broken body – used to test the JSON error banner in the body editor.
+         */
+        get("/api/json-malformed") {
+            call.response.header("Content-Type", "application/json")
+            call.respondText(
+                """{ "status": "broken", "missing_close": [1, 2, 3""",
+                ContentType.Application.Json,
+                HttpStatusCode.OK,
+            )
+        }
         // ── WebSocket – echo ───────────────────────────────────────────────
         webSocket("/ws") {
             send(Frame.Text("Connected to ReqLab WebSocket echo server. Send any message and it will be echoed."))

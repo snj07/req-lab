@@ -80,6 +80,7 @@ import kotlinx.coroutines.withContext
  * The main composable shell shared between Desktop and Web.
  * Contains: toolbar, sidebar, request/response editors, bottom panel, and all dialog overlays.
  */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Composable
 fun MainScreen(state: AppState = remember { AppState() }) {
     val scope = rememberCoroutineScope()
@@ -129,7 +130,11 @@ fun MainScreen(state: AppState = remember { AppState() }) {
             val auth = if (t == null) "" else {
                 "${t.authType}|${t.authUsername}|${t.authPassword}|${t.authToken}|${t.authApiKey}|${t.authApiValue}"
             }
-            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|${t?.bodyContent}|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}"
+            // Use bodyContent length as fingerprint instead of the full content.
+            // Including the full body (potentially multi-MB) would create a huge
+            // string on the main thread on every keystroke and block the UI.
+            val bodyLen = t?.bodyContent?.length ?: 0
+            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|BL:$bodyLen|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}"
         }.drop(1)
             .collect {
                 if (state.settings.autoSaveRequests) {

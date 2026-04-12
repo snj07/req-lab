@@ -153,19 +153,19 @@ class ResponseBodyUiTest {
     @Test
     fun body_toolbar_displayed() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("response-body-toolbar").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-toolbar").assertIsDisplayed()
     }
 
     @Test
     fun format_toggle_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("format-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-format-toggle").assertIsDisplayed()
     }
 
     @Test
     fun word_wrap_toggle_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("word-wrap-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-word-wrap-toggle").assertIsDisplayed()
     }
 
     @Test
@@ -177,19 +177,19 @@ class ResponseBodyUiTest {
     @Test
     fun search_toggle_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("search-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-search-toggle").assertIsDisplayed()
     }
 
     @Test
     fun copy_body_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("copy-body-button").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-copy-button").assertIsDisplayed()
     }
 
     @Test
     fun download_body_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("download-body-button").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-download-button").assertIsDisplayed()
     }
 
     // ── Search bar ──
@@ -200,22 +200,22 @@ class ResponseBodyUiTest {
 
         composeRule.onNodeWithTag("response-search-bar").assertDoesNotExist()
 
-        composeRule.onNodeWithTag("search-toggle").performClick()
+        composeRule.onNodeWithTag("response-search-toggle").performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("response-search-bar").assertIsDisplayed()
-        composeRule.onNodeWithTag("search-input").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-search-input").assertIsDisplayed()
     }
 
     @Test
     fun search_bar_closes_on_second_toggle() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
 
-        composeRule.onNodeWithTag("search-toggle").performClick()
+        composeRule.onNodeWithTag("response-search-toggle").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("response-search-bar").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("search-toggle").performClick()
+        composeRule.onNodeWithTag("response-search-toggle").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("response-search-bar").assertDoesNotExist()
     }
@@ -224,10 +224,10 @@ class ResponseBodyUiTest {
     fun search_shows_match_count() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
 
-        composeRule.onNodeWithTag("search-toggle").performClick()
+        composeRule.onNodeWithTag("response-search-toggle").performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("search-input").performTextInput("id")
+        composeRule.onNodeWithTag("response-search-input").performTextInput("id")
         composeRule.waitForIdle()
 
         // Should show match count (e.g., "1/2" for 2 occurrences of "id" in the JSON)
@@ -240,7 +240,7 @@ class ResponseBodyUiTest {
     @Test
     fun response_body_view_has_line_numbers() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
-        composeRule.onNodeWithTag("response-body").assertIsDisplayed()
+        composeRule.onNodeWithTag("response-input", useUnmergedTree = true).assertIsDisplayed()
         // Line number "1" should be visible (first line)
         composeRule.onNodeWithText("1", useUnmergedTree = true).assertExists()
     }

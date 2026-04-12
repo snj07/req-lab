@@ -161,6 +161,46 @@ class ApiClientE2ETest {
     }
 
     @Test
+    fun supports_xml_html_and_javascript_body_types() = runTest {
+        val client = KtorApiClient(retryPolicy = RetryPolicy(maxAttempts = 1))
+
+        val xmlEvents = client.execute(
+            requestOf(
+                method = HttpMethodType.POST,
+                url = "$baseUrl/echo-xml",
+                body = RequestBody(BodyType.XML, "<root><msg>hello</msg></root>")
+            )
+        ).toList()
+
+        val htmlEvents = client.execute(
+            requestOf(
+                method = HttpMethodType.POST,
+                url = "$baseUrl/echo-html",
+                body = RequestBody(BodyType.HTML, "<html><body><h1>Test</h1></body></html>")
+            )
+        ).toList()
+
+        val jsEvents = client.execute(
+            requestOf(
+                method = HttpMethodType.POST,
+                url = "$baseUrl/echo-js",
+                body = RequestBody(BodyType.JAVASCRIPT, "console.log('hello');")
+            )
+        ).toList()
+
+        assertSuccessStatus(xmlEvents, 200)
+        assertSuccessStatus(htmlEvents, 200)
+        assertSuccessStatus(jsEvents, 200)
+
+        // Verify the body was echoed back
+        val xmlSuccess = xmlEvents.filterIsInstance<NetworkEvent.Success>().first()
+        assertTrue(xmlSuccess.response.bodyText.contains("hello"), "XML body should be echoed back")
+
+        val htmlSuccess = htmlEvents.filterIsInstance<NetworkEvent.Success>().first()
+        assertTrue(htmlSuccess.response.bodyText.contains("Test"), "HTML body should be echoed back")
+    }
+
+    @Test
     fun supports_basic_bearer_and_api_key_authentication() = runTest {
         val client = KtorApiClient(retryPolicy = RetryPolicy(maxAttempts = 1))
 

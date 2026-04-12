@@ -27,12 +27,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestEditorTab
 import com.reqlab.ui.shared.state.RequestTabState
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.platform.copyToClipboard as platformCopyToClipboard
+import kotlinx.serialization.ExperimentalSerializationApi
 
 /**
  * Top-level composable for a single request tab's editor area.
@@ -43,8 +45,9 @@ import com.reqlab.ui.shared.platform.copyToClipboard as platformCopyToClipboard
  *  - [KeyValueEditor]  — params and headers tables      (KeyValueEditor.kt)
  *  - [BodyEditor]      — body type + content            (BodyEditor.kt)
  *  - [AuthEditor]      — auth type + credentials        (AuthEditor.kt)
- *  - [ScriptEditor]    — pre-request / test scripts     (ScriptEditor.kt)
+ *  - [ScriptEditor]    — pre-request / post-request scripts (ScriptEditor.kt)
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun RequestEditor(
     tab: RequestTabState,
@@ -109,7 +112,7 @@ fun RequestEditor(
                 RequestEditorTab.TESTS       -> ScriptEditor(
                     script          = tab.testScript,
                     onScriptChanged = { tab.testScript = it; markDirty() },
-                    title           = "Tests",
+                    title           = "Post-request Script",
                 )
             }
         }
@@ -207,6 +210,14 @@ private fun EditorTabBar(
         ) {
             RequestEditorTab.entries.forEach { tab ->
                 val selected = tab == selectedTab
+                val label = when (tab) {
+                    RequestEditorTab.PARAMS -> Strings.params
+                    RequestEditorTab.HEADERS -> Strings.headers
+                    RequestEditorTab.BODY -> Strings.body
+                    RequestEditorTab.AUTH -> Strings.auth
+                    RequestEditorTab.PRE_REQUEST -> Strings.preRequest
+                    RequestEditorTab.TESTS -> Strings.tests
+                }
                 Tab(
                     selected = selected,
                     onClick = { onTabSelected(tab) },
@@ -222,7 +233,7 @@ private fun EditorTabBar(
                                 tint = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim)
                         }
                         Text(
-                            tab.label,
+                            label,
                             fontSize = 12.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceVariant,

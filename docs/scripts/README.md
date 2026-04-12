@@ -5,8 +5,8 @@ ReqLab scripts use a namespaced API under the `reqlab` prefix (configurable in *
 ## Where scripts run
 
 - **Pre-request script** — runs before the HTTP request is built and sent.
-- **Test script** — runs after the response is received.
-- Scripts apply to HTTP requests. WebSocket requests currently do not execute pre-request or test scripts.
+- **Post-request script** — runs after the response is received.
+- Scripts apply to HTTP requests. WebSocket requests currently do not execute pre-request or post-request scripts.
 
 ## Namespace prefix
 
@@ -42,7 +42,7 @@ The global (prefix-free) API is also supported for backward compatibility.
 
 - Scripts execute in a sandboxed JavaScript runtime with the configured namespace prefix.
 - Pre-request scripts can mutate request URL, method, body, headers, and query params before send.
-- Test scripts can read response code/status/time/size/body/headers and register multiple named tests.
+- Post-request scripts can read response code/status/time/size/body/headers and register multiple named tests.
 - `environment`, `globals`, `collectionVariables`, and `variables` scopes are available inside scripts.
 - The engine executes JavaScript synchronously for request flow; asynchronous callbacks are not awaited before request dispatch.
 
@@ -57,7 +57,7 @@ reqlab.request.setBody('{"from":"pre-request"}')
 reqlab.console.log("Prepared request", reqlab.request.method, reqlab.request.url)
 ```
 
-## Example — test script
+## Example — post-request script
 
 ```javascript
 reqlab.test("Status is 200", function() {

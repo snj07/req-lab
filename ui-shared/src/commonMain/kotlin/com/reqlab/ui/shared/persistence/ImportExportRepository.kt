@@ -2,7 +2,9 @@ package com.reqlab.ui.shared.persistence
 
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.ui.shared.state.FormDataEntryState
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
 import androidx.compose.runtime.mutableStateListOf
@@ -63,6 +65,8 @@ data class RequestDto(
     val userHeaders: List<Pair<String, String>> = emptyList(),
     val bodyType: String? = null,
     val bodyContent: String? = null,
+    val formDataEntries: List<FormDataEntryState> = emptyList(),
+    val urlencodedEntries: List<FormDataEntryState> = emptyList(),
     val authType: String? = null,
     val authUsername: String? = null,
     val authPassword: String? = null,
@@ -108,9 +112,16 @@ object ImportExportRepository {
 
     fun importCollectionFromString(state: AppState, rawJson: String): String {
         val root = parseJsonString(rawJson)
-        validateType(root, "reqLabCollection")
-        validateVersion(root)
-        val dto = collectionDtoFromJson(root)
+        val dto = when {
+            root["type"]?.jsonPrimitive?.contentOrNull == "reqLabCollection" -> {
+                validateVersion(root)
+                collectionDtoFromJson(root)
+            }
+            PostmanImporter.isPostmanCollection(root) -> PostmanImporter.importCollection(root)
+            else -> throw ImportExportException(
+                "Unrecognized collection format. Expected a ReqLab or Postman v2/v2.1 collection."
+            )
+        }
         val existingNames = state.collections.map { it.name }.toMutableSet()
         val uniqueName = ImportExportNaming.generateUniqueCollectionName(dto.name, existingNames)
         state.collections.add(collectionDtoToNode(dto, uniqueName))
@@ -124,8 +135,13 @@ object ImportExportRepository {
 
     fun importEnvironmentFromString(state: AppState, rawJson: String): String {
         val root = parseJsonString(rawJson)
-        validateType(root, "reqLabEnvironment")
-        val dto = environmentDtoFromJson(root)
+        val dto = when {
+            root["type"]?.jsonPrimitive?.contentOrNull == "reqLabEnvironment" -> environmentDtoFromJson(root)
+            PostmanImporter.isPostmanEnvironment(root) -> PostmanImporter.importEnvironment(root)
+            else -> throw ImportExportException(
+                "Unrecognized environment format. Expected a ReqLab or Postman environment."
+            )
+        }
         val existing = state.environments.map { it.name }.toSet()
         val uniqueName = ImportExportNaming.generateUniqueEnvironmentName(dto.name, existing)
         state.environments.add(environmentDtoToState(dto, uniqueName))
@@ -321,6 +337,31 @@ object ImportExportRepository {
                 put("body", buildJsonObject {
                     put("type", bt.name)
                     node.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                    if (node.formDataEntries.isNotEmpty()) {
+                        put("formDataEntries", buildJsonArray {
+                            node.formDataEntries.forEach { e ->
+                                add(buildJsonObject {
+                                    put("key", e.key)
+                                    put("type", e.type.name)
+                                    put("value", e.value)
+                                    put("description", e.description)
+                                    put("enabled", e.enabled)
+                                })
+                            }
+                        })
+                    }
+                    if (node.urlencodedEntries.isNotEmpty()) {
+                        put("urlencodedEntries", buildJsonArray {
+                            node.urlencodedEntries.forEach { e ->
+                                add(buildJsonObject {
+                                    put("key", e.key)
+                                    put("value", e.value)
+                                    put("description", e.description)
+                                    put("enabled", e.enabled)
+                                })
+                            }
+                        })
+                    }
                 })
             }
             node.authType?.let { at ->
@@ -411,6 +452,31 @@ object ImportExportRepository {
                 put("body", buildJsonObject {
                     put("type", bt)
                     dto.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                    if (dto.formDataEntries.isNotEmpty()) {
+                        put("formDataEntries", buildJsonArray {
+                            dto.formDataEntries.forEach { e ->
+                                add(buildJsonObject {
+                                    put("key", e.key)
+                                    put("type", e.type.name)
+                                    put("value", e.value)
+                                    put("description", e.description)
+                                    put("enabled", e.enabled)
+                                })
+                            }
+                        })
+                    }
+                    if (dto.urlencodedEntries.isNotEmpty()) {
+                        put("urlencodedEntries", buildJsonArray {
+                            dto.urlencodedEntries.forEach { e ->
+                                add(buildJsonObject {
+                                    put("key", e.key)
+                                    put("value", e.value)
+                                    put("description", e.description)
+                                    put("enabled", e.enabled)
+                                })
+                            }
+                        })
+                    }
                 })
             }
             dto.authType?.let { at ->
@@ -489,6 +555,8 @@ object ImportExportRepository {
         val bodyObj = root["body"]?.jsonObject
         val bodyType = bodyObj?.get("type")?.jsonPrimitive?.contentOrNull
         val bodyContent = bodyObj?.get("content")?.jsonPrimitive?.contentOrNull
+        val formDataEntries = bodyObj?.get("formDataEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
+        val urlencodedEntries = bodyObj?.get("urlencodedEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
         val authObj = root["auth"]?.jsonObject
         val authType = authObj?.get("type")?.jsonPrimitive?.contentOrNull
         val authUsername = authObj?.get("username")?.jsonPrimitive?.contentOrNull
@@ -501,10 +569,23 @@ object ImportExportRepository {
             preRequestScript = preRequestScript, testScript = testScript,
             userHeaders = userHeaders,
             bodyType = bodyType, bodyContent = bodyContent,
+            formDataEntries = formDataEntries,
+            urlencodedEntries = urlencodedEntries,
             authType = authType,
             authUsername = authUsername, authPassword = authPassword,
             authToken = authToken, authApiKey = authApiKey, authApiValue = authApiValue,
         )
+    }
+
+    private fun formEntryFromJson(obj: JsonObject): FormDataEntryState {
+        val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: ""
+        val type = obj["type"]?.jsonPrimitive?.contentOrNull
+            ?.let { runCatching { FormEntryType.valueOf(it.uppercase()) }.getOrNull() }
+            ?: FormEntryType.TEXT
+        val value = obj["value"]?.jsonPrimitive?.contentOrNull ?: ""
+        val description = obj["description"]?.jsonPrimitive?.contentOrNull ?: ""
+        val enabled = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true
+        return FormDataEntryState(key = key, type = type, value = value, description = description, enabled = enabled)
     }
 
     private fun environmentDtoFromJson(root: JsonObject): ReqLabEnvironmentDto {
@@ -555,6 +636,8 @@ object ImportExportRepository {
             userHeaders = dto.userHeaders,
             bodyType = bodyType,
             bodyContent = dto.bodyContent,
+            formDataEntries = dto.formDataEntries,
+            urlencodedEntries = dto.urlencodedEntries,
             authType = authType,
             authUsername = dto.authUsername,
             authPassword = dto.authPassword,

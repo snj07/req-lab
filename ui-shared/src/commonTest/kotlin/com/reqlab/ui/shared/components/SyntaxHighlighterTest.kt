@@ -1,17 +1,22 @@
 package com.reqlab.ui.shared.components
 
 import com.reqlab.ui.shared.components.SyntaxLanguage
+import com.reqlab.ui.shared.components.autoFormat
 import com.reqlab.ui.shared.components.detectLanguage
 import com.reqlab.ui.shared.components.findSearchMatches
 import com.reqlab.ui.shared.components.formatXml
 import com.reqlab.ui.shared.components.fileExtensionForContentType
+import com.reqlab.ui.shared.components.highlightJavaScript
 import com.reqlab.ui.shared.components.highlightJson
 import com.reqlab.ui.shared.components.highlightXml
 import com.reqlab.ui.shared.components.highlightGraphql
 import com.reqlab.ui.shared.components.highlightLine
 import com.reqlab.ui.shared.components.highlightText
+import com.reqlab.ui.shared.components.tryPrettyPrint
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -22,6 +27,7 @@ import kotlin.test.assertTrue
  * - XML formatter
  * - Content-type → file-extension mapping
  */
+@OptIn(ExperimentalSerializationApi::class)
 class SyntaxHighlighterTest {
 
     // ── detectLanguage ──────────────────────────────────────────
@@ -255,5 +261,179 @@ mutation CreateUser(${'$'}input: UserInput!) {
     @Test
     fun fileExtension_null() {
         assertEquals("txt", fileExtensionForContentType(null))
+    }
+
+    // ── detectLanguage – JavaScript ─────────────────────────────
+
+    @Test
+    fun detectLanguage_javascript_content_type() {
+        assertEquals(SyntaxLanguage.JAVASCRIPT, detectLanguage("application/javascript"))
+        assertEquals(SyntaxLanguage.JAVASCRIPT, detectLanguage("text/javascript"))
+        assertEquals(SyntaxLanguage.JAVASCRIPT, detectLanguage("application/javascript; charset=utf-8"))
+    }
+
+    @Test
+    fun detectLanguage_ecmascript_content_type() {
+        assertEquals(SyntaxLanguage.JAVASCRIPT, detectLanguage("application/ecmascript"))
+    }
+
+    // ── highlightJavaScript ─────────────────────────────────────
+
+    @Test
+    fun highlightJavaScript_preserves_text() {
+        val input = "const x = 42;"
+        val result = highlightJavaScript(input)
+        assertEquals(input, result.text)
+    }
+
+    @Test
+    fun highlightJavaScript_keywords_get_spans() {
+        val input = "function test() { return true; }"
+        val result = highlightJavaScript(input)
+        assertTrue(result.spanStyles.isNotEmpty(), "Expected spans for JS keywords")
+    }
+
+    @Test
+    fun highlightJavaScript_multiline() {
+        val input = """
+async function fetchData() {
+    const response = await fetch('/api');
+    return response.json();
+}
+        """.trimIndent()
+        val result = highlightJavaScript(input)
+        assertEquals(input, result.text)
+        assertTrue(result.spanStyles.isNotEmpty())
+    }
+
+    @Test
+    fun highlightJavaScript_comments() {
+        val input = """
+// single line
+/* multi
+   line */
+const a = 1;
+        """.trimIndent()
+        val result = highlightJavaScript(input)
+        assertEquals(input, result.text)
+    }
+
+    @Test
+    fun highlightJavaScript_strings() {
+        val input = """const s = "hello"; const c = 'world'; const t = `tmpl`;"""
+        val result = highlightJavaScript(input)
+        assertEquals(input, result.text)
+    }
+
+    @Test
+    fun highlightJavaScript_builtins() {
+        val input = "console.log(JSON.stringify(Math.PI));"
+        val result = highlightJavaScript(input)
+        assertEquals(input, result.text)
+        assertTrue(result.spanStyles.isNotEmpty())
+    }
+
+    @Test
+    fun highlightJavaScript_empty() {
+        val result = highlightJavaScript("")
+        assertEquals("", result.text)
+    }
+
+    @Test
+    fun highlightJavaScript_numbers() {
+        val input = "let x = 42; let y = 3.14; let z = -1;"
+        val result = highlightJavaScript(input)
+        assertEquals(input, result.text)
+    }
+
+    // ── highlightLine / highlightText – JavaScript ──────────────
+
+    @Test
+    fun highlightLine_javascript_delegates_correctly() {
+        val input = "const x = 1;"
+        val result = highlightLine(input, SyntaxLanguage.JAVASCRIPT)
+        assertEquals(input, result.text)
+        assertTrue(result.spanStyles.isNotEmpty())
+    }
+
+    @Test
+    fun highlightText_javascript_delegates_correctly() {
+        val input = "function foo() {}"
+        val viaText = highlightText(input, SyntaxLanguage.JAVASCRIPT)
+        val viaDirect = highlightJavaScript(input)
+        assertEquals(viaDirect.text, viaText.text)
+    }
+
+    // ── autoFormat ──────────────────────────────────────────────
+
+    @Test
+    fun autoFormat_json_pretty_prints() {
+        val input = """{"a":1,"b":"hello"}"""
+        val result = autoFormat(input, SyntaxLanguage.JSON)
+        // Should be multi-line after formatting
+        assertTrue(result.lines().size > 1, "Expected pretty-printed JSON")
+        assertTrue(result.contains("\"a\""))
+        assertTrue(result.contains("\"hello\""))
+    }
+
+    @Test
+    fun autoFormat_json_invalid_returns_raw() {
+        val input = "not valid json {"
+        val result = autoFormat(input, SyntaxLanguage.JSON)
+        assertEquals(input, result, "Invalid JSON should return raw text")
+    }
+
+    @Test
+    fun autoFormat_xml_indents() {
+        val input = "<root><child>text</child></root>"
+        val result = autoFormat(input, SyntaxLanguage.XML)
+        assertTrue(result.lines().size > 1, "Expected indented XML")
+    }
+
+    @Test
+    fun autoFormat_html_indents() {
+        val input = "<div><span>text</span></div>"
+        val result = autoFormat(input, SyntaxLanguage.HTML)
+        assertTrue(result.lines().size > 1, "Expected indented HTML")
+    }
+
+    @Test
+    fun autoFormat_javascript_returns_raw() {
+        val input = "function foo() { return 1; }"
+        val result = autoFormat(input, SyntaxLanguage.JAVASCRIPT)
+        assertEquals(input, result, "JS autoformat should return raw text (no formatter)")
+    }
+
+    @Test
+    fun autoFormat_plain_returns_raw() {
+        val input = "just some text"
+        val result = autoFormat(input, SyntaxLanguage.PLAIN)
+        assertEquals(input, result)
+    }
+
+    // ── tryPrettyPrint ──────────────────────────────────────────
+
+    @Test
+    fun tryPrettyPrint_valid_json() {
+        val input = """{"key":"value","num":42}"""
+        val result = tryPrettyPrint(input)
+        assertNotEquals(input, result, "Pretty-printed JSON should differ from compact form")
+        assertTrue(result.contains("\"key\""))
+        assertTrue(result.contains("42"))
+    }
+
+    @Test
+    fun tryPrettyPrint_invalid_json_falls_back() {
+        val input = "not json"
+        val result = tryPrettyPrint(input)
+        assertEquals(input, result)
+    }
+
+    // ── fileExtensionForContentType – JavaScript ────────────────
+
+    @Test
+    fun fileExtension_javascript() {
+        assertEquals("js", fileExtensionForContentType("application/javascript"))
+        assertEquals("js", fileExtensionForContentType("text/javascript"))
     }
 }

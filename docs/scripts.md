@@ -5,7 +5,7 @@ This document is the full scripting reference for ReqLab’s built-in JavaScript
 ReqLab supports two script execution points:
 
 - **Pre-request script**: runs before request dispatch.
-- **Test script**: runs after response is received.
+- **Post-request script**: runs after response is received.
 
 Both use the same API surface.
 
@@ -43,7 +43,7 @@ The runtime also exposes unprefixed globals for compatibility:
 ### Scope limitation
 
 - Scripts currently apply to **HTTP requests**.
-- WebSocket requests do not execute pre-request/test scripts.
+- WebSocket requests do not execute pre-request/post-request scripts.
 
 ---
 
@@ -279,7 +279,7 @@ reqlab.request.headers.upsert("Authorization", token ? "Bearer " + token : "")
 
 ---
 
-## 4) Test script patterns
+## 4) Post-request script patterns
 
 ## 4.1 Status/body assertions
 
@@ -322,7 +322,7 @@ reqlab.test("token exists", function () {
 
 - A thrown top-level script error sets script `error` and marks execution failed.
 - `reqlab.test(...)` captures failures per test block; mixed pass/fail is supported.
-- Overall test script success is false if any assertion fails.
+- Overall post-request script success is false if any assertion fails.
 
 Recommended pattern:
 

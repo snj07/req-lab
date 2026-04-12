@@ -14,6 +14,8 @@ ReqLab uses a layered validation strategy:
 - `qa-tests`: JVM integration and E2E tests
 - `core-network`: protocol behavior and request mapping tests
 - `core-storage`: repository and persistence behavior tests
+- `core-model`: model serialization and data structure tests
+- `ui-shared`: syntax highlighter, code folding, Postman import, i18n, and app state tests
 - `ui-desktop`: Compose Desktop UI automation smoke tests
 
 ## Dummy Server Endpoints
@@ -53,6 +55,7 @@ Simulation parameters used by current endpoints:
 ```bash
 ./gradlew :core-network:allTests
 ./gradlew :core-storage:allTests
+./gradlew :ui-shared:desktopTest
 ./gradlew :qa-tests:jvmTest
 ./gradlew :ui-desktop:desktopTest
 ```
@@ -81,6 +84,9 @@ Implemented and tested:
 - WebSocket connect/send/receive/disconnect
 - Storage behavior via in-memory repository implementations
 - Desktop shell rendering smoke tests (layout panels/labels)
+- Syntax highlighting: JSON, XML/HTML, GraphQL, JavaScript token colorization
+- Code folding: brace-based, tag-based, comment-based region detection and fold state management
+- Postman collection/environment import (v2/v2.1)
 
 Not yet fully testable because implementation is not complete yet:
 

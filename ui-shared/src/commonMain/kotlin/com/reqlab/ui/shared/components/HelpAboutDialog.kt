@@ -95,7 +95,7 @@ fun HelpAboutDialog(state: AppState) {
 
                     HelpSection("Feature Overview") {
                         HelpText("• Request builder for methods, URL, params, headers, auth, and body")
-                        HelpText("• Pre-request and post-response test scripts")
+                        HelpText("• Pre-request and post-request scripts")
                         HelpText("• Collections, history, environments, and global variables")
                         HelpText("• Multi-tab editing with save and tab management shortcuts")
                         HelpText("• Response viewer plus network/test logs")
@@ -105,7 +105,7 @@ fun HelpAboutDialog(state: AppState) {
                         HelpText("1) Create or open a request tab.")
                         HelpText("2) Configure URL, method, auth, headers, and body.")
                         HelpText("3) Choose an environment for variable values.")
-                        HelpText("4) Add optional pre-request/test scripts.")
+                        HelpText("4) Add optional pre-request/post-request scripts.")
                         HelpText("5) Send request and inspect response, logs, and tests.")
                     }
 
@@ -121,7 +121,7 @@ fun HelpAboutDialog(state: AppState) {
 
                     HelpSection("Scripting Overview") {
                         HelpText("Use pre-request scripts to prepare headers, query values, body, and variables before dispatch.")
-                        HelpText("Use test scripts to assert response behavior and persist extracted values into variables.")
+                        HelpText("Use post-request scripts to assert response behavior and persist extracted values into variables.")
                         HelpText("The default scripting namespace is reqlab and can be changed in Settings → Scripts.")
                     }
 

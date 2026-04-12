@@ -1,6 +1,6 @@
-# Scripted Tests
+# Scripted Assertions
 
-ReqLab test scripts are written using the `reqlab` namespace (configurable in **Settings → Scripts**).
+ReqLab post-request scripts are written using the `reqlab` namespace (configurable in **Settings → Scripts**).
 
 ## Pattern
 

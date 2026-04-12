@@ -8,7 +8,7 @@ ReqLab supports end-to-end API testing with:
 
 - HTTP request authoring and execution
 - Pre-request scripting
-- Post-response test scripting
+- Post-request scripting
 - Multi-scope variables (environment, global, collection, request-local)
 - Assertion-based response validation
 - Reusable collections and environments
@@ -35,12 +35,49 @@ ReqLab supports end-to-end API testing with:
 - Response size (`size`)
 - Structured pass/fail test result reporting
 
+### Code Editor
+
+ReqLab features a full-featured code editor used across request body editing, script editing, and response viewing. All capabilities are built with pure Compose Multiplatform and work cross-platform (macOS, Linux, Windows, Web).
+
+**Syntax Highlighting** — Token-level colorization for:
+- JSON (keys, strings, numbers, booleans, null, braces)
+- XML / HTML (tags, attributes, values, comments, doctypes)
+- GraphQL (keywords, types, fields, directives, comments)
+- JavaScript (keywords, builtins, strings, comments, numbers, operators)
+- Plain text (default)
+
+**Code Folding** (response viewer) — Collapse and expand regions:
+- Brace-based folding for JSON, JavaScript, and GraphQL (`{ }`, `[ ]`)
+- Tag-based folding for XML and HTML (`<tag>...</tag>`)
+- Multi-line comment folding (`/* ... */`, `<!-- ... -->`)
+- Fold All / Unfold All toolbar controls
+- Fold marker badges showing hidden line count
+
+**Search / Find** — In-editor text search:
+- Case-insensitive search with match count
+- Previous / Next match navigation with active match highlighting
+- Keyboard-driven toggle (toolbar button)
+
+**Formatting** — Auto-format source code:
+- JSON pretty-print (indented with 2-space indent)
+- XML / HTML indentation
+- Toggle on/off from toolbar
+
+**Editor Features**:
+- Line numbers gutter (all editor modes)
+- Word wrap toggle
+- Copy to clipboard (toolbar button)
+- Download to file (response viewer)
+- Monospace font family
+- Virtualized rendering (LazyColumn) for large responses (>200 lines)
+- Full text selection support in read-only mode
+
 ### Script Runtime
 
 ReqLab provides a JavaScript runtime for request automation.
 
 - **Pre-request scripts**: run before dispatch to mutate outgoing request
-- **Post-response test scripts**: run after response to assert behavior
+- **Post-request scripts**: run after response to assert behavior
 - Runtime namespace default: `reqlab` (global aliases also supported)
 - Console logging via `reqlab.console.log(...)`
 
@@ -59,7 +96,7 @@ ReqLab supports four variable scopes:
    - Session-scoped runtime map across requests
 4. **Request-local variables**
    - `reqlab.variables.get/set/unset`
-   - Request-scoped lifecycle (pre-request to test for the same request)
+   - Request-scoped lifecycle (pre-request to post-request for the same request)
 
 Variable interpolation uses `{{name}}` in URL, headers, body, and auth fields.
 
@@ -86,7 +123,12 @@ Pre-request scripts can mutate outgoing request values:
 ### Collections and Test Automation
 
 - Collection import/export using `qa-tests/fixtures/reqlab-test-collection.json`
-- Request-level pre-request and test scripts in collection items
+- **Postman Collection v2 / v2.1 import** — auto-detected and converted to ReqLab format
+  - Folders, requests, headers, auth (bearer / basic / API key), body (raw JSON, form-data, urlencoded, GraphQL, binary), and scripts
+  - Postman `pm.*` script namespace automatically rewritten to `reqlab.*`
+  - `pm.sendRequest` calls commented out (unsupported)
+- **Postman Environment import** — name and enabled variables imported; disabled variables skipped
+- Request-level pre-request and post-request scripts in collection items
 - Automated collection validation via `qa-tests/collection-validator.mjs`
 - Deterministic sample-server endpoints for reproducible test runs
 
@@ -110,9 +152,9 @@ The `sample-server` module provides local endpoints for deterministic API testin
    - Apply request mutations and variable writes
 2. **HTTP execution phase**
    - Send request with resolved/mutated values
-3. **Post-response phase**
+3. **Post-request phase**
    - Build response context
-   - Execute test script
+   - Execute post-request script
    - Produce assertion results and pass/fail status
 
 ### Script API Areas
@@ -166,6 +208,6 @@ node qa-tests/collection-validator.mjs
 ## Notes
 
 - Script runtime is synchronous; asynchronous callbacks are not awaited before request dispatch.
-- Scripts currently apply to HTTP requests only; WebSocket requests do not run pre-request/test scripts.
+- Scripts currently apply to HTTP requests only; WebSocket requests do not run pre-request/post-request scripts.
 - Collection variables are session-scoped (not persisted as environment/global workspace values).
 - For full script API details, see `docs/scripts/api-reference.md`.

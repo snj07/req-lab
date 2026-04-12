@@ -243,7 +243,8 @@ fun Sidebar(state: AppState) {
                                             val existingIds = state.collections.map { it.id }.toSet()
                                             val importedName = ImportExportRepository.importCollectionFromString(state, content)
                                             state.collections.firstOrNull { it.id !in existingIds }?.let { imported ->
-                                                state.collectionExpandedState[imported.id] = false
+                                                // Collapse the root node and all sub-folders
+                                                collapseNodeRecursively(imported, state)
                                             }
                                             withContext(kotlinx.coroutines.Dispatchers.Main) {
                                                 WorkspaceRepository.save(state)
@@ -1757,4 +1758,17 @@ private fun findCollectionById(nodes: MutableList<CollectionNode>, collectionId:
         }
     }
     return null
+}
+
+/**
+ * Recursively sets the expanded state to false for a node and all its
+ * folder children, so imported collections appear fully collapsed.
+ */
+private fun collapseNodeRecursively(node: CollectionNode, state: AppState) {
+    if (node.isFolder) {
+        state.collectionExpandedState[node.id] = false
+        for (child in node.children) {
+            collapseNodeRecursively(child, state)
+        }
+    }
 }

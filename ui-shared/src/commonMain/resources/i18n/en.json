@@ -187,7 +187,7 @@
   "system_theme": "System",
   "tcp_connect": "TCP Connect",
   "test_results": "Test Results",
-  "tests": "Tests",
+  "tests": "Post-request",
   "theme": "Theme",
   "timing": "Timing",
   "timing_not_available": "Detailed timing phases are not available for this response.",

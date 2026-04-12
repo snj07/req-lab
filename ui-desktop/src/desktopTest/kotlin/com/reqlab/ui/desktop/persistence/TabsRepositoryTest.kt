@@ -89,4 +89,23 @@ class TabsRepositoryTest {
         assertTrue(loaded.headers.any { it.kind == HeaderKind.USER && !it.keyLocked })
         assertTrue(loaded.isDirty)
     }
+
+    @Test
+    fun save_large_body_returns_success_and_roundtrips_content_length() {
+        val source = AppState()
+        val tab = source.activeTab!!
+        tab.name = "Large Body"
+        tab.bodyType = BodyType.JSON
+        tab.bodyContent = "{\"items\":[" + (0 until 80_000).joinToString(",") { "{\"k\":$it}" } + "]}"
+
+        val saved = TabsRepository.save(source)
+        assertTrue(saved, "TabsRepository.save must return success for large body payload")
+
+        val loadedState = AppState()
+        TabsRepository.load(loadedState)
+        val loaded = loadedState.activeTab!!
+
+        assertEquals(tab.bodyContent.length, loaded.bodyContent.length,
+            "Large body content length must round-trip through persistence")
+    }
 }

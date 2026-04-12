@@ -18,12 +18,19 @@ enum class HttpMethodType {
 enum class BodyType {
     NONE,
     JSON,
+    XML,           // raw XML body – syntax-highlighted, sent as application/xml
+    HTML,          // raw HTML body – syntax-highlighted, sent as text/html
+    JAVASCRIPT,    // raw JS body – syntax-highlighted, sent as application/javascript
     FORM_DATA,
     X_WWW_FORM_URLENCODED,
     RAW_TEXT,
     BINARY,
     GRAPHQL
 }
+
+/** Entry type for a form-data row (text value or file attachment). */
+@Serializable
+enum class FormEntryType { TEXT, FILE }
 
 @Serializable
 enum class AuthType {
@@ -41,6 +48,19 @@ data class KeyValueEntry(
     val value: String,
     val enabled: Boolean = true,
     val secret: Boolean = false
+)
+
+/**
+ * Extended entry for structured form-data rows.
+ * Carries a [type] (text vs file) and an optional [description].
+ */
+@Serializable
+data class FormDataEntry(
+    val key: String,
+    val type: FormEntryType = FormEntryType.TEXT,
+    val value: String,
+    val description: String = "",
+    val enabled: Boolean = true,
 )
 
 @Serializable
@@ -61,6 +81,7 @@ data class RequestBody(
     val type: BodyType = BodyType.NONE,
     val content: String? = null,
     val formEntries: List<KeyValueEntry> = emptyList(),
+    val formDataEntries: List<FormDataEntry> = emptyList(),
     val binaryName: String? = null,
     val binaryBytesBase64: String? = null,
     val graphQl: GraphQlBody? = null

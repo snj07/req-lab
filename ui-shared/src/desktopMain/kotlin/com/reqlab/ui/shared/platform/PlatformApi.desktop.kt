@@ -25,6 +25,16 @@ actual fun copyToClipboard(text: String) {
     clipboard.setContents(StringSelection(text), null)
 }
 
+actual fun readFromClipboard(): String? {
+    return try {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        val data = clipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor)
+        data as? String
+    } catch (_: Exception) {
+        null
+    }
+}
+
 actual fun formatTimestamp(epochMillis: Long): String {
     val sdf = SimpleDateFormat("HH:mm:ss")
     return sdf.format(Date(epochMillis))

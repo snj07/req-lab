@@ -1,10 +1,13 @@
 package com.reqlab.ui.shared.persistence
 
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.AuthType
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.FormDataEntryState
 import com.reqlab.ui.shared.state.HeaderKind
+import com.reqlab.ui.shared.state.MutableFormDataRow
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestTabState
 import kotlinx.serialization.json.Json
@@ -35,8 +38,8 @@ object TabsRepository {
 
     // ── Save ───────────────────────────────────────────────────────────────
 
-    fun save(state: AppState) {
-        runCatching {
+    fun save(state: AppState): Boolean {
+        return runCatching {
             val arr = buildJsonArray {
                 state.openTabs.forEach { tab ->
                     add(buildJsonObject {
@@ -47,7 +50,13 @@ object TabsRepository {
                         put("collectionName", tab.collectionName ?: "")
                         put("folderPath", buildJsonArray { tab.folderPath.forEach { add(JsonPrimitive(it)) } })
                         put("bodyType",    tab.bodyType.name)
+                        put("lastRawSubtype", tab.lastRawSubtype.name)
                         put("bodyContent", tab.bodyContent)
+                        put("bodyContents", buildJsonObject {
+                            tab.bodyContents.forEach { entry ->
+                                if (entry.value.isNotBlank()) put(entry.key.name, entry.value)
+                            }
+                        })
                         put("authType",    tab.authType.name)
                         put("authUsername", tab.authUsername)
                         put("authPassword", tab.authPassword)
@@ -64,6 +73,8 @@ object TabsRepository {
                         put("isDirty",     tab.isDirty)
                         put("params",  kvListJson(tab.params))
                         put("headers", kvListJson(tab.headers))
+                        put("formRows", formRowListJson(tab.formRows))
+                        put("urlencodedRows", formRowListJson(tab.urlencodedRows))
                     })
                 }
             }
@@ -72,7 +83,8 @@ object TabsRepository {
                 put("tabs", arr)
             }
             PlatformStorage.putString(STORAGE_KEY, root.toString())
-        }
+            true
+        }.getOrElse { false }
     }
 
     // ── Load ───────────────────────────────────────────────────────────────
@@ -125,7 +137,13 @@ object TabsRepository {
                     folderPath = parsedFolderPath
                 )
                 tab.bodyType    = safeEnum(obj["bodyType"]?.jsonPrimitive?.content, BodyType.JSON)
+                tab.lastRawSubtype = safeEnum(obj["lastRawSubtype"]?.jsonPrimitive?.content, BodyType.JSON)
                 tab.bodyContent = obj["bodyContent"]?.jsonPrimitive?.content ?: ""
+                obj["bodyContents"]?.jsonObject?.forEach { (typeName, contentEl) ->
+                    runCatching { BodyType.valueOf(typeName) }.getOrNull()?.let { type ->
+                        tab.bodyContents[type] = contentEl.jsonPrimitive.content
+                    }
+                }
                 tab.authType    = safeEnum(obj["authType"]?.jsonPrimitive?.content, AuthType.NONE)
                 tab.authUsername = obj["authUsername"]?.jsonPrimitive?.content ?: ""
                 tab.authPassword = obj["authPassword"]?.jsonPrimitive?.content ?: ""
@@ -154,6 +172,14 @@ object TabsRepository {
                     legacyDirtyFlag = obj["isDirty"]?.jsonPrimitive?.booleanOrNull ?: false,
                 )
 
+                // Load structured form rows (may be absent in older saves → empty list)
+                obj["formRows"]?.jsonArray?.forEach { el ->
+                    tab.formRows.add(formRowFromJson(el.jsonObject))
+                }
+                obj["urlencodedRows"]?.jsonArray?.forEach { el ->
+                    tab.urlencodedRows.add(formRowFromJson(el.jsonObject))
+                }
+
                 state.openTabs.add(tab)
             }
 
@@ -163,6 +189,28 @@ object TabsRepository {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    private fun formRowListJson(rows: List<MutableFormDataRow>): JsonArray =
+        buildJsonArray {
+            rows.forEach { r ->
+                add(buildJsonObject {
+                    put("key",         r.key)
+                    put("type",        r.type.name)
+                    put("value",       r.value)
+                    put("description", r.description)
+                    put("enabled",     r.enabled)
+                })
+            }
+        }
+
+    private fun formRowFromJson(obj: JsonObject): MutableFormDataRow =
+        MutableFormDataRow(
+            key         = obj["key"]?.jsonPrimitive?.content ?: "",
+            type        = safeEnum(obj["type"]?.jsonPrimitive?.content, FormEntryType.TEXT),
+            value       = obj["value"]?.jsonPrimitive?.content ?: "",
+            description = obj["description"]?.jsonPrimitive?.content ?: "",
+            enabled     = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true,
+        )
 
     private fun kvListJson(list: List<MutableKeyValue>): JsonArray =
         buildJsonArray {

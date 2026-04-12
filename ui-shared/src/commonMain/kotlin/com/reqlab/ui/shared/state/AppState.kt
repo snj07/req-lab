@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.ResponseDefinition
 import kotlinx.coroutines.Job
@@ -20,7 +21,7 @@ import com.reqlab.ui.shared.i18n.AppLanguage
 
 enum class RequestEditorTab(val label: String) {
     PARAMS("Params"), HEADERS("Headers"), BODY("Body"),
-    AUTH("Auth"), PRE_REQUEST("Pre-request"), TESTS("Tests")
+    AUTH("Auth"), PRE_REQUEST("Pre-request"), TESTS("Post-request")
 }
 
 enum class ResponseTab(val label: String) {
@@ -78,6 +79,10 @@ data class CollectionNode(
     val userHeaders: List<Pair<String, String>> = emptyList(),
     val bodyType: BodyType? = null,
     val bodyContent: String? = null,
+    /** Structured form-data rows (FORM_DATA body type). */
+    val formDataEntries: List<FormDataEntryState> = emptyList(),
+    /** Structured urlencoded rows (X_WWW_FORM_URLENCODED body type). */
+    val urlencodedEntries: List<FormDataEntryState> = emptyList(),
     val authType: AuthType? = null,
     val authUsername: String? = null,
     val authPassword: String? = null,
@@ -85,6 +90,37 @@ data class CollectionNode(
     val authApiKey: String? = null,
     val authApiValue: String? = null,
 )
+
+/**
+ * Immutable snapshot of a form-data/urlencoded row — used in [CollectionNode]
+ * and import/export serialization.
+ */
+data class FormDataEntryState(
+    val key: String = "",
+    val type: FormEntryType = FormEntryType.TEXT,
+    val value: String = "",
+    val description: String = "",
+    val enabled: Boolean = true,
+)
+
+/**
+ * Mutable row for structured form-data and x-www-form-urlencoded editors.
+ * [type] distinguishes text-value from file-attachment rows.
+ */
+class MutableFormDataRow(
+    key: String = "",
+    type: FormEntryType = FormEntryType.TEXT,
+    value: String = "",
+    description: String = "",
+    enabled: Boolean = true,
+    val uid: String = generateUuid(),
+) {
+    var key         by mutableStateOf(key)
+    var type        by mutableStateOf(type)
+    var value       by mutableStateOf(value)
+    var description by mutableStateOf(description)
+    var enabled     by mutableStateOf(enabled)
+}
 
 /** Mutable key-value pair used in param / header / variable editors. */
 class MutableKeyValue(
@@ -115,13 +151,16 @@ object SystemHeaderRules {
     fun isSystemHeader(key: String): Boolean = key in nonDeletableKeys
 
     fun defaultContentTypeFor(bodyType: BodyType): String = when (bodyType) {
-        BodyType.JSON -> "application/json"
-        BodyType.FORM_DATA -> "multipart/form-data"
+        BodyType.JSON       -> "application/json"
+        BodyType.XML        -> "application/xml"
+        BodyType.HTML       -> "text/html"
+        BodyType.JAVASCRIPT -> "application/javascript"
+        BodyType.FORM_DATA  -> "multipart/form-data"
         BodyType.X_WWW_FORM_URLENCODED -> "application/x-www-form-urlencoded"
-        BodyType.GRAPHQL -> "application/json"
-        BodyType.RAW_TEXT -> "text/plain"
-        BodyType.BINARY -> "application/octet-stream"
-        BodyType.NONE -> "application/json"
+        BodyType.GRAPHQL    -> "application/json"
+        BodyType.RAW_TEXT   -> "text/plain"
+        BodyType.BINARY     -> "application/octet-stream"
+        BodyType.NONE       -> "application/json"
     }
 }
 
@@ -201,7 +240,28 @@ class RequestTabState(
     )
 
     var bodyType    by mutableStateOf(BodyType.JSON)
-    var bodyContent by mutableStateOf("")
+
+    /**
+     * Remembers the last-selected RAW sub-type (JSON, XML, HTML, JS, Text)
+     * so that switching away from RAW and back preserves the user's choice.
+     */
+    var lastRawSubtype by mutableStateOf(BodyType.JSON)
+
+    /**
+     * All body contents keyed by [BodyType].
+     * Switching [bodyType] automatically resolves to the correct content.
+     */
+    val bodyContents = mutableStateMapOf<BodyType, String>()
+
+    /** Content for the currently active body type. Gets/sets [bodyContents]\[[bodyType]]. */
+    var bodyContent: String
+        get() = bodyContents[bodyType] ?: ""
+        set(value) { bodyContents[bodyType] = value }
+
+    /** Structured rows for FORM_DATA body type (key/type/value/description). */
+    val formRows = mutableStateListOf<MutableFormDataRow>()
+    /** Structured rows for X_WWW_FORM_URLENCODED body type (key/value/description). */
+    val urlencodedRows = mutableStateListOf<MutableFormDataRow>()
 
     var authType by mutableStateOf(AuthType.NONE)
     var authUsername  by mutableStateOf("")
@@ -239,18 +299,26 @@ class RequestTabState(
     var lastError   by mutableStateOf<String?>(null)
 
     init {
-        savedSnapshot = currentSnapshot()
+        savedSnapshot = currentSnapshotForDirtyTracking()
     }
+
+    private fun totalBodyLength(): Int = bodyContents.values.sumOf { it.length }
 
     private fun currentSnapshot(): String {
         val paramsSnapshot = params.joinToString(";") { p -> "${p.key}|${p.value}|${p.enabled}|${p.secret}" }
         val headersSnapshot = headers.joinToString(";") { h -> "${h.key}|${h.value}|${h.enabled}|${h.secret}|${h.kind}|${h.keyLocked}" }
+        val formRowsSnapshot = formRows.joinToString(";") { r -> "${r.key}|${r.type.name}|${r.value}|${r.description}|${r.enabled}" }
+        val urlencodedRowsSnapshot = urlencodedRows.joinToString(";") { r -> "${r.key}|${r.value}|${r.description}|${r.enabled}" }
+        val allBodyContentsSnapshot = bodyContents.entries
+            .sortedBy { entry -> entry.key.name }
+            .joinToString(";") { entry -> "${entry.key.name}=${entry.value}" }
         return listOf(
             name,
             method.name,
             url,
             bodyType.name,
-            bodyContent,
+            lastRawSubtype.name,
+            allBodyContentsSnapshot,
             authType.name,
             authUsername,
             authPassword,
@@ -264,6 +332,8 @@ class RequestTabState(
             retryDelayMs.toString(),
             paramsSnapshot,
             headersSnapshot,
+            formRowsSnapshot,
+            urlencodedRowsSnapshot,
         ).joinToString("#")
     }
 
@@ -275,21 +345,64 @@ class RequestTabState(
         savedSnapshot = when {
             snapshot != null -> snapshot
             legacyDirtyFlag -> "__legacy-dirty__"
-            else -> currentSnapshot()
+            else -> currentSnapshotForDirtyTracking()
         }
         recomputeDirty()
     }
 
     fun recomputeDirty() {
-        isDirty = currentSnapshot() != savedSnapshot
+        isDirty = currentSnapshotForDirtyTracking() != savedSnapshot
+    }
+
+    private fun currentSnapshotForDirtyTracking(): String {
+        val totalBodyLength = totalBodyLength()
+        if (totalBodyLength <= 100_000) return currentSnapshot()
+
+        // Lightweight snapshot for huge payloads: avoids allocating multi-MB strings
+        // on the UI thread while still tracking meaningful state transitions.
+        val bodyLengthFingerprint = bodyContents.entries
+            .sortedBy { it.key.name }
+            .joinToString(";") { "${it.key.name}:${it.value.length}" }
+        val paramsCount = params.size
+        val headersCount = headers.size
+        val formCount = formRows.size
+        val urlEncodedCount = urlencodedRows.size
+        return listOf(
+            "LARGE",
+            name,
+            method.name,
+            url,
+            bodyType.name,
+            lastRawSubtype.name,
+            bodyLengthFingerprint,
+            authType.name,
+            retryEnabled.toString(),
+            retryCount.toString(),
+            retryDelayMs.toString(),
+            paramsCount.toString(),
+            headersCount.toString(),
+            formCount.toString(),
+            urlEncodedCount.toString(),
+        ).joinToString("#")
     }
 
     fun markDirty() {
-        recomputeDirty()
+        // For large body content (> 100 KB total across all body types),
+        // skip the expensive currentSnapshot() call which serialises the
+        // full body into a string — this would be O(n) for multi-MB
+        // payloads and blocks the UI thread.  In that case, any edit is
+        // unconditionally dirty.  For normal-sized content, use exact
+        // snapshot comparison to correctly detect reverts to saved state.
+        val totalBodyLength = totalBodyLength()
+        if (totalBodyLength > 100_000) {
+            isDirty = true
+        } else {
+            recomputeDirty()
+        }
     }
 
     fun markSaved() {
-        savedSnapshot = currentSnapshot()
+        savedSnapshot = currentSnapshotForDirtyTracking()
         isDirty = false
         lastSavedTimestamp = currentTimeMillis()
     }
@@ -459,7 +572,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         )
 
     /**
-     * Merges variables set by a pre-request or test script into the active environment.
+     * Merges variables set by a pre-request or post-request script into the active environment.
      * Existing variables with the same key are updated; new keys are appended.
      */
     fun mergeScriptVariables(vars: Map<String, String>) {
@@ -551,6 +664,19 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         // Populate body, headers, and auth from collection node
         node?.bodyType?.let { tab.bodyType = it; tab.syncSystemHeaders() }
         node?.bodyContent?.takeIf { it.isNotBlank() }?.let { tab.bodyContent = it }
+        // Populate structured form rows from collection node
+        if (!node?.formDataEntries.isNullOrEmpty()) {
+            tab.formRows.clear()
+            node!!.formDataEntries.forEach { e ->
+                tab.formRows.add(MutableFormDataRow(e.key, e.type, e.value, e.description, e.enabled))
+            }
+        }
+        if (!node?.urlencodedEntries.isNullOrEmpty()) {
+            tab.urlencodedRows.clear()
+            node!!.urlencodedEntries.forEach { e ->
+                tab.urlencodedRows.add(MutableFormDataRow(e.key, e.type, e.value, e.description, e.enabled))
+            }
+        }
         node?.authType?.let { tab.authType = it }
         node?.authUsername?.takeIf { it.isNotBlank() }?.let { tab.authUsername = it }
         node?.authPassword?.takeIf { it.isNotBlank() }?.let { tab.authPassword = it }

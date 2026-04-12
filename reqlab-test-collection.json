@@ -1,0 +1,813 @@
+{
+  "type": "reqLabCollection",
+  "version": "1.0",
+  "name": "ReqLab Test Suite",
+  "folders": [
+    {
+      "name": "HTTP Methods",
+      "folders": [],
+      "requests": [
+        {
+          "name": "GET All Users",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/users"
+        },
+        {
+          "name": "POST Create User",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/users",
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\"\n}"
+          }
+        },
+        {
+          "name": "PUT Replace User 1",
+          "method": "PUT",
+          "url": "{{baseUrl}}/api/users/1",
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"name\": \"Alice Updated\",\n  \"email\": \"alice.updated@example.com\"\n}"
+          }
+        },
+        {
+          "name": "PATCH Update User 2",
+          "method": "PATCH",
+          "url": "{{baseUrl}}/api/users/2",
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"name\": \"Bob Updated\"\n}"
+          }
+        },
+        {
+          "name": "DELETE User 3",
+          "method": "DELETE",
+          "url": "{{baseUrl}}/api/users/3"
+        },
+        {
+          "name": "OPTIONS Users",
+          "method": "OPTIONS",
+          "url": "{{baseUrl}}/api/users"
+        },
+        {
+          "name": "HEAD Users (check X-Total-Count header)",
+          "method": "HEAD",
+          "url": "{{baseUrl}}/api/users"
+        }
+      ]
+    },
+    {
+      "name": "Query Params",
+      "folders": [],
+      "requests": [
+        {
+          "name": "Search - q, page, limit",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/search?q=test&page=1&limit=10"
+        },
+        {
+          "name": "Search - page 2, larger limit",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/search?q=hello&page=2&limit=25"
+        },
+        {
+          "name": "Search - no params (defaults)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/search"
+        },
+        {
+          "name": "Search - empty query string",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/search?q=&page=1&limit=5"
+        },
+        {
+          "name": "Search - multiple custom params",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/search?q=kotlin&page=1&limit=3&sort=name&order=asc"
+        }
+      ]
+    },
+    {
+      "name": "Headers",
+      "folders": [],
+      "requests": [
+        {
+          "name": "Echo Request Headers",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/echo-headers"
+        },
+        {
+          "name": "Echo Headers - with custom X-Client-Id",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/echo-headers",
+          "headers": [
+            {
+              "key": "X-Client-Id",
+              "value": "reqlab-client-001"
+            }
+          ]
+        },
+        {
+          "name": "Echo Headers - with Accept and X-Request-Id",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/echo-headers",
+          "headers": [
+            {
+              "key": "Accept",
+              "value": "application/json"
+            },
+            {
+              "key": "X-Request-Id",
+              "value": "req-12345"
+            },
+            {
+              "key": "X-Trace-Id",
+              "value": "trace-abcdef"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Body Types",
+      "folders": [
+        {
+          "name": "JSON",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST JSON Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{\n  \"message\": \"Hello from ReqLab\",\n  \"timestamp\": 1711234567\n}"
+              }
+            },
+            {
+              "name": "POST JSON Body - nested object",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{\n  \"user\": {\n    \"name\": \"Alice\",\n    \"age\": 30\n  },\n  \"tags\": [\"kotlin\", \"api\", \"reqlab\"]\n}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Raw Text",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST Raw Text",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/raw",
+              "body": {
+                "type": "RAW_TEXT",
+                "content": "Hello from ReqLab – this is a plain text request body."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Form Data",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST Form Data (multipart)",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/form-data",
+              "body": {
+                "type": "FORM_DATA",
+                "content": "name=Alice&role=tester&department=engineering"
+              }
+            }
+          ]
+        },
+        {
+          "name": "URL Encoded",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST URL Encoded",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/urlencoded",
+              "body": {
+                "type": "X_WWW_FORM_URLENCODED",
+                "content": "username=alice&password=secret123&remember=true"
+              }
+            }
+          ]
+        },
+        {
+          "name": "File Upload",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST Binary File Upload",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/upload",
+              "body": {
+                "type": "BINARY",
+                "content": "ReqLabBinarySamplePayload"
+              }
+            }
+          ]
+        },
+        {
+          "name": "XML",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST XML Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/xml",
+              "body": {
+                "type": "XML",
+                "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<user>\n  <name>Alice</name>\n  <email>alice@example.com</email>\n</user>"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "application/xml" }
+              ]
+            },
+            {
+              "name": "POST XML Body - nested",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/xml",
+              "body": {
+                "type": "XML",
+                "content": "<?xml version=\"1.0\"?>\n<order>\n  <id>101</id>\n  <items>\n    <item>\n      <name>Widget</name>\n      <qty>3</qty>\n    </item>\n  </items>\n</order>"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "application/xml" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "HTML",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST HTML Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/html",
+              "body": {
+                "type": "HTML",
+                "content": "<!DOCTYPE html>\n<html>\n  <head><title>Test</title></head>\n  <body>\n    <h1>Hello from ReqLab</h1>\n  </body>\n</html>"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "text/html" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "JavaScript",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST JavaScript Body",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/javascript",
+              "body": {
+                "type": "JAVASCRIPT",
+                "content": "// ReqLab test script\nconst data = { message: 'hello', version: 2 };\nconsole.log(JSON.stringify(data));"
+              },
+              "headers": [
+                { "key": "Content-Type", "value": "application/javascript" }
+              ]
+            }
+          ]
+        }
+      ],
+      "requests": []
+    },
+    {
+      "name": "Authentication",
+      "folders": [
+        {
+          "name": "Basic Auth",
+          "folders": [],
+          "requests": [
+            {
+              "name": "GET Basic Auth (admin:password) - success",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/basic",
+              "auth": {
+                "type": "BASIC",
+                "username": "{{basicUser}}",
+                "password": "{{basicPassword}}"
+              }
+            },
+            {
+              "name": "GET Basic Auth (wrong password) - 401",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/basic",
+              "auth": {
+                "type": "BASIC",
+                "username": "{{basicUser}}",
+                "password": "wrongpassword"
+              }
+            },
+            {
+              "name": "GET Basic Auth (no header) - 401",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/basic"
+            }
+          ]
+        },
+        {
+          "name": "Bearer Token",
+          "folders": [],
+          "requests": [
+            {
+              "name": "GET Bearer Token (valid {{token}}) - success",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/bearer",
+              "auth": {
+                "type": "BEARER",
+                "token": "{{token}}"
+              }
+            },
+            {
+              "name": "GET Bearer Token (wrong token) - 401",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/bearer",
+              "auth": {
+                "type": "BEARER",
+                "token": "wrong-token-value"
+              }
+            },
+            {
+              "name": "GET Bearer Token (no header) - 401",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/bearer"
+            }
+          ]
+        },
+        {
+          "name": "API Key",
+          "folders": [],
+          "requests": [
+            {
+              "name": "GET API Key Header (valid {{apiKey}}) - success",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/apikey",
+              "auth": {
+                "type": "API_KEY",
+                "apiKey": "X-API-Key",
+                "apiValue": "{{apiKey}}"
+              }
+            },
+            {
+              "name": "GET API Key Header (wrong key) - 401",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/apikey",
+              "auth": {
+                "type": "API_KEY",
+                "apiKey": "X-API-Key",
+                "apiValue": "wrong-key-value"
+              }
+            },
+            {
+              "name": "GET API Key Header (missing) - 401",
+              "method": "GET",
+              "url": "{{baseUrl}}/api/auth/apikey"
+            }
+          ]
+        }
+      ],
+      "requests": []
+    },
+    {
+      "name": "Cookies",
+      "folders": [],
+      "requests": [
+        {
+          "name": "GET Cookies (set + echo)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/cookies"
+        },
+        {
+          "name": "GET Cookies - resend cookies (add Cookie header manually)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/cookies",
+          "headers": [
+            {
+              "key": "Cookie",
+              "value": "session=abc123; user=reqlab-tester"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Redirects",
+      "folders": [],
+      "requests": [
+        {
+          "name": "302 Redirect to /api/final",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/redirect"
+        },
+        {
+          "name": "Redirect Target /api/final (direct)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/final"
+        }
+      ]
+    },
+    {
+      "name": "Error Responses",
+      "folders": [],
+      "requests": [
+        {
+          "name": "400 Bad Request",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/400"
+        },
+        {
+          "name": "401 Unauthorized",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/401"
+        },
+        {
+          "name": "403 Forbidden",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/403"
+        },
+        {
+          "name": "404 Not Found",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/404"
+        },
+        {
+          "name": "405 Method Not Allowed",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/405"
+        },
+        {
+          "name": "422 Unprocessable Entity",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/422"
+        },
+        {
+          "name": "429 Too Many Requests",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/429"
+        },
+        {
+          "name": "500 Internal Server Error",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/500"
+        },
+        {
+          "name": "502 Bad Gateway",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/502"
+        },
+        {
+          "name": "503 Service Unavailable",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/503"
+        }
+      ]
+    },
+    {
+      "name": "WebSocket",
+      "folders": [],
+      "requests": [
+        {
+          "name": "WS Echo Server",
+          "method": "GET",
+          "url": "ws://localhost:8080/ws"
+        }
+      ]
+    },
+    {
+      "name": "Slow Requests",
+      "folders": [],
+      "requests": [
+        {
+          "name": "Slow Response - default 3s delay",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/slow"
+        },
+        {
+          "name": "Slow Response - custom 1s delay",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/slow?ms=1000"
+        },
+        {
+          "name": "Slow Response - near-instant 100ms",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/slow?ms=100"
+        }
+      ]
+    },
+    {
+      "name": "Scripts & Tests",
+      "folders": [],
+      "requests": [
+        {
+          "name": "Timestamp – pre-request captures server time",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/timestamp",
+          "preRequestScript": "reqlab.console.log(\"Fetching server timestamp…\")",
+          "testScript": "reqlab.test(\"Status is 200\", function() {\n    reqlab.expect(reqlab.response.code).to.equal(200)\n})\nreqlab.test(\"Response has unix timestamp\", function() {\n    reqlab.expect(reqlab.response.json().unix).to.be.above(0)\n})\nreqlab.test(\"Response has iso field\", function() {\n    reqlab.expect(reqlab.response.text()).to.include(\"iso\")\n})\nreqlab.environment.set(\"serverTimestamp\", reqlab.response.json().unix)"
+        },
+        {
+          "name": "Token – pre-request fetches auth token",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/token",
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"user\": \"alice\",\n  \"role\": \"admin\"\n}"
+          },
+          "preRequestScript": "reqlab.environment.set(\"requestUser\", \"alice\")\nreqlab.environment.set(\"requestRole\", \"admin\")\nreqlab.console.log(\"Requesting token for\", reqlab.environment.get(\"requestUser\"))",
+          "testScript": "reqlab.test(\"Status is 200\", function() {\n    reqlab.expect(reqlab.response.code).to.equal(200)\n})\nreqlab.test(\"Token is present in response\", function() {\n    reqlab.expect(reqlab.response.json().token).to.include(\"rl.\")\n})\nreqlab.test(\"User matches request\", function() {\n    reqlab.expect(reqlab.response.json().user).to.equal(\"alice\")\n})\nreqlab.environment.set(\"scriptToken\", reqlab.response.json().token)\nreqlab.console.log(\"Stored token:\", reqlab.environment.get(\"scriptToken\"))"
+        },
+        {
+          "name": "Protected – validate access with stored token",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/protected",
+          "headers": [
+            {
+              "key": "X-Token",
+              "value": "{{scriptToken}}"
+            }
+          ],
+          "preRequestScript": "reqlab.environment.set(\"X-Token\", reqlab.environment.get(\"scriptToken\"))\nreqlab.console.log(\"X-Token set from scriptToken:\", reqlab.environment.get(\"scriptToken\"))",
+          "testScript": "reqlab.test(\"Status is 200 or 401\", function() {\n    reqlab.expect(reqlab.response.code).to.be.oneOf([200, 401])\n})\nreqlab.test(\"Response body is valid JSON\", function() {\n    reqlab.expect(reqlab.response.text()).to.include(\"{\")\n})"
+        },
+        {
+          "name": "Validate JSON Body – assert schema",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/validate",
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"name\": \"Alice\",\n  \"email\": \"alice@example.com\",\n  \"age\": 30,\n  \"city\": \"Springfield\"\n}"
+          },
+          "preRequestScript": "reqlab.console.log(\"Sending JSON body for schema validation\")",
+          "testScript": "reqlab.test(\"Status is 200\", function() {\n    reqlab.expect(reqlab.response.code).to.equal(200)\n})\nreqlab.test(\"Body is valid JSON\", function() {\n    reqlab.expect(reqlab.response.json().valid).to.equal(true)\n})\nreqlab.test(\"Field count is above 0\", function() {\n    reqlab.expect(reqlab.response.json().fieldCount).to.be.above(0)\n})\nreqlab.console.log(\"Validated\", reqlab.response.json().fieldCount, \"fields\")"
+        },
+        {
+          "name": "Echo Full – verify pre-request header injection",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/echo-full",
+          "headers": [
+            {
+              "key": "X-Request-Id",
+              "value": "{{X-Request-Id}}"
+            },
+            {
+              "key": "X-Client",
+              "value": "{{X-Client}}"
+            }
+          ],
+          "preRequestScript": "reqlab.environment.set(\"X-Request-Id\", \"req-scripted\")\nreqlab.environment.set(\"X-Client\", \"ReqLab-ScriptEngine\")\nreqlab.console.log(\"Injecting X-Request-Id and X-Client via pre-request script\")",
+          "testScript": "reqlab.test(\"Status is 200\", function() {\n    reqlab.expect(reqlab.response.code).to.equal(200)\n})\nreqlab.test(\"Method is GET\", function() {\n    reqlab.expect(reqlab.response.json().method).to.equal(\"GET\")\n})\nreqlab.test(\"Response has headers object\", function() {\n    reqlab.expect(reqlab.response.text()).to.include(\"headers\")\n})\nreqlab.console.log(\"Echo path:\", reqlab.response.json().path)"
+        },
+        {
+          "name": "User List – validate response structure",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/users",
+          "preRequestScript": "reqlab.console.log(\"Fetching user list from\", reqlab.environment.get(\"baseUrl\"))",
+          "testScript": "reqlab.test(\"Status is 200\", function() {\n    reqlab.expect(reqlab.response.code).to.equal(200)\n})\nreqlab.test(\"Response has users array\", function() {\n    reqlab.expect(reqlab.response.text()).to.include(\"users\")\n})\nreqlab.test(\"Method field is GET\", function() {\n    reqlab.expect(reqlab.response.json().method).to.equal(\"GET\")\n})\nreqlab.console.log(\"User list loaded successfully\")"
+        }
+      ]
+    },
+    {
+      "name": "Scripting Runtime Coverage",
+      "folders": [],
+      "requests": [
+        {
+          "name": "01 Pre-request header/query mutation + scope set",
+          "method": "GET",
+          "url": "{{baseUrl}}/headers?seed=1",
+          "preRequestScript": "var runId = \"run-\" + Date.now();\nvar traceId = \"trace-\" + Math.floor(Math.random() * 100000);\nreqlab.environment.set(\"runId\", runId);\nreqlab.environment.set(\"traceId\", traceId);\nreqlab.globals.set(\"suiteGlobal\", \"global-1\");\nreqlab.collectionVariables.set(\"suiteCollection\", \"collection-1\");\nreqlab.variables.set(\"requestOnly\", \"local-1\");\nreqlab.request.headers.upsert(\"X-Run-Id\", runId);\nreqlab.request.headers.add(\"X-Trace-Id\", traceId);\nreqlab.request.setQueryParam(\"source\", \"pre-script\");\nreqlab.console.log(\"Prepared request runId\", runId, \"traceId\", traceId);",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"header mutation reached server\", function(){\n  var body = reqlab.response.json();\n  reqlab.expect(body.hasRunId).to.equal(true);\n  reqlab.expect(body.hasTrace).to.equal(true);\n  reqlab.expect(body.runId).to.equal(reqlab.environment.get(\"runId\"));\n  reqlab.expect(body.traceId).to.equal(reqlab.environment.get(\"traceId\"));\n});\nreqlab.test(\"script variables are readable\", function(){\n  reqlab.expect(reqlab.globals.get(\"suiteGlobal\")).to.equal(\"global-1\");\n  reqlab.expect(reqlab.collectionVariables.get(\"suiteCollection\")).to.equal(\"collection-1\");\n  reqlab.expect(reqlab.variables.get(\"requestOnly\")).to.equal(\"local-1\");\n});\nreqlab.environment.set(\"lastRunId\", reqlab.response.json().runId);"
+        },
+        {
+          "name": "02 Cross-request environment variable usage",
+          "method": "GET",
+          "url": "{{baseUrl}}/headers",
+          "headers": [
+            {
+              "key": "X-Run-Id",
+              "value": "{{lastRunId}}"
+            }
+          ],
+          "preRequestScript": "reqlab.request.headers.upsert(\"X-Trace-Id\", \"trace-cross\");\nreqlab.console.log(\"Using lastRunId from previous request\", reqlab.environment.get(\"lastRunId\"));",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"cross-request variable resolved\", function(){\n  var body = reqlab.response.json();\n  reqlab.expect(body.runId).to.equal(reqlab.environment.get(\"lastRunId\"));\n  reqlab.expect(body.traceId).to.equal(\"trace-cross\");\n});"
+        },
+        {
+          "name": "03 Request body mutation in pre-request",
+          "method": "POST",
+          "url": "{{baseUrl}}/echo-body",
+          "body": {
+            "type": "RAW_TEXT",
+            "content": "original-body"
+          },
+          "preRequestScript": "reqlab.request.headers.upsert(\"Content-Type\", \"application/json\");\nreqlab.request.setBody('{\"changed\":true,\"source\":\"pre\"}');\nreqlab.console.log(\"Body overwritten in pre-request\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"mutated body reaches server\", function(){\n  var body = reqlab.response.json();\n  reqlab.expect(body.method).to.equal(\"POST\");\n  reqlab.expect(body.body).to.include(\"\\\"changed\\\":true\");\n  reqlab.expect(body.body).to.include(\"\\\"source\\\":\\\"pre\\\"\");\n});"
+        },
+        {
+          "name": "04 JSON user validation and schema-like checks",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/user",
+          "preRequestScript": "reqlab.environment.set(\"expectedUserType\", \"Subscriber\");\nreqlab.console.log(\"Validating /json/user response\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"required fields exist\", function(){\n  var u = reqlab.response.json();\n  reqlab.expect(u).to.have.property(\"id\");\n  reqlab.expect(u).to.have.property(\"name\");\n  reqlab.expect(u).to.have.property(\"age\");\n  reqlab.expect(u).to.have.property(\"type\");\n});\nreqlab.test(\"field values and types are valid\", function(){\n  var u = reqlab.response.json();\n  reqlab.expect(u.name).to.equal(\"Jane\");\n  reqlab.expect(u.type).to.equal(reqlab.environment.get(\"expectedUserType\"));\n  reqlab.expect(typeof u.id).to.equal(\"string\");\n  reqlab.expect(typeof u.age).to.equal(\"number\");\n  reqlab.expect(u.age).to.be.oneOf([23,24,25]);\n});"
+        },
+        {
+          "name": "05 JSON array and nested object assertions",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/array",
+          "preRequestScript": "reqlab.console.log(\"Checking array payload\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"array contains expected rows\", function(){\n  var items = reqlab.response.json().items;\n  reqlab.expect(Array.isArray(items)).to.equal(true);\n  reqlab.expect(items.length).to.equal(2);\n  reqlab.expect(items[0].label).to.equal(\"alpha\");\n  reqlab.expect(items[0].tags).to.include(\"core\");\n  reqlab.expect(items[1].label).to.equal(\"beta\");\n});"
+        },
+        {
+          "name": "06 Object type matrix validation",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/object",
+          "preRequestScript": "reqlab.console.log(\"Checking object type matrix\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"types are correct\", function(){\n  var p = reqlab.response.json().payload;\n  reqlab.expect(typeof p.title).to.equal(\"string\");\n  reqlab.expect(typeof p.count).to.equal(\"number\");\n  reqlab.expect(typeof p.enabled).to.equal(\"boolean\");\n  reqlab.expect(p.nullable).to.be.null;\n  reqlab.expect(Array.isArray(p.list)).to.equal(true);\n  reqlab.expect(typeof p.nested).to.equal(\"object\");\n});"
+        },
+        {
+          "name": "07 Response time and body size checks",
+          "method": "GET",
+          "url": "{{baseUrl}}/response-time?ms=120",
+          "preRequestScript": "reqlab.console.log(\"Response-time request starting\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"response time in expected band\", function(){\n  reqlab.expect(reqlab.response.responseTime).to.be.above(0);\n  reqlab.expect(reqlab.response.responseTime).to.be.below(5000);\n});\nreqlab.test(\"response size is non-empty\", function(){\n  reqlab.expect(reqlab.response.size).to.be.above(10);\n});"
+        },
+        {
+          "name": "08 Plain string body match",
+          "method": "GET",
+          "url": "{{baseUrl}}/string-body",
+          "preRequestScript": "reqlab.console.log(\"Checking plain string endpoint\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"body contains expected text\", function(){\n  reqlab.expect(reqlab.response.text()).to.include(\"ReqLab plain string body\");\n  reqlab.expect(reqlab.response.text()).to.match(/scripting assertions/);\n});"
+        },
+        {
+          "name": "09 Headers and cookies validation",
+          "method": "GET",
+          "url": "{{baseUrl}}/cookies",
+          "headers": [
+            {
+              "key": "Cookie",
+              "value": "client_id=req-suite"
+            }
+          ],
+          "preRequestScript": "reqlab.console.log(\"Checking cookie and response header behavior\");",
+          "testScript": "reqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200)\n});\nreqlab.test(\"set-cookie header exists\", function(){\n  var setCookie = reqlab.response.headers.get(\"set-cookie\");\n  reqlab.expect(setCookie).to.exist;\n  reqlab.expect(setCookie).to.include(\"script_session\");\n});\nreqlab.test(\"request cookie header echoed\", function(){\n  reqlab.expect(reqlab.response.json().receivedCookieHeader).to.include(\"client_id=req-suite\");\n});"
+        },
+        {
+          "name": "10 Status 201 validation",
+          "method": "GET",
+          "url": "{{baseUrl}}/status/201",
+          "preRequestScript": "reqlab.console.log(\"Validating 201 response\");",
+          "testScript": "reqlab.test(\"status code 201\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(201)\n});\nreqlab.test(\"response payload has deterministic values\", function(){\n  var body = reqlab.response.json();\n  reqlab.expect(body.status).to.equal(201);\n  reqlab.expect(body.ok).to.equal(true);\n});"
+        },
+        {
+          "name": "11 Async capability probe",
+          "method": "GET",
+          "url": "{{baseUrl}}/status/200",
+          "preRequestScript": "reqlab.environment.set(\"asyncPromiseType\", typeof Promise);\nreqlab.environment.set(\"asyncTimeoutType\", typeof setTimeout);\nreqlab.console.log(\"Promise type:\", reqlab.environment.get(\"asyncPromiseType\"), \"setTimeout type:\", reqlab.environment.get(\"asyncTimeoutType\"));",
+          "testScript": "reqlab.test(\"Promise is available\", function(){\n  reqlab.expect(reqlab.environment.get(\"asyncPromiseType\")).to.equal(\"function\");\n});\nreqlab.test(\"setTimeout availability is explicit\", function(){\n  reqlab.expect(reqlab.environment.get(\"asyncTimeoutType\")).to.be.oneOf([\"undefined\",\"function\"]);\n});"
+        },
+        {
+          "name": "11b Undefined and empty variable handling",
+          "method": "GET",
+          "url": "{{baseUrl}}/status/200",
+          "preRequestScript": "var g = reqlab.globals.get(\"suiteGlobal\");\nvar c = reqlab.collectionVariables.get(\"suiteCollection\");\nvar l = reqlab.variables.get(\"requestOnly\");\nreqlab.environment.set(\"safeGlobal\", g == null ? \"\" : String(g));\nreqlab.environment.set(\"safeCollection\", c == null ? \"\" : String(c));\nreqlab.environment.set(\"safeLocal\", l == null ? \"\" : String(l));\nreqlab.console.log(\"safe values\", reqlab.environment.get(\"safeGlobal\"), reqlab.environment.get(\"safeCollection\"), reqlab.environment.get(\"safeLocal\"));",
+          "testScript": "reqlab.test(\"undefined getters do not crash\", function(){\n  reqlab.expect(reqlab.globals.get(\"missingGlobal\")).to.be.undefined;\n  reqlab.expect(reqlab.collectionVariables.get(\"missingCollection\")).to.be.undefined;\n  reqlab.expect(reqlab.variables.get(\"missingVar\")).to.be.undefined;\n});\nreqlab.test(\"empty fallback values are handled\", function(){\n  reqlab.expect(reqlab.environment.get(\"safeGlobal\")).to.be.oneOf([\"\",\"global-1\"]);\n  reqlab.expect(reqlab.environment.get(\"safeCollection\")).to.be.oneOf([\"\",\"collection-1\"]);\n  reqlab.expect(reqlab.environment.get(\"safeLocal\")).to.be.oneOf([\"\",\"local-1\"]);\n});"
+        },
+        {
+          "name": "12 Negative-path status assertion (expected 201)",
+          "method": "GET",
+          "url": "{{baseUrl}}/status/201",
+          "preRequestScript": "reqlab.console.log(\"Negative-path status validation\");",
+          "testScript": "reqlab.test(\"status code remains deterministic\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(201);\n  reqlab.expect(reqlab.response.code).to.not.equal(500);\n});"
+        },
+        {
+          "name": "13 Negative-path missing header handled",
+          "method": "GET",
+          "url": "{{baseUrl}}/headers",
+          "preRequestScript": "reqlab.console.log(\"Negative-path missing trace header\");",
+          "testScript": "reqlab.test(\"missing trace header is represented safely\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200);\n  reqlab.expect(reqlab.response.json().hasTrace).to.equal(false);\n  reqlab.expect(reqlab.response.json().traceId).to.equal(\"\");\n});"
+        },
+        {
+          "name": "14 Negative-path schema-like mismatch guard",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/user",
+          "preRequestScript": "reqlab.console.log(\"Negative-path schema guard\");",
+          "testScript": "reqlab.test(\"missing field is undefined\", function(){\n  var body = reqlab.response.json();\n  reqlab.expect(body.nonExistentField).to.be.undefined;\n  reqlab.expect(body).to.have.property(\"name\");\n});"
+        },
+        {
+          "name": "15 Assertion syntax matrix",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/object",
+          "preRequestScript": "reqlab.console.log(\"Running assertion syntax matrix\");",
+          "testScript": "reqlab.test(\"comparison syntax set\", function(){\n  var p = reqlab.response.json().payload;\n  reqlab.expect(p.count).to.be.above(1);\n  reqlab.expect(p.count).to.be.below(10);\n  reqlab.expect(p.count).to.be.at.least(3);\n  reqlab.expect(p.count).to.be.at.most(3);\n  reqlab.expect(p.title).to.match(/Req/);\n  reqlab.expect(p.title).to.include(\"Req\");\n  reqlab.expect(p.title).to.not.equal(\"Other\");\n  reqlab.expect(p.list).to.have.lengthOf(3);\n  reqlab.expect(p.nested).to.have.property(\"code\");\n});"
+        }
+      ]
+    },
+    {
+      "name": "Edge Case Coverage",
+      "folders": [],
+      "requests": [
+        {
+          "name": "EC01 Empty response body handling",
+          "method": "GET",
+          "url": "{{baseUrl}}/string-body",
+          "testScript": "reqlab.test(\"text response is not empty\", function(){\n  reqlab.expect(reqlab.response.text()).to.not.be.empty;\n  reqlab.expect(reqlab.response.text()).to.include(\"ReqLab\");\n});\nreqlab.test(\"status is 200\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});"
+        },
+        {
+          "name": "EC02 Large JSON payload parsing",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/users",
+          "testScript": "reqlab.test(\"parse users array\", function(){\n  var data = reqlab.response.json();\n  reqlab.expect(data).to.have.property(\"users\");\n  reqlab.expect(data.users).to.have.lengthOf(3);\n  reqlab.expect(data.users[0]).to.have.property(\"name\");\n  reqlab.expect(data.users[0]).to.have.property(\"email\");\n});"
+        },
+        {
+          "name": "EC03 Error status 400",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/400",
+          "testScript": "reqlab.test(\"400 Bad Request\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(400);\n});\nreqlab.test(\"error body has fields\", function(){\n  var data = reqlab.response.json();\n  reqlab.expect(data).to.have.property(\"error\");\n  reqlab.expect(data).to.have.property(\"code\");\n  reqlab.expect(data.code).to.equal(400);\n});"
+        },
+        {
+          "name": "EC04 Error status 500",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/error/500",
+          "testScript": "reqlab.test(\"500 Internal Server Error\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(500);\n  var data = reqlab.response.json();\n  reqlab.expect(data.code).to.equal(500);\n  reqlab.expect(data).to.have.property(\"message\");\n});"
+        },
+        {
+          "name": "EC05 Response time under threshold",
+          "method": "GET",
+          "url": "{{baseUrl}}/response-time?ms=50",
+          "testScript": "reqlab.test(\"response under 5000ms\", function(){\n  reqlab.expect(reqlab.response.responseTime).to.be.below(5000);\n});\nreqlab.test(\"delay value in body\", function(){\n  reqlab.expect(reqlab.response.json().delayMs).to.equal(50);\n});"
+        },
+        {
+          "name": "EC06 POST echo body validation",
+          "method": "POST",
+          "url": "{{baseUrl}}/echo-body",
+          "body": {
+            "type": "JSON",
+            "content": "{\"test\": true, \"items\": [1,2,3]}"
+          },
+          "testScript": "reqlab.test(\"echo body matches\", function(){\n  var data = reqlab.response.json();\n  reqlab.expect(data.method).to.equal(\"POST\");\n  reqlab.expect(data.length).to.be.above(0);\n  reqlab.expect(data).to.have.property(\"body\");\n});"
+        },
+        {
+          "name": "EC07 Assertion alias coverage",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/user",
+          "testScript": "reqlab.test(\"eql alias\", function(){\n  reqlab.expect(reqlab.response.json().id).to.eql(\"1\");\n});\nreqlab.test(\"contains alias\", function(){\n  reqlab.expect(reqlab.response.json().name).to.contain(\"Jan\");\n});\nreqlab.test(\"greaterThan alias\", function(){\n  reqlab.expect(reqlab.response.json().age).to.be.greaterThan(18);\n});\nreqlab.test(\"lessThan alias\", function(){\n  reqlab.expect(reqlab.response.json().age).to.be.lessThan(100);\n});"
+        },
+        {
+          "name": "EC08 Boolean getter assertions",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/user",
+          "testScript": "reqlab.test(\"true getter\", function(){\n  reqlab.expect(reqlab.response.json().active).to.be.true;\n});\nreqlab.test(\"not false\", function(){\n  reqlab.expect(reqlab.response.json().active).to.not.be.false;\n});\nreqlab.test(\"typeof check\", function(){\n  reqlab.expect(typeof reqlab.response.json().active).to.equal(\"boolean\");\n});"
+        },
+        {
+          "name": "EC09 Null and undefined getters",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/object",
+          "testScript": "reqlab.test(\"null field\", function(){\n  reqlab.expect(reqlab.response.json().payload.nullable).to.be.null;\n});\nreqlab.test(\"missing field undefined\", function(){\n  reqlab.expect(reqlab.response.json().payload.doesNotExist).to.be.undefined;\n});\nreqlab.test(\"not null on real value\", function(){\n  reqlab.expect(reqlab.response.json().payload.title).to.not.be.null;\n});"
+        },
+        {
+          "name": "EC10 All variable scopes in one request",
+          "method": "GET",
+          "url": "{{baseUrl}}/status/200",
+          "preRequestScript": "reqlab.environment.set(\"ec10Env\", \"envVal\");\nreqlab.globals.set(\"ec10Global\", \"globalVal\");\nreqlab.collectionVariables.set(\"ec10Coll\", \"collVal\");\nreqlab.variables.set(\"ec10Req\", \"reqVal\");",
+          "testScript": "reqlab.test(\"env set in pre-req\", function(){\n  reqlab.expect(reqlab.environment.get(\"ec10Env\")).to.equal(\"envVal\");\n});\nreqlab.test(\"global set in pre-req\", function(){\n  reqlab.expect(reqlab.globals.get(\"ec10Global\")).to.equal(\"globalVal\");\n});\nreqlab.test(\"coll set in pre-req\", function(){\n  reqlab.expect(reqlab.collectionVariables.get(\"ec10Coll\")).to.equal(\"collVal\");\n});\nreqlab.test(\"req set in pre-req\", function(){\n  reqlab.expect(reqlab.variables.get(\"ec10Req\")).to.equal(\"reqVal\");\n});"
+        },
+        {
+          "name": "EC11 Mixed pass-fail assertion handling",
+          "method": "GET",
+          "url": "{{baseUrl}}/json/user",
+          "testScript": "reqlab.test(\"passes - name check\", function(){\n  reqlab.expect(reqlab.response.json().name).to.equal(\"Jane\");\n});\nreqlab.test(\"passes - type check\", function(){\n  reqlab.expect(reqlab.response.json().type).to.equal(\"Subscriber\");\n});\nreqlab.test(\"passes - age check\", function(){\n  reqlab.expect(reqlab.response.json().age).to.be.at.least(18);\n});"
+        },
+        {
+          "name": "EC12 Console logging edge cases",
+          "method": "GET",
+          "url": "{{baseUrl}}/status/200",
+          "preRequestScript": "reqlab.console.log(\"string log\");\nreqlab.console.log(42);\nreqlab.console.log(null);\nreqlab.console.log({key: \"value\"});\nreqlab.console.log(true, false, undefined);",
+          "testScript": "reqlab.test(\"request completed\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});"
+        }
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "name": "Health Check",
+      "method": "GET",
+      "url": "{{baseUrl}}/"
+    },
+    {
+      "name": "Current Server Time",
+      "method": "GET",
+      "url": "{{baseUrl}}/api/time"
+    }
+  ]
+}

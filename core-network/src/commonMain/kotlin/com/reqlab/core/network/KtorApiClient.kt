@@ -261,6 +261,24 @@ class KtorApiClient(
                 builder.setBody(payload)
             }
 
+            BodyType.XML -> {
+                builder.contentType(ContentType.Application.Xml)
+                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
+                builder.setBody(payload)
+            }
+
+            BodyType.HTML -> {
+                builder.contentType(ContentType.Text.Html)
+                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
+                builder.setBody(payload)
+            }
+
+            BodyType.JAVASCRIPT -> {
+                builder.contentType(ContentType.parse("application/javascript"))
+                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
+                builder.setBody(payload)
+            }
+
             BodyType.GRAPHQL -> {
                 builder.contentType(ContentType.Application.Json)
                 val graphQlBody = body.graphQl
@@ -294,11 +312,19 @@ class KtorApiClient(
             }
 
             BodyType.FORM_DATA -> {
+                // Prefer the typed formDataEntries (new structured rows) over the legacy formEntries.
+                val entries = if (body.formDataEntries.isNotEmpty()) {
+                    body.formDataEntries.filter { it.enabled }.map { e ->
+                        KeyValueEntry(e.key, VariableResolver.resolve(e.value, variableLayers))
+                    }
+                } else {
+                    body.formEntries.filter { it.enabled }.map { e ->
+                        e.copy(value = VariableResolver.resolve(e.value, variableLayers))
+                    }
+                }
                 val multipart = MultiPartFormDataContent(
                     formData {
-                        body.formEntries.filter { it.enabled }.forEach { entry ->
-                            append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
-                        }
+                        entries.forEach { entry -> append(entry.key, entry.value) }
                     }
                 )
                 builder.setBody(multipart)

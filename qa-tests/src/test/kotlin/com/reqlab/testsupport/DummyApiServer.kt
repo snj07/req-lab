@@ -342,6 +342,74 @@ fun Application.dummyApiModule(
                 }
             }
         }
+
+        // ── Body type echo endpoints ────────────────────────────
+
+        post("/echo-xml") {
+            requestLogger(call.logRequest())
+            val body = call.receiveText()
+            val ct = call.request.contentType().toString()
+            call.respond(buildJsonObject {
+                put("contentType", ct)
+                put("bodyLength", body.length)
+                put("body", body)
+            })
+        }
+
+        post("/echo-html") {
+            requestLogger(call.logRequest())
+            val body = call.receiveText()
+            val ct = call.request.contentType().toString()
+            call.respond(buildJsonObject {
+                put("contentType", ct)
+                put("bodyLength", body.length)
+                put("body", body)
+            })
+        }
+
+        post("/echo-js") {
+            requestLogger(call.logRequest())
+            val body = call.receiveText()
+            val ct = call.request.contentType().toString()
+            call.respond(buildJsonObject {
+                put("contentType", ct)
+                put("bodyLength", body.length)
+                put("body", body)
+            })
+        }
+
+        post("/echo-form-data") {
+            requestLogger(call.logRequest())
+            val fields = mutableMapOf<String, String>()
+            call.receiveMultipart().forEachPart { part ->
+                when (part) {
+                    is io.ktor.http.content.PartData.FormItem -> {
+                        fields[part.name ?: "unknown"] = part.value
+                    }
+                    is io.ktor.http.content.PartData.FileItem -> {
+                        fields[part.name ?: "file"] = "<file:${part.originalFileName}>"
+                    }
+                    else -> { /* ignore */ }
+                }
+            }
+            call.respond(buildJsonObject {
+                put("fieldCount", fields.size)
+                putJsonObject("fields") {
+                    fields.forEach { (k, v) -> put(k, v) }
+                }
+            })
+        }
+
+        post("/echo-urlencoded") {
+            requestLogger(call.logRequest())
+            val params = call.receiveParameters()
+            call.respond(buildJsonObject {
+                put("paramCount", params.entries().size)
+                putJsonObject("params") {
+                    params.entries().forEach { (k, values) -> put(k, values.firstOrNull() ?: "") }
+                }
+            })
+        }
     }
 }
 

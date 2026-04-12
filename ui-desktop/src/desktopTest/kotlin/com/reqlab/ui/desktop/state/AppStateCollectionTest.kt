@@ -121,6 +121,36 @@ class AppStateCollectionTest {
     }
 
     @Test
+    fun markSaved_large_body_uses_lightweight_saved_snapshot() {
+        val tab = RequestTabState(name = "Large")
+        tab.bodyContent = "{\"items\":[" + (0 until 320_000).joinToString(",") { "{\"k\":$it}" } + "]}"
+        tab.markDirty()
+        assertTrue(tab.isDirty)
+
+        tab.markSaved()
+
+        assertFalse(tab.isDirty)
+        val persistedSnapshot = tab.savedSnapshotForPersistence()
+        assertTrue(persistedSnapshot.startsWith("LARGE#"),
+            "Large-body markSaved must persist lightweight snapshot prefix")
+        assertTrue(persistedSnapshot.length < 10_000,
+            "Saved snapshot for large body must stay compact for responsive saves")
+    }
+
+    @Test
+    fun markDirty_after_large_saved_snapshot_sets_dirty_without_full_snapshot_compare() {
+        val tab = RequestTabState(name = "Large")
+        tab.bodyContent = "x".repeat(250_000)
+        tab.markSaved()
+        assertFalse(tab.isDirty)
+
+        tab.bodyContent += "y"
+        tab.markDirty()
+
+        assertTrue(tab.isDirty)
+    }
+
+    @Test
     fun dirty_state_resets_when_changes_are_reverted_to_saved_snapshot() {
         val tab = RequestTabState(name = "Test", url = "https://example.com")
         tab.markSaved()

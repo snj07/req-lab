@@ -7,6 +7,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import com.reqlab.editor.core.EditorDocument
+import com.reqlab.editor.core.LanguageMode
+import com.reqlab.editor.core.LanguageRegistry
+import com.reqlab.editor.core.TokenType
 
 // ── Syntax token colours ────────────────────────────────────────
 
@@ -35,6 +41,13 @@ object SyntaxColors {
     val gqlDirective = Color(0xFFE5C07B)   // gold        – @directives
     val gqlComment   = Color(0xFF6A9955)   // green       – # comments
 
+    // JavaScript / general scripting
+    val jsKeyword   = Color(0xFFC678DD)   // purple      – keywords (var, let, const, …)
+    val jsBuiltin   = Color(0xFF4EC9B0)   // teal        – built-in objects (console, Date, …)
+    val jsString    = Color(0xFFCE9178)   // warm orange – string literals
+    val jsComment   = Color(0xFF6A9955)   // green       – // and /* */ comments
+    val jsOperator  = Color(0xFFD4D4D4)   // light gray  – operators and punctuation
+
     // General
     val plain        = Color(0xFFD4D4D4)   // default text
     val searchMatch  = Color(0x44FFEB3B)   // yellow tint – search highlight
@@ -44,7 +57,7 @@ object SyntaxColors {
 // ── Content-type detection ──────────────────────────────────────
 
 enum class SyntaxLanguage {
-    JSON, XML, HTML, GRAPHQL, PLAIN
+    JSON, XML, HTML, GRAPHQL, JAVASCRIPT, PLAIN
 }
 
 fun detectLanguage(contentType: String?): SyntaxLanguage = when {
@@ -54,6 +67,8 @@ fun detectLanguage(contentType: String?): SyntaxLanguage = when {
     contentType.contains("xml", ignoreCase = true)  -> SyntaxLanguage.XML
     contentType.contains("html", ignoreCase = true) -> SyntaxLanguage.HTML
     contentType.contains("svg", ignoreCase = true)  -> SyntaxLanguage.XML
+    contentType.contains("javascript", ignoreCase = true) -> SyntaxLanguage.JAVASCRIPT
+    contentType.contains("ecmascript", ignoreCase = true) -> SyntaxLanguage.JAVASCRIPT
     else -> SyntaxLanguage.PLAIN
 }
 
@@ -375,23 +390,216 @@ private fun findWordEnd(text: String, start: Int): Int {
     return i
 }
 
+// ── JavaScript / scripting Highlighter ──────────────────────────
+
+private val JS_KEYWORDS = setOf(
+    "var", "let", "const", "function", "return", "if", "else", "for",
+    "while", "do", "switch", "case", "break", "continue", "try",
+    "catch", "finally", "throw", "new", "delete", "typeof",
+    "instanceof", "in", "of", "class", "extends", "super", "import",
+    "export", "default", "from", "as", "async", "await", "yield",
+    "this", "void", "with",
+)
+
+private val JS_BUILTINS = setOf(
+    "console", "Date", "Math", "JSON", "Object", "Array", "String",
+    "Number", "Boolean", "RegExp", "Error", "Promise", "Map", "Set",
+    "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+    "parseInt", "parseFloat", "isNaN", "isFinite", "require",
+)
+
+fun highlightJavaScript(text: String): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    val len = text.length
+
+    while (i < len) {
+        val ch = text[i]
+        when {
+            // Single-line comment  //
+            ch == '/' && i + 1 < len && text[i + 1] == '/' -> {
+                val end = text.indexOf('\n', i).let { if (it < 0) len else it }
+                withStyle(SpanStyle(color = SyntaxColors.jsComment, fontStyle = FontStyle.Italic)) {
+                    append(text.substring(i, end))
+                }
+                i = end
+            }
+            // Multi-line comment  /* ... */
+            ch == '/' && i + 1 < len && text[i + 1] == '*' -> {
+                val end = text.indexOf("*/", i + 2).let { if (it < 0) len else it + 2 }
+                withStyle(SpanStyle(color = SyntaxColors.jsComment, fontStyle = FontStyle.Italic)) {
+                    append(text.substring(i, end))
+                }
+                i = end
+            }
+            // Double-quoted string
+            ch == '"' -> {
+                val end = findStringEnd(text, i)
+                withStyle(SpanStyle(color = SyntaxColors.jsString)) {
+                    append(text.substring(i, end))
+                }
+                i = end
+            }
+            // Single-quoted string
+            ch == '\'' -> {
+                val end = findCharStringEnd(text, i, '\'')
+                withStyle(SpanStyle(color = SyntaxColors.jsString)) {
+                    append(text.substring(i, end))
+                }
+                i = end
+            }
+            // Template literal
+            ch == '`' -> {
+                val end = findCharStringEnd(text, i, '`')
+                withStyle(SpanStyle(color = SyntaxColors.jsString)) {
+                    append(text.substring(i, end))
+                }
+                i = end
+            }
+            // Number
+            ch.isDigit() || (ch == '-' && i + 1 < len && text[i + 1].isDigit()) -> {
+                val match = JSON_NUMBER_REGEX.find(text, i)
+                if (match != null && match.range.first == i) {
+                    withStyle(SpanStyle(color = SyntaxColors.jsonNumber)) { append(match.value) }
+                    i = match.range.last + 1
+                } else {
+                    append(ch)
+                    i++
+                }
+            }
+            // Word: keyword, builtin, boolean, null, or identifier
+            ch.isLetter() || ch == '_' || ch == '$' -> {
+                val end = findJsWordEnd(text, i)
+                val word = text.substring(i, end)
+                when {
+                    word in JS_KEYWORDS ->
+                        withStyle(SpanStyle(color = SyntaxColors.jsKeyword, fontWeight = FontWeight.SemiBold)) { append(word) }
+                    word in JS_BUILTINS ->
+                        withStyle(SpanStyle(color = SyntaxColors.jsBuiltin)) { append(word) }
+                    word == "true" || word == "false" ->
+                        withStyle(SpanStyle(color = SyntaxColors.jsonBoolean, fontWeight = FontWeight.SemiBold)) { append(word) }
+                    word == "null" || word == "undefined" ->
+                        withStyle(SpanStyle(color = SyntaxColors.jsonNull, fontStyle = FontStyle.Italic)) { append(word) }
+                    else ->
+                        withStyle(SpanStyle(color = SyntaxColors.plain)) { append(word) }
+                }
+                i = end
+            }
+            // Braces and operators
+            ch in "{}()[];:,.=><+-*/%!&|?~^" -> {
+                withStyle(SpanStyle(color = SyntaxColors.jsOperator)) { append(ch) }
+                i++
+            }
+            else -> {
+                append(ch)
+                i++
+            }
+        }
+    }
+}
+
+private fun findCharStringEnd(text: String, start: Int, quote: Char): Int {
+    var i = start + 1
+    while (i < text.length) {
+        when (text[i]) {
+            '\\' -> i += 2
+            quote -> return i + 1
+            else -> i++
+        }
+    }
+    return text.length
+}
+
+private fun findJsWordEnd(text: String, start: Int): Int {
+    var i = start
+    while (i < text.length && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '$')) i++
+    return i
+}
+
 // ── Highlight a single line with the appropriate language ────────
 
+/**
+ * Maps a [SyntaxLanguage] to an editor-core [LanguageMode], returning null
+ * for languages not supported by editor-core (e.g. GraphQL).
+ */
+private fun syntaxLanguageToMode(language: SyntaxLanguage): LanguageMode? = when (language) {
+    SyntaxLanguage.JSON       -> LanguageMode.JSON
+    SyntaxLanguage.XML        -> LanguageMode.XML
+    SyntaxLanguage.HTML       -> LanguageMode.HTML
+    SyntaxLanguage.JAVASCRIPT -> LanguageMode.JAVASCRIPT
+    SyntaxLanguage.PLAIN      -> LanguageMode.PLAIN_TEXT
+    SyntaxLanguage.GRAPHQL    -> null
+}
+
+/** Maps an editor-core [TokenType] to the appropriate [Color] for the given UI language. */
+private fun tokenColor(type: TokenType, language: SyntaxLanguage): Color = when (type) {
+    TokenType.KEYWORD    -> when (language) {
+        SyntaxLanguage.JAVASCRIPT -> SyntaxColors.jsKeyword
+        else                      -> SyntaxColors.jsonBoolean
+    }
+    TokenType.STRING     -> when (language) {
+        SyntaxLanguage.JSON                        -> SyntaxColors.jsonString
+        SyntaxLanguage.JAVASCRIPT                  -> SyntaxColors.jsString
+        SyntaxLanguage.XML, SyntaxLanguage.HTML    -> SyntaxColors.xmlAttrValue
+        else                                       -> SyntaxColors.jsonString
+    }
+    TokenType.NUMBER     -> SyntaxColors.jsonNumber
+    TokenType.COMMENT    -> when (language) {
+        SyntaxLanguage.XML, SyntaxLanguage.HTML -> SyntaxColors.xmlComment
+        else                                    -> SyntaxColors.jsComment
+    }
+    TokenType.OPERATOR   -> SyntaxColors.jsOperator
+    TokenType.PUNCTUATION -> SyntaxColors.jsonBrace
+    TokenType.TAG        -> SyntaxColors.xmlTagName
+    TokenType.ATTRIBUTE  -> SyntaxColors.xmlAttrName
+    TokenType.PROPERTY   -> SyntaxColors.jsonKey
+    TokenType.VALUE      -> SyntaxColors.xmlAttrValue
+    TokenType.PLAIN      -> SyntaxColors.plain
+    TokenType.ERROR      -> Color(0xFFFF6B6B)
+}
+
+/**
+ * Highlights text using editor-core's language tokenizers.
+ * Produces an [AnnotatedString] with the same colour scheme as the legacy
+ * per-language highlighters, but using the new unified tokenizer.
+ */
+private fun highlightWithEditorCore(text: String, language: SyntaxLanguage): AnnotatedString {
+    val mode = syntaxLanguageToMode(language) ?: return AnnotatedString(text)
+    if (mode == LanguageMode.PLAIN_TEXT) return AnnotatedString(text)
+    if (!LanguageRegistry.hasProvider(mode)) LanguageRegistry.registerBuiltins()
+    val provider = LanguageRegistry.getProvider(mode)
+    val doc = EditorDocument.create(text)
+    return buildAnnotatedString {
+        append(text)
+        var tokenState: Any? = null
+        var charOffset = 0
+        for (lineNum in 1..doc.lineCount) {
+            val lineText = doc.lineText(lineNum)
+            val (tokens, newState) = provider.tokenizeLine(lineText, lineNum, tokenState)
+            tokenState = newState
+            for (token in tokens) {
+                val start = charOffset + token.startOffset
+                val end = charOffset + token.endOffset
+                if (start < end && end <= text.length) {
+                    val color = tokenColor(token.type, language)
+                    addStyle(SpanStyle(color = color), start, end.coerceAtMost(text.length))
+                }
+            }
+            charOffset += lineText.length + if (lineNum < doc.lineCount) 1 else 0
+        }
+    }
+}
+
 fun highlightLine(line: String, language: SyntaxLanguage): AnnotatedString = when (language) {
-    SyntaxLanguage.JSON    -> highlightJson(line)
-    SyntaxLanguage.XML     -> highlightXml(line)
-    SyntaxLanguage.HTML    -> highlightXml(line)  // reuse XML highlighter for HTML
-    SyntaxLanguage.GRAPHQL -> highlightGraphql(line)
-    SyntaxLanguage.PLAIN   -> AnnotatedString(line)
+    SyntaxLanguage.GRAPHQL    -> highlightGraphql(line)
+    SyntaxLanguage.PLAIN      -> AnnotatedString(line)
+    else                      -> highlightWithEditorCore(line, language)
 }
 
 /** Highlight the entire text at once (used for small responses). */
 fun highlightText(text: String, language: SyntaxLanguage): AnnotatedString = when (language) {
-    SyntaxLanguage.JSON    -> highlightJson(text)
-    SyntaxLanguage.XML     -> highlightXml(text)
-    SyntaxLanguage.HTML    -> highlightXml(text)
-    SyntaxLanguage.GRAPHQL -> highlightGraphql(text)
-    SyntaxLanguage.PLAIN   -> AnnotatedString(text)
+    SyntaxLanguage.GRAPHQL    -> highlightGraphql(text)
+    SyntaxLanguage.PLAIN      -> AnnotatedString(text)
+    else                      -> highlightWithEditorCore(text, language)
 }
 
 // ── Search match highlighting ───────────────────────────────────
@@ -486,6 +694,102 @@ fun formatXml(raw: String): String {
     }
 
     return sb.toString().trimEnd()
+}
+
+// ── Auto-formatting ─────────────────────────────────────────────
+
+@kotlinx.serialization.ExperimentalSerializationApi
+private val prettyJsonFormatter = Json { prettyPrint = true; prettyPrintIndent = "  " }
+
+/**
+ * Try to pretty-print JSON.  Falls back to the raw text on any error.
+ */
+@kotlinx.serialization.ExperimentalSerializationApi
+fun tryPrettyPrint(raw: String): String = try {
+    val element = prettyJsonFormatter.decodeFromString(JsonElement.serializer(), raw)
+    prettyJsonFormatter.encodeToString(JsonElement.serializer(), element)
+} catch (_: Exception) {
+    raw
+}
+
+/**
+ * Auto-format [raw] text based on [language].
+ */
+@kotlinx.serialization.ExperimentalSerializationApi
+fun autoFormat(raw: String, language: SyntaxLanguage): String = when (language) {
+    SyntaxLanguage.JSON       -> tryPrettyPrint(raw)
+    SyntaxLanguage.XML        -> formatXml(raw)
+    SyntaxLanguage.HTML       -> formatXml(raw)
+    SyntaxLanguage.GRAPHQL    -> raw
+    SyntaxLanguage.JAVASCRIPT -> raw
+    SyntaxLanguage.PLAIN      -> raw
+}
+
+// ── JSON validation ─────────────────────────────────────────────
+
+/**
+ * Result of a JSON validation pass.
+ * [line] and [col] are 1-based and best-effort (extracted from the exception message).
+ */
+data class JsonValidationError(
+    val message: String,
+    val line: Int = -1,
+    val col: Int = -1,
+)
+
+/**
+ * Validates [text] as JSON.  Returns [JsonValidationError] on any parse error,
+ * or null if the text is empty or valid JSON.
+ */
+fun validateJson(text: String): JsonValidationError? {
+    if (text.isBlank()) return null
+    return try {
+        Json.Default.parseToJsonElement(text)
+        null   // valid
+    } catch (e: Exception) {
+        // Try to extract line/col from the exception message, e.g. "… at line 3 column 7 …"
+        val msg = e.message ?: "Invalid JSON"
+        val lineMatch = Regex("""line (\d+)""", RegexOption.IGNORE_CASE).find(msg)
+        val colMatch  = Regex("""column (\d+)""", RegexOption.IGNORE_CASE).find(msg)
+        JsonValidationError(
+            message = msg.substringBefore("\n").take(200),
+            line = lineMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: -1,
+            col  = colMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: -1,
+        )
+    }
+}
+
+// ── XML validation (lightweight) ────────────────────────────────
+
+data class XmlValidationError(val message: String)
+
+/**
+ * Very lightweight XML well-formedness check based on tag balancing.
+ * Returns null if [text] is blank or appears well-formed, or an [XmlValidationError].
+ */
+fun validateXml(text: String): XmlValidationError? {
+    if (text.isBlank()) return null
+    return try {
+        val trimmed = text.trim()
+        // Quick heuristic: must start with '<' and end with '>'
+        if (!trimmed.startsWith("<") || !trimmed.endsWith(">"))
+            return XmlValidationError("XML must begin with '<' and end with '>'")
+        // Count unclosed tags (simplified check)
+        val openTags = Regex("<(\\w[\\w:.-]*)(?:\\s[^>]*)?>").findAll(trimmed)
+            .map { it.groupValues[1].lowercase() }
+            .filter { it !in setOf("area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr") }
+            .toList()
+        val closeTags = Regex("</(\\w[\\w:.-]*)>").findAll(trimmed)
+            .map { it.groupValues[1].lowercase() }
+            .toList()
+        val selfClosing = Regex("<\\w[\\w:.-]*[^>]*/\\s*>").findAll(trimmed).count()
+        val expectedClose = openTags.size - selfClosing
+        if (expectedClose != closeTags.size) {
+            XmlValidationError("XML appears to have mismatched tags (${openTags.size - selfClosing} open, ${closeTags.size} close)")
+        } else null
+    } catch (_: Exception) {
+        null  // Don't block on validation errors in the validator itself
+    }
 }
 
 // ── File extension from content type ────────────────────────────

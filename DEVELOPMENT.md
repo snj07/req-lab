@@ -22,7 +22,7 @@ req-lab/
 ├── core-model/          # Shared domain models (RequestDefinition, ResponseDefinition, …)
 ├── core-network/        # Ktor-backed HTTP engine, interceptors, retry, WebSocket
 ├── core-storage/        # Persistence contracts and JSON file adapter
-├── core-scripting/      # Script engine contracts (pre-request / test scripts)
+├── core-scripting/      # Script engine contracts (pre-request / post-request scripts)
 ├── feature-requests/    # Request use-cases wiring core-model + core-network
 ├── ui-shared/           # Shared Compose UI code (jvm + wasmJs) — 95% of all UI
 ├── ui-desktop/          # Thin Compose Desktop launcher (~44 lines)
@@ -208,7 +208,7 @@ components/
 ├── KeyValueEditor.kt      — reusable key-value table (Params, Headers)
 ├── BodyEditor.kt          — body type selector + content editor
 ├── AuthEditor.kt          — auth type selector + credential fields
-├── ScriptEditor.kt        — code editor for Pre-request and Test scripts
+├── ScriptEditor.kt        — code editor for Pre-request and Post-request scripts
 ├── RequestTabsBar.kt      — horizontal tab bar with scroll, context menu, indicators
 ├── RequestExecutor.kt     — sendRequest, saveRequest, buildAuthConfig, buildCurlCommand
 ├── RequestEditor.kt       — top-level editor composable, delegates to above

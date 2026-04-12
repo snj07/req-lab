@@ -22,6 +22,14 @@ expect fun currentTimeMillis(): Long
 /** Copy [text] to the system clipboard. */
 expect fun copyToClipboard(text: String)
 
+/**
+ * Read plain text from the system clipboard synchronously.
+ * Returns null if the clipboard has no text content or is unavailable.
+ * On desktop this accesses the AWT Toolkit clipboard on the calling thread —
+ * callers must ensure this is called from a background coroutine dispatcher.
+ */
+expect fun readFromClipboard(): String?
+
 // ── Formatting ──────────────────────────────────────────────────
 
 /** Format an epoch-millis timestamp as "HH:mm:ss" local time. */

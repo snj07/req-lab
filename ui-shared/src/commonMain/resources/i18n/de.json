@@ -91,7 +91,7 @@
   "system_theme": "System",
   "tcp_connect": "TCP-Verbindung",
   "test_results": "Testergebnisse",
-  "tests": "Tests",
+  "tests": "Post-Request",
   "theme": "Design",
   "timing": "Zeitmessung",
   "timing_not_available": "Detaillierte Zeitphasen sind für diese Antwort nicht verfügbar.",

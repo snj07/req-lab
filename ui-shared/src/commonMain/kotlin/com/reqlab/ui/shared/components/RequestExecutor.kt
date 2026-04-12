@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.components
 import com.reqlab.core.model.AuthConfig
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormDataEntry
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestBody
@@ -131,7 +132,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                 queryParams = effectiveQueryParams.map { KeyValueEntry(it.key, it.value) },
                 headers = effectiveHeaders.map { KeyValueEntry(it.key, it.value) },
                 auth = buildAuthConfig(tab),
-                body = buildRequestBody(tab.bodyType, effectiveBodyContent),
+                body = buildRequestBody(tab, effectiveBodyContent),
                 createdAtEpochMillis = currentTimeMillis(),
                 updatedAtEpochMillis = currentTimeMillis(),
             )
@@ -191,7 +192,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                                 " ${event.response.metrics.responseSizeBytes}B)",
                             LogLevel.SUCCESS,
                         )
-                        // ── Test script ───────────────────────────────────
+                        // ── Post-request script ───────────────────────────
                         if (tab.testScript.isNotBlank()) {
                             val resp = event.response
                             val layers2 = state.activeVariableLayers()
@@ -216,7 +217,7 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
                             val testResult = scriptEngine.executeTestScript(tab.testScript, testCtx, state.settings.scriptPrefix)
                             testResult.logs.forEach { state.log(it) }
                             if (testResult.error != null) {
-                                state.log("⚠ Test script error: ${testResult.error}", LogLevel.ERROR)
+                                state.log("⚠ Post-request script error: ${testResult.error}", LogLevel.ERROR)
                             }
                             testResult.assertions.forEach { a ->
                                 state.testResults.add(TestResultEntry(a.name, a.passed, a.message ?: ""))
@@ -273,12 +274,30 @@ fun saveRequest(
     onSaved: (() -> Unit)? = null,
 ) {
     tab.syncSystemHeaders()
-    scope.launch {
-        withContext(ioDispatcher) { TabsRepository.save(state) }
-        tab.markSaved()
-        state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
-        onSaved?.invoke()
+    val saveJob = scope.launch {
+        try {
+            val ok = withContext(ioDispatcher) { TabsRepository.save(state) }
+            if (ok) {
+                tab.markSaved()
+                state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
+                onSaved?.invoke()
+            } else {
+                state.log("✗ Failed to save request: ${tab.name}", LogLevel.ERROR)
+                state.showError(
+                    title = "Save failed",
+                    message = "The request could not be saved. Please try again.",
+                )
+            }
+        } finally {
+            state.finishOperation()
+        }
     }
+
+    state.startOperation(
+        title = "Saving request",
+        message = "Please wait while request data is persisted...",
+        job = saveJob,
+    )
 }
 
 // ── Internal helpers ────────────────────────────────────────────
@@ -292,6 +311,40 @@ fun buildAuthConfig(tab: RequestTabState): AuthConfig {
         else             -> emptyMap()
     }
     return AuthConfig(type = tab.authType, params = params)
+}
+
+/**
+ * Builds a [RequestBody] from [tab] state, using structured form rows when available.
+ * Falls back to parsing [effectiveBodyContent] for older/simpler body types.
+ */
+fun buildRequestBody(tab: RequestTabState, effectiveBodyContent: String): RequestBody {
+    return when (tab.bodyType) {
+        BodyType.FORM_DATA -> {
+            val rows = tab.formRows.filter { it.enabled }
+            val formDataEntries = rows.map { com.reqlab.core.model.FormDataEntry(it.key, it.type, it.value, it.description, it.enabled) }
+            val formEntries = rows.map { KeyValueEntry(it.key, it.value) }
+            RequestBody(
+                type = BodyType.FORM_DATA,
+                formEntries = formEntries,
+                formDataEntries = formDataEntries,
+            )
+        }
+        BodyType.X_WWW_FORM_URLENCODED -> {
+            val rows = tab.urlencodedRows.filter { it.enabled }
+            val formEntries = if (rows.isNotEmpty()) {
+                rows.map { KeyValueEntry(it.key, it.value) }
+            } else {
+                // Backward compat: parse from raw bodyContent
+                effectiveBodyContent.split("&", "\n").mapNotNull { part ->
+                    val idx = part.indexOf('=')
+                    if (idx > 0) KeyValueEntry(part.substring(0, idx).trim(), part.substring(idx + 1).trim())
+                    else null
+                }
+            }
+            RequestBody(type = BodyType.X_WWW_FORM_URLENCODED, formEntries = formEntries)
+        }
+        else -> buildRequestBody(tab.bodyType, effectiveBodyContent)
+    }
 }
 
 /**
