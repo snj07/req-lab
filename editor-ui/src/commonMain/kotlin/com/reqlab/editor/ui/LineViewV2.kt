@@ -116,12 +116,20 @@ internal fun LineViewV2(
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     val measured: TextLayoutResult = remember(annotated, wordWrap, containerWidthPx) {
-        val constraints = if (wordWrap && containerWidthPx > 0)
-            Constraints.fixedWidth(containerWidthPx)
-        else
-            Constraints()
-        textMeasurer.measure(annotated, textStyle, constraints = constraints)
-            .also { layoutResult = it }
+        // Compose's packed Constraints use 18 bits per dimension: max = (1 shl 18) - 1 = 262_143 px.
+        // In non-wordWrap mode, measuring an unbounded single line can easily exceed this limit
+        // (50_000 chars × 7.8 px/char ≈ 390_000 px at density=1). Cap the measurement width
+        // to MAX_SAFE_RENDER_WIDTH_PX so that the TextLayoutResult.size.width is always safe.
+        val constraints = when {
+            wordWrap && containerWidthPx > 0 -> Constraints.fixedWidth(containerWidthPx)
+            !wordWrap -> Constraints(maxWidth = MAX_SAFE_RENDER_WIDTH_PX)
+            else      -> Constraints()
+        }
+        textMeasurer.measure(
+            annotated, textStyle,
+            softWrap    = wordWrap,
+            constraints = constraints,
+        ).also { layoutResult = it }
     }
 
     val lineLen    = lineText.length
@@ -181,7 +189,12 @@ internal fun LineViewV2(
     ) {
         Canvas(
             modifier = if (wrapping) Modifier.matchParentSize()
-                       else Modifier.size(width = lineWidthDp, height = lineHeightDp),
+                       // Clamp to prevent Modifier.size() from producing a Constraints width
+                       // above Compose's packed safe limit of 262_143 px.
+                       else Modifier.size(
+                           width  = lineWidthDp.coerceAtMost(with(density) { MAX_SAFE_RENDER_WIDTH_PX.toDp() }),
+                           height = lineHeightDp,
+                       ),
         ) {
             if (showSelection) {
                 val path = measured.getPathForRange(lineSelStart, lineSelEnd)
@@ -204,11 +217,40 @@ internal fun LineViewV2(
 }
 
 /** Returns the text offset within [lr] that corresponds to [position]. */
-private fun offsetInLayout(lr: TextLayoutResult, position: androidx.compose.ui.geometry.Offset): Int =
-    if (position.x >= lr.size.width.toFloat()) lr.layoutInput.text.length
-    else lr.getOffsetForPosition(position)
+private fun offsetInLayout(lr: TextLayoutResult, position: androidx.compose.ui.geometry.Offset): Int {
+    val textLen = lr.layoutInput.text.length
+    if (textLen <= 0) return 0
+
+    val clickedLine = lr.getLineForVerticalPosition(position.y)
+    val lastVisualLine = (lr.lineCount - 1).coerceAtLeast(0)
+
+    // End-of-line snapping should only apply on the LAST wrapped visual line.
+    // On earlier wrapped rows, x can legitimately be > endX(last line), and those
+    // clicks must still place the cursor within that wrapped row.
+    if (clickedLine == lastVisualLine) {
+        val endX = lr.getCursorRect(textLen).left
+        // Clicks beyond rendered text on last visual line are always end-of-line.
+        if (position.x >= endX) return textLen
+
+        // For UX parity with common editors, clicking in the right half of the final
+        // glyph also snaps to end-of-line (cursor after the last character).
+        val lastGlyphStartX = lr.getCursorRect(textLen - 1).left
+        val lastGlyphMidX = lastGlyphStartX + ((endX - lastGlyphStartX) * 0.5f)
+        if (position.x >= lastGlyphMidX) return textLen
+    }
+
+    return lr.getOffsetForPosition(position).coerceIn(0, textLen)
+}
 
 private const val MAX_RENDER_CHARS_PER_LINE = 50_000
+
+/**
+ * Compose's Constraints representation caps each dimension at (1 shl 18) − 1 = 262_143 px.
+ * Using 262_000 gives a small safety margin while maximising visible content.
+ * At default density=1.0 and 13 sp monospace (~7.8 px/char) this allows ~33_600 chars
+ * of visible horizontal content before the layout is clipped.
+ */
+private const val MAX_SAFE_RENDER_WIDTH_PX = 262_000
 
 private fun buildLineAnnotatedString(
     lineText: String,

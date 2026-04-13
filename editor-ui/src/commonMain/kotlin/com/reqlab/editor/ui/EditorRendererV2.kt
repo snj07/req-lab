@@ -6,13 +6,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +33,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -60,6 +64,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.semantics.insertTextAtCursor
@@ -70,7 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.editor.core.InlineEditorError
@@ -79,6 +85,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+
+// Keys that must never produce a character when pressed (no text insertion).
+private val NON_CHARACTER_KEYS = setOf(
+    Key.Function,
+    Key.Unknown,
+    Key.F1, Key.F2, Key.F3, Key.F4, Key.F5, Key.F6,
+    Key.F7, Key.F8, Key.F9, Key.F10, Key.F11, Key.F12,
+    Key.Escape, Key.Insert,
+    Key.PrintScreen, Key.ScrollLock, Key.CapsLock, Key.NumLock,
+    Key.PageUp, Key.PageDown,
+    Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
+    Key.MoveHome, Key.MoveEnd,
+    Key.ShiftLeft, Key.ShiftRight,
+    Key.CtrlLeft, Key.CtrlRight,
+    Key.AltLeft, Key.AltRight,
+    Key.MetaLeft, Key.MetaRight,
+)
 
 /**
  * Fully virtualized code editor renderer.
@@ -110,6 +134,10 @@ fun EditorRendererV2(
     onTextChange: ((String) -> Unit)? = null,
     onPasteRequest: (() -> String?)? = null,
     onCopyRequest: ((String) -> Unit)? = null,
+    /** Called whenever the horizontal scroll offset changes (no-wrap mode only). For testing. */
+    onHorizontalScroll: ((Int) -> Unit)? = null,
+    /** Called once after composition with the internal horizontal ScrollState. For testing. */
+    onScrollStateReady: ((androidx.compose.foundation.ScrollState) -> Unit)? = null,
 ) {
     val state        by viewModel.state.collectAsState()
     val listState    = rememberLazyListState()
@@ -118,10 +146,18 @@ fun EditorRendererV2(
     val focus        = remember { FocusRequester() }
     // Tracks the widest line seen (px) so the dummy spacer keeps hScrollState.maxValue correct.
     var hMaxContentWidthPx by remember { mutableStateOf(0) }
-    val horizontalWheelState = rememberScrollableState { delta ->
-        if (wordWrap) return@rememberScrollableState 0f
-        hScrollState.dispatchRawDelta(-delta)
-        delta
+    // Context-menu state: show a DropdownMenu on secondary-button (right-click) press.
+    var contextMenuVisible by remember { mutableStateOf(false) }
+    var contextMenuOffset  by remember { mutableStateOf(Offset.Zero) }
+
+    // Notify test / caller whenever the horizontal scroll position changes.
+    LaunchedEffect(hScrollState.value) {
+        if (!wordWrap) onHorizontalScroll?.invoke(hScrollState.value)
+    }
+
+    // Expose hScrollState to tests after first successful composition.
+    androidx.compose.runtime.SideEffect {
+        onScrollStateReady?.invoke(hScrollState)
     }
 
     LaunchedEffect(listState.firstVisibleItemIndex, listState.layoutInfo) {
@@ -190,6 +226,8 @@ fun EditorRendererV2(
                         true
                     }
                     meta && event.key == Key.A -> { viewModel.selectAll(); true }
+                    meta && shift && event.key == Key.Z -> { viewModel.redo(); true }
+                    meta && event.key == Key.Z -> { viewModel.undo(); true }
                     meta && event.key == Key.C -> {
                         val selected = viewModel.getSelectedText()
                         if (selected.isNotEmpty()) onCopyRequest?.invoke(selected)
@@ -220,7 +258,12 @@ fun EditorRendererV2(
                     else -> {
                         val cp = event.utf16CodePoint
                         val altOrMeta = meta || event.isCtrlPressed || event.isAltPressed
-                        if (cp > 0 && !cp.toChar().isISOControl() && !altOrMeta) {
+                        val looksLikeFnGlobeGhost =
+                            cp == '?'.code && !event.isShiftPressed && event.key != Key.Slash
+                        // Guard against fn / function / navigation keys whose utf16CodePoint
+                        // happens to be a printable value (e.g. fn → '?' on macOS).
+                        if (cp > 0 && !cp.toChar().isISOControl() && !altOrMeta &&
+                            event.key !in NON_CHARACTER_KEYS && !looksLikeFnGlobeGhost) {
                             viewModel.insertAtCursor(cp.toChar().toString())
                             true
                         } else false
@@ -232,11 +275,37 @@ fun EditorRendererV2(
             .pointerInput(Unit) {
                 detectTapGestures { focus.requestFocus() }
             }
-            .scrollable(
-                state = horizontalWheelState,
-                orientation = Orientation.Horizontal,
-                enabled = !wordWrap,
-            ),
+            // Detect secondary-button (right-click) press and show the context menu.
+            .pointerInput("contextMenu") {
+                awaitEachGesture {
+                    val event = awaitPointerEvent(PointerEventPass.Main)
+                    if (event.buttons.isSecondaryPressed) {
+                        contextMenuOffset =
+                            event.changes.firstOrNull()?.position ?: return@awaitEachGesture
+                        contextMenuVisible = true
+                    }
+                }
+            }
+            // ── Horizontal scroll (no-wrap mode only) ────────────────────────────────────
+            // onPointerEvent fires synchronously on every wheel/trackpad tick, delivering
+            // raw deltas immediately without any velocity-accumulation warm-up phase.
+            // This is the Desktop-specific fast path; the Scroll event only fires on JVM/Desktop.
+            .then(
+                if (!wordWrap)
+                    @OptIn(ExperimentalComposeUiApi::class)
+                    Modifier.onPointerEvent(PointerEventType.Scroll) { event ->
+                        val dx = event.changes.sumOf { it.scrollDelta.x.toDouble() }.toFloat()
+                        val dy = event.changes.sumOf { it.scrollDelta.y.toDouble() }.toFloat()
+                        if (abs(dx) >= abs(dy)) {
+                            // Dominant horizontal: handle here, consume to stop LazyColumn
+                            // from also applying the vertical component (diagonal jerk).
+                            hScrollState.dispatchRawDelta(dx * 34f)
+                            event.changes.forEach { it.consume() }
+                        }
+                        // Pure vertical scroll: not consumed — LazyColumn handles it normally.
+                    }
+                else Modifier
+            )
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
@@ -256,8 +325,16 @@ fun EditorRendererV2(
             val contentWidthPx = (
                 with(density) { maxWidth.toPx() } -
                     with(density) { gutterWidth.toPx() } -
-                    with(density) { 1.dp.toPx() } -
-                    with(density) { 24.dp.toPx() }
+                    with(density) { 1.dp.toPx() }   // divider
+                ).toInt().coerceAtLeast(1)
+
+            // The text in LineViewV2 has padding(start = 8.dp, end = 16.dp) applied.
+            // The TextMeasurer must see the inner width (minus those pads) so that
+            // soft-wrapped text fills the column without spilling into the gutter or
+            // past the right edge.
+            val lineTextWidthPx = (contentWidthPx -
+                with(density) { 8.dp.toPx() } -
+                with(density) { 16.dp.toPx() }
                 ).toInt().coerceAtLeast(1)
 
             // ── Invisible spacer that keeps hScrollState.maxValue in sync ────────────────
@@ -313,6 +390,9 @@ fun EditorRendererV2(
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val ptr   = event.changes.firstOrNull() ?: break
                                 if (!ptr.pressed) break
+                                // Do not treat right-click drag as text selection.
+                                if (event.buttons.isSecondaryPressed &&
+                                        !event.buttons.isPrimaryPressed) break
                                 if (ptr.position != ptr.previousPosition) {
                                     val docOff = posToDragOffset(
                                         posX         = ptr.position.x,
@@ -352,12 +432,17 @@ fun EditorRendererV2(
                         docLine in (start + 1)..(end - 1)
                     }
 
-                    Row(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(if (!wordWrap) Modifier.clipToBounds() else Modifier) // ← ADD
+                        ){
 
                         // ── Gutter ─────────────────────────────────────
                         Row(
                             modifier = Modifier
                                 .width(gutterWidth)
+                                .zIndex(1f) 
                                 .background(theme.background)
                                 .padding(end = 4.dp, top = 1.dp, bottom = 1.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -418,17 +503,33 @@ fun EditorRendererV2(
                         }
 
                         // ── Vertical divider ───────────────────────────
-                        Box(Modifier.width(1.dp).fillMaxHeight().background(theme.gutterBorder))
+                        Box(Modifier.width(1.dp).fillMaxHeight().zIndex(1f).background(theme.gutterBorder))
 
                         // ── Line content ──────────────────────────────────────────────────
                         // One hScrollState is shared. A zero-height dummy Spacer (above the
                         // LazyColumn) sets maxValue via horizontalScroll layout each frame.
-                        // Each row's content is shifted with `offset { IntOffset(-value, 0) }`
+                        // Each row's content is shifted with GPU translationX from hScrollState.
                         // and clipped by clipToBounds() to the viewport edge.
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .then(if (!wordWrap) Modifier.clipToBounds() else Modifier),
+                                .then(if (!wordWrap) Modifier.clipToBounds() else Modifier)
+                                // In no-wrap mode, LineViewV2 is only as wide as its text.
+                                // Clicks in the empty area to the RIGHT of a short line
+                                // don't hit LineViewV2. This fallback handler catches
+                                // unconsumed taps and snaps cursor to line end.
+                                // detectTapGestures uses awaitFirstDown(requireUnconsumed=true)
+                                // so it only fires when LineViewV2 didn't already handle the tap.
+                                .then(
+                                    if (!wordWrap && !isReadOnly)
+                                        Modifier.pointerInput(lineStart, lineEnd) {
+                                            detectTapGestures {
+                                                focus.requestFocus()
+                                                viewModel.moveCursorTo(lineEnd)
+                                            }
+                                        }
+                                    else Modifier
+                                ),
                         ) {
                             LineViewV2(
                                 docLine          = docLine,
@@ -450,16 +551,13 @@ fun EditorRendererV2(
                                 language         = language,
                                 theme            = theme,
                                 wordWrap         = wordWrap,
-                                containerWidthPx = if (wordWrap) contentWidthPx else 0,
+                                containerWidthPx = if (wordWrap) lineTextWidthPx else 0,
                                 modifier         = Modifier
                                     .then(
                                         if (wordWrap) Modifier.fillMaxWidth()
                                         else Modifier
-                                            // Measure at natural text width (not viewport-constrained):
-                                            .wrapContentWidth(unbounded = true)
-                                            // Shift left by scroll amount — all rows move together:
-                                            .offset { IntOffset(-hScrollState.value, 0) }
-                                            // Track widest line so maxValue stays correct:
+                                            .wrapContentWidth(unbounded = true, align = androidx.compose.ui.Alignment.Start)
+                                            .graphicsLayer { translationX = -hScrollState.value.toFloat() }
                                             .onGloballyPositioned { coords ->
                                                 val w = coords.size.width
                                                 if (w > hMaxContentWidthPx) hMaxContentWidthPx = w
@@ -497,6 +595,67 @@ fun EditorRendererV2(
                         else Modifier
                     ),
             )
+
+            // ── Right-click context menu ────────────────────────────────────────
+            val cmDensity = LocalDensity.current
+            val hasSelection = state.selectionStart >= 0 &&
+                state.selectionEnd > state.selectionStart
+            DropdownMenu(
+                expanded         = contextMenuVisible,
+                onDismissRequest = { contextMenuVisible = false },
+                offset           = DpOffset(
+                    x = with(cmDensity) { contextMenuOffset.x.toDp() },
+                    y = with(cmDensity) { contextMenuOffset.y.toDp() },
+                ),
+            ) {
+                DropdownMenuItem(
+                    text    = { Text("Copy") },
+                    enabled = hasSelection,
+                    onClick = {
+                        contextMenuVisible = false
+                        val sel = viewModel.getSelectedText()
+                        if (sel.isNotEmpty()) onCopyRequest?.invoke(sel)
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-copy") else Modifier,
+                )
+                DropdownMenuItem(
+                    text    = { Text("Cut") },
+                    enabled = hasSelection && !isReadOnly,
+                    onClick = {
+                        contextMenuVisible = false
+                        val sel = viewModel.getSelectedText()
+                        if (sel.isNotEmpty()) onCopyRequest?.invoke(sel)
+                        viewModel.deleteBeforeCursor()
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-cut") else Modifier,
+                )
+                DropdownMenuItem(
+                    text    = { Text("Paste") },
+                    enabled = !isReadOnly,
+                    onClick = {
+                        contextMenuVisible = false
+                        scope.launch {
+                            val clip = withContext(Dispatchers.Default) {
+                                onPasteRequest?.invoke()
+                            } ?: return@launch
+                            viewModel.insertAtCursor(clip)
+                        }
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-paste") else Modifier,
+                )
+                DropdownMenuItem(
+                    text    = { Text("Select All") },
+                    onClick = {
+                        contextMenuVisible = false
+                        viewModel.selectAll()
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-selectall") else Modifier,
+                )
+            }
         }
     }
 }
@@ -535,7 +694,12 @@ private fun posToDragOffset(
     val xInContent     = posX - contentStartPx + hScrollValue
     // Monospace 13sp: typical character width ≈ 0.6 × font size in pixels (fontSize * density)
     val charWidthPx    = 13f * density.density * 0.6f
-    val charOffset     = (xInContent / charWidthPx).toInt().coerceIn(0, lineText.length)
+    val snapToLineEndThreshold = (lineText.length * charWidthPx) - (charWidthPx * 0.35f)
+    val charOffset = if (xInContent >= snapToLineEndThreshold) {
+        lineText.length
+    } else {
+        ((xInContent / charWidthPx) + 0.5f).toInt().coerceIn(0, lineText.length)
+    }
 
     return lineStart + charOffset
 }

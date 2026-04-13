@@ -38,6 +38,14 @@ data class EditorDisplayState(
     val totalDisplayLines: Int = 1,
 )
 
+private data class EditCommand(
+    val start: Int,
+    val beforeText: String,
+    val afterText: String,
+    val cursorBefore: Int,
+    val cursorAfter: Int,
+)
+
 // ── EditorViewModelV2 ────────────────────────────────────────────
 
 class EditorViewModelV2(
@@ -79,6 +87,9 @@ class EditorViewModelV2(
     private var lastExternalText: String = initialText
     private var diagnosticsJob: Job? = null
     private var editSequence: Long = 0L
+    private val undoStack = ArrayDeque<EditCommand>()
+    private val redoStack = ArrayDeque<EditCommand>()
+    private var undoBytes: Long = 0L
 
     init {
         idleLexer.scheduleFrom(0, scope)
@@ -88,6 +99,7 @@ class EditorViewModelV2(
     fun onExternalTextChanged(text: String) {
         if (text == lastExternalText) return
         lastExternalText = text
+        clearHistory()
         // Notify immediately: lastExternalText is already correct, so onTextChange fires
         // before the background coroutine completes. The guard above prevents feedback loops
         // when onTextChange → bodyContent update → LaunchedEffect → onExternalTextChanged.
@@ -124,165 +136,228 @@ class EditorViewModelV2(
     }
 
     fun insertAtCursor(text: String) {
+        if (text.isEmpty()) return
         editSequence++
         val st = _state.value
-        var cursorPos = st.cursorOffset
-        val oldText = lastExternalText
-        if (st.selectionStart >= 0 && st.selectionEnd > st.selectionStart) {
-            val from = st.selectionStart
-            val to   = st.selectionEnd
-            document.delete(from, to)
-            styleBuffer.invalidateFrom(from)
-            cursorPos = from
-            val sf = from.coerceIn(0, oldText.length)
-            val st2 = to.coerceIn(sf, oldText.length)
-            lastExternalText = oldText.substring(0, sf) + text + oldText.substring(st2)
-        } else {
-            val sp = cursorPos.coerceIn(0, oldText.length)
-            lastExternalText = oldText.substring(0, sp) + text + oldText.substring(sp)
-        }
+        val oldLen = lastExternalText.length
+        val hasSelection = st.selectionStart >= 0 && st.selectionEnd > st.selectionStart
+        val from = if (hasSelection) st.selectionStart else st.cursorOffset
+        val to   = if (hasSelection) st.selectionEnd else st.cursorOffset
+        val f = from.coerceIn(0, oldLen)
+        val t = to.coerceIn(f, oldLen)
 
-        if (text.length <= 1_000) {
-            document.insert(cursorPos, text)
-            styleBuffer.invalidateFrom(cursorPos)
-            val newCursor = cursorPos + text.length
-            displayLineMap.reset(document.lineCount)
-            _state.update {
-                it.copy(
-                    version      = document.version,
-                    cursorOffset = newCursor,
-                    selectionStart = -1,
-                    selectionEnd   = -1,
-                    totalDisplayLines = displayLineMap.totalDisplayLines,
-                )
-            }
-            notifyTextChanged()
-            idleLexer.scheduleFrom(cursorPos, scope)
-            scheduleDiagnostics()
-        } else {
-            val newCursorEager = (cursorPos + text.length).coerceAtMost(
-                oldText.length - (if (st.selectionStart >= 0) (st.selectionEnd - st.selectionStart).coerceAtLeast(0) else 0) + text.length
-            )
-            _state.update {
-                it.copy(
-                    cursorOffset   = newCursorEager,
-                    selectionStart = -1,
-                    selectionEnd   = -1,
-                )
-            }
-            // lastExternalText was already updated eagerly above — notify now so
-            // onTextChange fires before the background coroutine finishes.
-            notifyTextChanged()
-            scope.launch(Dispatchers.Default) {
-                mutex.withLock {
-                    document.insert(cursorPos, text)
-                    document.rebuildLineIndex()
-                    styleBuffer.invalidateFrom(cursorPos)
-                    styleBuffer.grow(document.length)
-                    displayLineMap.reset(document.lineCount)
-                }
-                val fullText = document.toFullString()
-                val newCursor = (cursorPos + text.length).coerceAtMost(document.length)
-                lastExternalText = fullText
-                withContext(Dispatchers.Main) {
-                    _state.update {
-                        it.copy(
-                            version        = document.version,
-                            cursorOffset   = newCursor,
-                            selectionStart = -1,
-                            selectionEnd   = -1,
-                            totalDisplayLines = displayLineMap.totalDisplayLines,
-                        )
-                    }
-                }
-                idleLexer.scheduleFrom(cursorPos, scope)
-                scheduleDiagnostics()
-            }
-        }
+        applyReplace(
+            from = f,
+            to = t,
+            insertText = text,
+            cursorBefore = st.cursorOffset.coerceIn(0, oldLen),
+            cursorAfter = f + text.length,
+            recordHistory = true,
+            clearRedo = true,
+        )
     }
 
     fun deleteBeforeCursor() {
         editSequence++
         val st = _state.value
+        val oldLen = lastExternalText.length
         if (st.selectionStart >= 0 && st.selectionEnd > st.selectionStart) {
-            deleteRange(st.selectionStart, st.selectionEnd)
+            val f = st.selectionStart.coerceIn(0, oldLen)
+            val t = st.selectionEnd.coerceIn(f, oldLen)
+            applyReplace(
+                from = f,
+                to = t,
+                insertText = "",
+                cursorBefore = st.cursorOffset.coerceIn(0, oldLen),
+                cursorAfter = f,
+                recordHistory = true,
+                clearRedo = true,
+            )
             return
         }
-        val cursor = st.cursorOffset
+
+        // Clamp cursor to current document length so optimistic cursor updates cannot
+        // cause out-of-range backspace behavior.
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
         if (cursor <= 0) return
-        val old = lastExternalText
-        lastExternalText = if (cursor - 1 < old.length) old.removeRange(cursor - 1, minOf(cursor, old.length)) else old
-        document.delete(cursor - 1, cursor)
-        styleBuffer.invalidateFrom(cursor - 1)
-        val newCursor = cursor - 1
-        displayLineMap.reset(document.lineCount)
-        _state.update {
-            it.copy(
-                version      = document.version,
-                cursorOffset = newCursor,
-                selectionStart = -1, selectionEnd = -1,
-                totalDisplayLines = displayLineMap.totalDisplayLines,
-            )
-        }
-        notifyTextChanged()
-        idleLexer.scheduleFrom(newCursor, scope)
-        scheduleDiagnostics()
+        applyReplace(
+            from = cursor - 1,
+            to = cursor,
+            insertText = "",
+            cursorBefore = cursor,
+            cursorAfter = cursor - 1,
+            recordHistory = true,
+            clearRedo = true,
+        )
     }
 
     fun deleteForwardAtCursor() {
         editSequence++
         val st = _state.value
+        val oldLen = lastExternalText.length
         if (st.selectionStart >= 0 && st.selectionEnd > st.selectionStart) {
-            deleteRange(st.selectionStart, st.selectionEnd)
+            val f = st.selectionStart.coerceIn(0, oldLen)
+            val t = st.selectionEnd.coerceIn(f, oldLen)
+            applyReplace(
+                from = f,
+                to = t,
+                insertText = "",
+                cursorBefore = st.cursorOffset.coerceIn(0, oldLen),
+                cursorAfter = f,
+                recordHistory = true,
+                clearRedo = true,
+            )
             return
         }
-        val cursor = st.cursorOffset
-        if (cursor >= document.length) return
-        val old = lastExternalText
-        lastExternalText = if (cursor < old.length) old.removeRange(cursor, minOf(cursor + 1, old.length)) else old
-        document.delete(cursor, cursor + 1)
-        styleBuffer.invalidateFrom(cursor)
-        displayLineMap.reset(document.lineCount)
-        _state.update {
-            it.copy(
-                version      = document.version,
-                cursorOffset = cursor,
-                selectionStart = -1, selectionEnd = -1,
-                totalDisplayLines = displayLineMap.totalDisplayLines,
-            )
-        }
-        notifyTextChanged()
-        idleLexer.scheduleFrom(cursor, scope)
-        scheduleDiagnostics()
+
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
+        if (cursor >= oldLen) return
+        applyReplace(
+            from = cursor,
+            to = cursor + 1,
+            insertText = "",
+            cursorBefore = cursor,
+            cursorAfter = cursor,
+            recordHistory = true,
+            clearRedo = true,
+        )
     }
 
-    private fun deleteRange(from: Int, to: Int) {
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        editSequence++
+        val cmd = undoStack.removeLast()
+        undoBytes -= commandBytes(cmd)
+        applyReplace(
+            from = cmd.start,
+            to = cmd.start + cmd.afterText.length,
+            insertText = cmd.beforeText,
+            cursorBefore = cmd.cursorAfter,
+            cursorAfter = cmd.cursorBefore,
+            recordHistory = false,
+            clearRedo = false,
+        )
+        redoStack.addLast(cmd)
+    }
+
+    fun redo() {
+        if (redoStack.isEmpty()) return
+        editSequence++
+        val cmd = redoStack.removeLast()
+        applyReplace(
+            from = cmd.start,
+            to = cmd.start + cmd.beforeText.length,
+            insertText = cmd.afterText,
+            cursorBefore = cmd.cursorBefore,
+            cursorAfter = cmd.cursorAfter,
+            recordHistory = false,
+            clearRedo = false,
+        )
+        pushUndo(cmd)
+    }
+
+    private fun applyReplace(
+        from: Int,
+        to: Int,
+        insertText: String,
+        cursorBefore: Int,
+        cursorAfter: Int,
+        recordHistory: Boolean,
+        clearRedo: Boolean,
+    ) {
         val old = lastExternalText
         val f = from.coerceIn(0, old.length)
         val t = to.coerceIn(f, old.length)
-        lastExternalText = if (f < t) old.removeRange(f, t) else old
-        document.delete(from, to)
-        styleBuffer.invalidateFrom(from)
+        val beforeText = old.substring(f, t)
+
+        if (beforeText.isEmpty() && insertText.isEmpty()) {
+            _state.update {
+                it.copy(
+                    cursorOffset = cursorAfter.coerceIn(0, old.length),
+                    selectionStart = -1,
+                    selectionEnd = -1,
+                )
+            }
+            return
+        }
+
+        if (recordHistory) {
+            pushUndo(
+                EditCommand(
+                    start = f,
+                    beforeText = beforeText,
+                    afterText = insertText,
+                    cursorBefore = cursorBefore.coerceIn(0, old.length),
+                    cursorAfter = cursorAfter.coerceIn(0, old.length - (t - f) + insertText.length),
+                ),
+            )
+        }
+        if (clearRedo) {
+            redoStack.clear()
+        }
+
+        lastExternalText = old.substring(0, f) + insertText + old.substring(t)
+
+        document.delete(f, t)
+        if (insertText.isNotEmpty()) {
+            document.insert(f, insertText)
+        }
+
+        styleBuffer.invalidateFrom(f)
+        styleBuffer.grow(document.length)
         displayLineMap.reset(document.lineCount)
+
         _state.update {
             it.copy(
-                version      = document.version,
-                cursorOffset = from,
-                selectionStart = -1, selectionEnd = -1,
+                version = document.version,
+                cursorOffset = cursorAfter.coerceIn(0, lastExternalText.length),
+                selectionStart = -1,
+                selectionEnd = -1,
                 totalDisplayLines = displayLineMap.totalDisplayLines,
             )
         }
+
         notifyTextChanged()
-        idleLexer.scheduleFrom(from, scope)
+        idleLexer.scheduleFrom(f, scope)
         scheduleDiagnostics()
     }
+
+    private fun pushUndo(cmd: EditCommand) {
+        undoStack.addLast(cmd)
+        undoBytes += commandBytes(cmd)
+        while (undoStack.size > MAX_UNDO_COMMANDS || undoBytes > MAX_UNDO_BYTES) {
+            val dropped = undoStack.removeFirst()
+            undoBytes -= commandBytes(dropped)
+        }
+    }
+
+    private fun clearHistory() {
+        undoStack.clear()
+        redoStack.clear()
+        undoBytes = 0L
+    }
+
+    private fun commandBytes(cmd: EditCommand): Long =
+        (cmd.beforeText.length + cmd.afterText.length).toLong()
 
     fun moveCursorTo(offset: Int, extendSelection: Boolean = false) {
         val clamped = offset.coerceIn(0, document.length)
         _state.update { st ->
             if (extendSelection) {
-                val anchor = if (st.selectionStart >= 0) st.selectionStart else st.cursorOffset
-                val (selStart, selEnd) = if (anchor <= clamped) anchor to clamped else clamped to anchor
+                // The anchor is the FIXED end of the selection — the opposite end from
+                // where the cursor currently sits. This ensures the anchor stays pinned
+                // while the user drags left or right, and flips correctly when direction
+                // reverses (e.g. drag left then back right past the start point).
+                val anchor = when {
+                    st.selectionStart < 0 ->
+                        st.cursorOffset               // no selection yet: anchor at current cursor
+                    st.cursorOffset >= st.selectionEnd ->
+                        st.selectionStart             // cursor is at the END → anchor is the START
+                    else ->
+                        st.selectionEnd               // cursor is at the START → anchor is the END
+                }
+                val selStart = minOf(anchor, clamped)
+                val selEnd   = maxOf(anchor, clamped)
                 st.copy(cursorOffset = clamped, selectionStart = selStart, selectionEnd = selEnd)
             } else {
                 st.copy(cursorOffset = clamped, selectionStart = -1, selectionEnd = -1)
@@ -418,6 +493,13 @@ class EditorViewModelV2(
                 _state.update { it.copy(diagnostics = errors) }
             }
         }
+    }
+
+    companion object {
+        // Keep undo memory bounded for multi-MB documents while still allowing
+        // long Cmd+Z/Cmd+Shift+Z chains.
+        private const val MAX_UNDO_COMMANDS = 2_000
+        private const val MAX_UNDO_BYTES = 32L * 1024L * 1024L
     }
 
     fun dispose() {
