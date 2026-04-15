@@ -33,6 +33,7 @@ object LanguageRegistry {
         register(XmlMode)
         register(HtmlMode)
         register(JavaScriptMode)
+        register(GraphQLMode)
     }
 
     fun clear() { providers.clear() }

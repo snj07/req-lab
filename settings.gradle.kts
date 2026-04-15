@@ -19,10 +19,6 @@ dependencyResolutionManagement {
 include(
     ":editor-core",
     ":editor-ui",
-    ":editor-web",
-    ":editor-desktop",
-    ":editor-platform-desktop",
-    ":editor-platform-web",
     ":core-model",
     ":core-network",
     ":core-storage",

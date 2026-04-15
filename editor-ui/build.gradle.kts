@@ -14,7 +14,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":editor-core"))
+            api(project(":editor-core"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

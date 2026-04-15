@@ -18,7 +18,6 @@ import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.ui.EditorRendererV2
 import com.reqlab.editor.ui.EditorTheme
 import com.reqlab.editor.ui.EditorViewModelV2
-import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -30,14 +29,16 @@ import kotlin.test.assertTrue
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Issue: horizontal scroll via mouse wheel/trackpad does not work at all in
- * no-wrap mode (or kicks in only after a noticeable delay).
- * Root cause was Compose's velocity-accumulator warm-up on scrollable().
- * Fix: replaced scrollable() with onPointerEvent(Scroll) which fires
- * synchronously on every raw wheel tick.
+ * Regression: horizontal scroll was non-functional in no-wrap mode.
  *
- * These tests verify that the scroll offset actually advances on the FIRST
- * wheel event (no warm-up delay) using the onHorizontalScroll callback.
+ * Fix: the editor uses `onPointerEvent(PointerEventType.Scroll)` which fires
+ * synchronously on every raw wheel / trackpad tick. When the horizontal
+ * component dominates (`abs(dx) >= abs(dy)`), the handler calls
+ * `hScrollState.dispatchRawDelta(dx * 34f)` and consumes the event.
+ *
+ * The tests obtain `hScrollState` via `onScrollStateReady`, then call
+ * `dispatchRawDelta` directly — this validates that the ScrollState is wired
+ * correctly without relying on headless pointer-event dispatch.
  */
 class NoWrapHorizontalScrollTest {
 
@@ -45,14 +46,12 @@ class NoWrapHorizontalScrollTest {
     val composeRule = createComposeRule()
 
     /**
-     * The very first wheel-scroll gesture must move the horizontal offset.
-     * Previously, the velocity accumulator absorbed the first several deltas
-     * resulting in zero movement.
+     * A scroll delta must advance the horizontal offset immediately.
      *
-     * Strategy: obtain hScrollState via onScrollStateReady, then call
-     * dispatchRawDelta directly — this tests that the ScrollState is wired
-     * correctly without relying on headless pointer-event dispatch (which is
-     * limited in Compose Desktop test infrastructure).
+     * Strategy: obtain hScrollState via onScrollStateReady, call
+     * dispatchRawDelta(320f) to simulate what the onPointerEvent handler does
+     * for a rightward wheel tick (dx * 34f with a positive dx), then verify
+     * both the raw ScrollState.value and the onHorizontalScroll callback.
      */
     @Test
     fun mouse_wheel_horizontal_scroll_advances_scroll_state() {
@@ -87,7 +86,7 @@ class NoWrapHorizontalScrollTest {
         requireNotNull(scrollState) { "onScrollStateReady must be called after composition" }
 
         composeRule.runOnIdle {
-            // Positive delta = scroll right (same as dx * -64f for a negative dx tick).
+            // Positive delta = scroll right, matching dx * 34f for a positive dx wheel tick.
             scrollState.dispatchRawDelta(320f)
         }
         composeRule.waitForIdle()
@@ -259,14 +258,18 @@ class NoWrapClickRightOfTextTest {
 }
 
 /**
- * Issue: in soft-wrap (wordWrap=true) mode, lines wrap too late because
- * containerWidthPx was measured as (viewport − gutter − 1dp − 24dp) but
- * did NOT subtract the padding(start=8dp, end=16dp) applied to each line row.
- * Text measured 24dp wider than the actual visual column → wrapped text was
- * still wider than the column and bled into / under the gutter area.
+ * Regression: in soft-wrap mode wrapped lines visually bled into / behind the
+ * gutter (line-number column).
  *
- * Fix: containerWidthPx now subtracts the 8dp+16dp line padding, so the
- * TextMeasurer sees exactly the inner content width.
+ * Three complementary fixes are now in place:
+ *  1. **Measurement fix** – `lineTextWidthPx` subtracts the `padding(start=8dp,
+ *     end=16dp)` applied to each line row from `containerWidthPx`, so the
+ *     TextMeasurer wraps at the correct inner width.
+ *  2. **Visual cover** – the gutter Row has `zIndex(1f)` and
+ *     `background(theme.background)`, so it always paints on top of any text
+ *     that might still reach the gutter column.
+ *  3. **Row clipping** – each line Row applies `clipToBounds()` in no-wrap
+ *     mode, so text that is translated off-screen cannot overflow the row.
  */
 class SoftWrapGutterOverflowTest {
 
@@ -357,11 +360,16 @@ class SoftWrapGutterOverflowTest {
 }
 
 /**
- * Issue: in no-wrap mode, text drifts behind the gutter (line numbers)
- * because the cursor-tracking LaunchedEffect scrolls hScrollState to arbitrary
- * values that the user cannot undo (horizontal scroll was broken).
- * Expected: when cursor is at offset 0, horizontal scroll should be 0
- * (content flush with the left edge of the content area).
+ * Regression: in no-wrap mode, content was drifting behind the gutter
+ * (line numbers), making the beginning of a line invisible.
+ *
+ * The fix combines:
+ *  - `graphicsLayer { translationX = -hScrollState.value.toFloat() }` on each
+ *    line to shift content left by the scroll offset.
+ *  - `clipToBounds()` on the content Box and on the outer Row to prevent
+ *    translated content from overflowing into the gutter column.
+ *  - The gutter Row carries `zIndex(1f)` + `background(theme.background)` as a
+ *    last-resort visual cover for any edge-case pixel bleed.
  */
 class NoWrapContentNotUnderGutterTest {
 

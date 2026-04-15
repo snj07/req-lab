@@ -5,6 +5,7 @@ object JavaScriptMode : LanguageModeProvider {
     override val displayName = "JavaScript"
     override val fileExtensions = listOf("js", "mjs", "cjs", "jsx")
     override val mimeTypes = listOf("application/javascript", "text/javascript")
+    override val foldingStyle = FoldingStyle.BRACE
 
     private val KEYWORDS = setOf(
         "break", "case", "catch", "class", "const", "continue", "debugger",

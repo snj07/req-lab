@@ -93,10 +93,10 @@ import androidx.compose.ui.unit.sp
 import com.reqlab.editor.core.InlineEditorError
 import com.reqlab.editor.core.InlineErrorSeverity
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.core.LanguageRegistry
 import com.reqlab.editor.ui.EditorRendererV2
 import com.reqlab.editor.ui.EditorTheme
 import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.SyntaxHighlighterRegistry
 import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.platform.copyToClipboard as platformCopyToClipboard
 import com.reqlab.ui.shared.platform.readFromClipboard
@@ -241,8 +241,8 @@ fun CodeEditor(
     // ── V2 ViewModel (manages all document state) ─────────────
     val languageMode = language.toLanguageMode()
     val viewModel = remember(languageMode) {
-        if (!LanguageRegistry.hasProvider(LanguageMode.PLAIN_TEXT)) {
-            LanguageRegistry.registerBuiltins()
+        if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
+            SyntaxHighlighterRegistry.registerBuiltinHighlighters()
         }
         EditorViewModelV2(initialText = text, languageMode = languageMode)
     }

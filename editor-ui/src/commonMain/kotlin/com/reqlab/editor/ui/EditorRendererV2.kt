@@ -1,6 +1,12 @@
 package com.reqlab.editor.ui
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.HorizontalScrollbar
+import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +23,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -41,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -72,11 +80,13 @@ import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.editor.core.InlineEditorError
@@ -86,6 +96,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 // Keys that must never produce a character when pressed (no text insertion).
 private val NON_CHARACTER_KEYS = setOf(
@@ -145,15 +156,45 @@ fun EditorRendererV2(
     val scope        = rememberCoroutineScope()
     val focus        = remember { FocusRequester() }
     // Tracks the widest line seen (px) so the dummy spacer keeps hScrollState.maxValue correct.
-    var hMaxContentWidthPx by remember { mutableStateOf(0) }
+    // Reset on every document edit (state.version) so deleted/replaced lines shrink the range.
+    var hMaxContentWidthPx by remember(state.version) { mutableStateOf(0) }
+    // Cache of per-displayLine TextLayoutResults fed back from LineViewV2.
+    // Used by the drag handler to map pointer coords → char offset accurately.
+    val layoutResultCache = remember { mutableStateMapOf<Int, TextLayoutResult>() }
     // Context-menu state: show a DropdownMenu on secondary-button (right-click) press.
     var contextMenuVisible by remember { mutableStateOf(false) }
     var contextMenuOffset  by remember { mutableStateOf(Offset.Zero) }
+    var shiftPressed by remember { mutableStateOf(false) }
 
+    // Add this LaunchedEffect:
+    LaunchedEffect(state.version) {
+        layoutResultCache.clear()
+    }
     // Notify test / caller whenever the horizontal scroll position changes.
     LaunchedEffect(hScrollState.value) {
         if (!wordWrap) onHorizontalScroll?.invoke(hScrollState.value)
     }
+
+    // Cursor-blink animation hoisted from LineViewV2 so exactly ONE
+    // InfiniteTransition exists for the whole editor instead of one per
+    // visible line.  Lines that don't hold the cursor receive cursorVisible=-1f.
+    val cursorBlink = rememberInfiniteTransition(label = "cursorBlink")
+    val cursorBlinkAlpha by cursorBlink.animateFloat(
+        initialValue = 1f,
+        targetValue  = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 1000
+                1f at 0
+                1f at 530
+                0f at 600
+                0f at 930
+                1f at 1000
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "cursorAlpha",
+    )
 
     // Expose hScrollState to tests after first successful composition.
     androidx.compose.runtime.SideEffect {
@@ -209,6 +250,7 @@ fun EditorRendererV2(
             }
             .onPreviewKeyEvent { event ->
                 if (isReadOnly) return@onPreviewKeyEvent false
+                shiftPressed = event.isShiftPressed
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val shift = event.isShiftPressed
                 val meta  = event.isMetaPressed || event.isCtrlPressed
@@ -233,10 +275,41 @@ fun EditorRendererV2(
                         if (selected.isNotEmpty()) onCopyRequest?.invoke(selected)
                         true
                     }
-                    event.key == Key.DirectionLeft  -> { viewModel.moveCursorLeft(shift); true }
-                    event.key == Key.DirectionRight -> { viewModel.moveCursorRight(shift); true }
-                    event.key == Key.DirectionUp    -> { viewModel.moveCursorUp(shift); true }
-                    event.key == Key.DirectionDown  -> { viewModel.moveCursorDown(shift); true }
+                    meta && event.key == Key.X -> {
+                        val selected = viewModel.getSelectedText()
+                        if (selected.isNotEmpty()) {
+                            onCopyRequest?.invoke(selected)
+                            viewModel.deleteSelection()
+                        } else {
+                            // No selection → cut the full current line (VS Code / IntelliJ behaviour).
+                            val docLine   = viewModel.document.lineAt(state.cursorOffset)
+                            val lineText  = viewModel.document.lineText(docLine)
+                            val lineStart = viewModel.document.lineStart(docLine)
+                            val lineEnd   = lineStart + lineText.length
+                            val hasTrailingNewline = lineEnd < viewModel.document.length
+                            val cutText = if (hasTrailingNewline) "$lineText\n" else lineText
+                            if (cutText.isNotEmpty()) {
+                                onCopyRequest?.invoke(cutText)
+                                // For a non-last line: delete "line\n" (lineStart..lineEnd+1).
+                                // For the last line: also delete the preceding '\n' so no
+                                // empty trailing line is left (lineStart-1..lineEnd).
+                                val deleteStart = if (hasTrailingNewline) lineStart
+                                                  else (lineStart - 1).coerceAtLeast(0)
+                                val deleteEnd   = if (hasTrailingNewline) lineEnd + 1 else lineEnd
+                                viewModel.moveCursorTo(deleteStart)
+                                viewModel.moveCursorTo(deleteEnd, extendSelection = true)
+                                viewModel.deleteSelection()
+                            }
+                        }
+                        true
+                    }
+                    
+                    event.isAltPressed && event.key == Key.DirectionLeft  -> { viewModel.moveCursorWordLeft(shift); true }
+                    event.isAltPressed && event.key == Key.DirectionRight -> { viewModel.moveCursorWordRight(shift); true }
+                    event.key == Key.DirectionLeft  -> { if (meta) viewModel.moveCursorToLineStart(shift) else viewModel.moveCursorLeft(shift); true }
+                    event.key == Key.DirectionRight -> { if (meta) viewModel.moveCursorToLineEnd(shift) else viewModel.moveCursorRight(shift); true }
+                    event.key == Key.DirectionUp    -> { if (meta) viewModel.moveCursorToDocStart(shift) else viewModel.moveCursorUp(shift); true }
+                    event.key == Key.DirectionDown  -> { if (meta) viewModel.moveCursorToDocEnd(shift) else viewModel.moveCursorDown(shift); true }
                     event.key == Key.MoveHome       -> { viewModel.moveCursorToLineStart(shift); true }
                     event.key == Key.MoveEnd        -> { viewModel.moveCursorToLineEnd(shift); true }
                     event.key == Key.Backspace -> {
@@ -316,7 +389,7 @@ fun EditorRendererV2(
                 fontFamily = FontFamily.Monospace,
                 textAlign  = TextAlign.End,
             )
-            val gutterWidth = remember(viewModel.document.lineCount) {
+            val gutterWidth = remember(viewModel.document.lineCount.toString().length) {
                 (viewModel.document.lineCount.toString().length * 9 + 40).dp
             }
             val foldStartSet = remember(state.version, state.foldVersion) {
@@ -395,13 +468,14 @@ fun EditorRendererV2(
                                         !event.buttons.isPrimaryPressed) break
                                 if (ptr.position != ptr.previousPosition) {
                                     val docOff = posToDragOffset(
-                                        posX         = ptr.position.x,
-                                        posY         = ptr.position.y,
-                                        listState    = listState,
-                                        viewModel    = viewModel,
-                                        density      = density,
-                                        gutterWidthPx = gutterWidthPx,
-                                        hScrollValue = hScrollState.value,
+                                        posX              = ptr.position.x,
+                                        posY              = ptr.position.y,
+                                        listState         = listState,
+                                        viewModel         = viewModel,
+                                        density           = density,
+                                        gutterWidthPx     = gutterWidthPx,
+                                        hScrollValue      = hScrollState.value,
+                                        layoutResultCache = layoutResultCache,
                                     )
                                     viewModel.moveCursorTo(docOff, extendSelection = true)
                                     ptr.consume()
@@ -503,7 +577,7 @@ fun EditorRendererV2(
                         }
 
                         // ── Vertical divider ───────────────────────────
-                        Box(Modifier.width(1.dp).fillMaxHeight().zIndex(1f).background(theme.gutterBorder))
+                        Box(Modifier.width(1.dp).fillMaxHeight().background(theme.gutterBorder))
 
                         // ── Line content ──────────────────────────────────────────────────
                         // One hScrollState is shared. A zero-height dummy Spacer (above the
@@ -543,15 +617,24 @@ fun EditorRendererV2(
                                 diagnostics      = state.diagnostics.filter { it.line - 1 == docLine },
                                 onTap            = { abs ->
                                     focus.requestFocus()
-                                    viewModel.moveCursorTo(abs)
+                                    viewModel.moveCursorTo(abs, extendSelection = shiftPressed)
                                 },
                                 onDragTo         = { abs ->
                                     viewModel.moveCursorTo(abs, extendSelection = true)
+                                },
+                                onWordSelect     = { abs ->
+                                    focus.requestFocus()
+                                    viewModel.selectWordAt(abs)
                                 },
                                 language         = language,
                                 theme            = theme,
                                 wordWrap         = wordWrap,
                                 containerWidthPx = if (wordWrap) lineTextWidthPx else 0,
+                                // Blink alpha from the single hoisted InfiniteTransition.
+                                // Only the line that holds the cursor gets the live value;
+                                // all others get -1f so the Canvas skips the cursor draw.
+                                cursorVisible    = if (cursorHere >= 0) cursorBlinkAlpha else -1f,
+                                onLayoutMeasured = { lr -> layoutResultCache[displayLine] = lr },
                                 modifier         = Modifier
                                     .then(
                                         if (wordWrap) Modifier.fillMaxWidth()
@@ -571,9 +654,18 @@ fun EditorRendererV2(
             }
 
             // ── Scrollbars (overlay) ──────────────────────────────────────
+            val scrollbarStyle = ScrollbarStyle(
+                minimalHeight    = 48.dp,
+                thickness        = 8.dp,
+                shape            = RoundedCornerShape(4.dp),
+                hoverDurationMillis = 300,
+                unhoverColor     = theme.foreground.copy(alpha = 0.28f),
+                hoverColor       = theme.foreground.copy(alpha = 0.55f),
+            )
             if (!wordWrap) {
                 HorizontalScrollbar(
                     adapter  = rememberScrollbarAdapter(hScrollState),
+                    style    = scrollbarStyle,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
@@ -587,6 +679,7 @@ fun EditorRendererV2(
 
             VerticalScrollbar(
                 adapter  = rememberScrollbarAdapter(listState),
+                style    = scrollbarStyle,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
@@ -597,16 +690,24 @@ fun EditorRendererV2(
             )
 
             // ── Right-click context menu ────────────────────────────────────────
+            // Use a zero-size Box offset to the right-click position as the anchor,
+            // so DropdownMenu's offset= parameter is relative to that point rather
+            // than to the BoxWithConstraints top-left corner.
             val cmDensity = LocalDensity.current
             val hasSelection = state.selectionStart >= 0 &&
                 state.selectionEnd > state.selectionStart
+            Box(
+                Modifier.offset {
+                    IntOffset(
+                        contextMenuOffset.x.roundToInt(),
+                        contextMenuOffset.y.roundToInt(),
+                    )
+                }
+            ) {
             DropdownMenu(
                 expanded         = contextMenuVisible,
                 onDismissRequest = { contextMenuVisible = false },
-                offset           = DpOffset(
-                    x = with(cmDensity) { contextMenuOffset.x.toDp() },
-                    y = with(cmDensity) { contextMenuOffset.y.toDp() },
-                ),
+                offset           = DpOffset.Zero,
             ) {
                 DropdownMenuItem(
                     text    = { Text("Copy") },
@@ -625,8 +726,10 @@ fun EditorRendererV2(
                     onClick = {
                         contextMenuVisible = false
                         val sel = viewModel.getSelectedText()
-                        if (sel.isNotEmpty()) onCopyRequest?.invoke(sel)
-                        viewModel.deleteBeforeCursor()
+                        if (sel.isNotEmpty()) {
+                            onCopyRequest?.invoke(sel)
+                            viewModel.deleteBeforeCursor()
+                        }
                     },
                     modifier = if (testTagPrefix.isNotEmpty())
                         Modifier.testTag("$testTagPrefix-context-cut") else Modifier,
@@ -656,6 +759,7 @@ fun EditorRendererV2(
                         Modifier.testTag("$testTagPrefix-context-selectall") else Modifier,
                 )
             }
+            } // end context-menu anchor Box
         }
     }
 }
@@ -665,7 +769,8 @@ fun EditorRendererV2(
  * Used by the global drag handler to extend selection across line boundaries.
  *
  * Y → displayLine via listState.layoutInfo.visibleItemsInfo
- * X → char offset via monospace character width estimate (13sp × 0.6)
+ * X,Y → char offset via TextLayoutResult.getOffsetForPosition() when a cached layout is
+ *       available, falling back to a monospace character-width estimate otherwise.
  */
 private fun posToDragOffset(
     posX: Float,
@@ -675,6 +780,7 @@ private fun posToDragOffset(
     density: androidx.compose.ui.unit.Density,
     gutterWidthPx: Float,
     hScrollValue: Int,
+    layoutResultCache: Map<Int, TextLayoutResult>,
 ): Int {
     val visibleItems = listState.layoutInfo.visibleItemsInfo
     // Find the item whose top offset is closest to (but ≤) the pointer y
@@ -689,17 +795,29 @@ private fun posToDragOffset(
     val lineStart = viewModel.document.lineStart(docLine)
     val lineText  = viewModel.document.lineText(docLine)
 
-    // Content start = gutter + 1dp divider + 8dp start padding = gutter + 9dp
+    // Content text starts after: gutter + 1dp divider + 8dp start padding.
     val contentStartPx = gutterWidthPx + (9f * density.density)
-    val xInContent     = posX - contentStartPx + hScrollValue
-    // Monospace 13sp: typical character width ≈ 0.6 × font size in pixels (fontSize * density)
-    val charWidthPx    = 13f * density.density * 0.6f
+
+    // ── Accurate path: use cached TextLayoutResult ───────────────────────────
+    val lr = layoutResultCache[displayLine]
+    if (lr != null) {
+        val xInCanvas = (posX - contentStartPx + hScrollValue).coerceAtLeast(0f)
+        // Subtract 1dp top-padding applied inside LineViewV2.
+        val yInCanvas = (posY - item.offset - (1f * density.density)).coerceAtLeast(0f)
+        val charOffset = lr.getOffsetForPosition(
+            androidx.compose.ui.geometry.Offset(xInCanvas, yInCanvas)
+        ).coerceIn(0, lineText.length)
+        return lineStart + charOffset
+    }
+
+    // ── Fallback: monospace estimate (used before first composition) ─────────
+    val xInContent  = posX - contentStartPx + hScrollValue
+    val charWidthPx = 13f * density.density * 0.6f
     val snapToLineEndThreshold = (lineText.length * charWidthPx) - (charWidthPx * 0.35f)
     val charOffset = if (xInContent >= snapToLineEndThreshold) {
         lineText.length
     } else {
         ((xInContent / charWidthPx) + 0.5f).toInt().coerceIn(0, lineText.length)
     }
-
     return lineStart + charOffset
 }

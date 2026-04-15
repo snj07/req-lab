@@ -314,6 +314,10 @@ class EditorViewModelV2(
                 selectionStart = -1,
                 selectionEnd = -1,
                 totalDisplayLines = displayLineMap.totalDisplayLines,
+                // Clear stale diagnostics immediately so undo/redo/edits don't
+                // leave red underlines on text that is now syntactically valid.
+                // They are re-populated after the 500 ms background validation pass.
+                diagnostics = emptyList(),
             )
         }
 
@@ -404,6 +408,68 @@ class EditorViewModelV2(
         val line   = document.lineAt(offset)
         moveCursorTo(document.lineStart(line) + document.lineText(line).length, extendSelection)
     }
+
+    fun selectWordAt(offset: Int) {
+        val text = lastExternalText
+        val len = text.length
+        if (len == 0) return
+        val pos = offset.coerceIn(0, len - 1)
+        var start = pos
+        var end = pos
+        while (start > 0 && isWordChar(text[start - 1])) start--
+        while (end < len && isWordChar(text[end])) end++
+        if (start == end) end = (end + 1).coerceAtMost(len) // single non-word char
+        _state.update {
+            it.copy(
+                selectionStart = start,
+                selectionEnd = end,
+                cursorOffset = end,
+            )
+        }
+    }
+
+    fun deleteSelection() {
+        val st = _state.value
+        if (st.selectionStart < 0 || st.selectionEnd <= st.selectionStart) return
+        editSequence++
+        val oldLen = lastExternalText.length
+        val f = st.selectionStart.coerceIn(0, oldLen)
+        val t = st.selectionEnd.coerceIn(f, oldLen)
+        applyReplace(
+            from = f,
+            to = t,
+            insertText = "",
+            cursorBefore = st.cursorOffset.coerceIn(0, oldLen),
+            cursorAfter = f,
+            recordHistory = true,
+            clearRedo = true,
+        )
+    }
+
+    fun moveCursorWordLeft(extendSelection: Boolean = false) {
+        val text = lastExternalText
+        var pos = _state.value.cursorOffset.coerceIn(0, text.length)
+        if (pos > 0) pos--
+        while (pos > 0 && !isWordChar(text[pos - 1])) pos--
+        while (pos > 0 && isWordChar(text[pos - 1])) pos--
+        moveCursorTo(pos, extendSelection)
+    }
+
+    fun moveCursorWordRight(extendSelection: Boolean = false) {
+        val text = lastExternalText
+        var pos = _state.value.cursorOffset.coerceIn(0, text.length)
+        while (pos < text.length && !isWordChar(text[pos])) pos++
+        while (pos < text.length && isWordChar(text[pos])) pos++
+        moveCursorTo(pos, extendSelection)
+    }
+
+    fun moveCursorToDocStart(extendSelection: Boolean = false) =
+        moveCursorTo(0, extendSelection)
+
+    fun moveCursorToDocEnd(extendSelection: Boolean = false) =
+        moveCursorTo(document.length, extendSelection)
+
+    private fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '_'
 
     fun selectAll() {
         _state.update { it.copy(selectionStart = 0, selectionEnd = document.length, cursorOffset = document.length) }

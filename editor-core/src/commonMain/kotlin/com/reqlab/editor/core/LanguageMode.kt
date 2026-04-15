@@ -1,31 +1,54 @@
 package com.reqlab.editor.core
 
 enum class LanguageMode {
-    PLAIN_TEXT, JSON, XML, HTML, JAVASCRIPT;
+    PLAIN_TEXT, JSON, XML, HTML, JAVASCRIPT, GRAPHQL;
 
     companion object {
         fun fromContentType(contentType: String?): LanguageMode {
             val type = contentType?.lowercase().orEmpty()
             return when {
-                "json" in type                        -> JSON
-                "xml" in type                         -> XML
-                "html" in type || "text/html" in type -> HTML
-                "javascript" in type || "js" in type  -> JAVASCRIPT
-                else                                  -> PLAIN_TEXT
+                "json" in type                              -> JSON
+                "graphql" in type                           -> GRAPHQL
+                "xml" in type                               -> XML
+                "html" in type || "text/html" in type       -> HTML
+                "javascript" in type || "ecmascript" in type || "js" in type -> JAVASCRIPT
+                else                                        -> PLAIN_TEXT
             }
         }
     }
 }
 
-interface LanguageModeProvider {
+/**
+ * Describes the structural folding strategy that the editor should use for
+ * a language.  Language providers declare which strategy applies; the editor-ui
+ * layer dispatches to the appropriate detector without ever naming individual
+ * [LanguageMode] values.
+ *
+ * - [BRACE]  – fold by matching `{` / `}` and `[` / `]` (JSON, JS, GraphQL …)
+ * - [XML]    – fold by matching open/close XML/HTML tags
+ * - [PLAIN]  – no structural folding (plain text, CSV …)
+ */
+enum class FoldingStyle { BRACE, XML, PLAIN }
+
+interface LanguageModeProvider : TextFormatter {
     val mode: LanguageMode
     val displayName: String
     val fileExtensions: List<String>
     val mimeTypes: List<String>
 
+    /** Structural folding strategy.  Defaults to [FoldingStyle.PLAIN]. */
+    val foldingStyle: FoldingStyle get() = FoldingStyle.PLAIN
+
     fun tokenizeLine(line: String, lineNumber: Int, state: Any? = null): Pair<List<Token>, Any?>
     fun foldingRegions(document: EditorDocument): List<FoldRegion>
     fun validate(text: String): List<InlineEditorError>
+
+    /**
+     * Default no-op formatter — returns [text] unchanged.
+     * Language modes that support formatting override this.
+     * Declared here so [LanguageModeProvider] fulfils [TextFormatter] automatically.
+     */
+    override fun format(text: String): String = text
 
     /**
      * Tokenize [document] in the char range [fromChar, toChar) and write results

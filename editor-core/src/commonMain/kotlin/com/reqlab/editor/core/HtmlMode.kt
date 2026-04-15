@@ -5,6 +5,7 @@ object HtmlMode : LanguageModeProvider {
     override val displayName = "HTML"
     override val fileExtensions = listOf("html", "htm", "xhtml")
     override val mimeTypes = listOf("text/html", "application/xhtml+xml")
+    override val foldingStyle = FoldingStyle.XML
 
     override fun tokenizeLine(line: String, lineNumber: Int, state: Any?): Pair<List<Token>, Any?> =
         XmlMode.tokenizeLine(line, lineNumber, state)
@@ -18,4 +19,6 @@ object HtmlMode : LanguageModeProvider {
             if ("Unclosed" in error.message) error.copy(severity = InlineErrorSeverity.WARNING) else error
         }
     }
+
+    override fun format(text: String): String = XmlMode.format(text)
 }

@@ -1,10 +1,6 @@
 package com.reqlab.editor.ui
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -14,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -42,6 +40,8 @@ import com.reqlab.editor.core.InlineErrorSeverity
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.core.StyleBuffer
 import com.reqlab.editor.core.TokenType
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+
 
 @Composable
 internal fun LineViewV2(
@@ -56,10 +56,23 @@ internal fun LineViewV2(
     diagnostics: List<InlineEditorError>,
     onTap: (absoluteOffset: Int) -> Unit,
     onDragTo: ((absoluteOffset: Int) -> Unit)? = null,
+    // onWordSelect = { abs ->
+    //     viewModel.selectWordAt(abs)
+    // },
+    onWordSelect: ((absoluteOffset: Int) -> Unit)? = null,
     language: LanguageMode,
     theme: EditorTheme = EditorTheme.Dark,
     wordWrap: Boolean = true,
     containerWidthPx: Int = 0,
+    /**
+     * Pre-computed cursor-blink alpha (0f..1f) from the hoisted InfiniteTransition
+     * in EditorRendererV2. -1f means "no cursor on this line" (draws nothing).
+     */
+    cursorVisible: Float = -1f,
+    /** Called after every (re-)measure with the new TextLayoutResult. Used by
+     *  the drag-selection handler to map pointer coordinates to character offsets
+     *  without relying on a hardcoded character-width estimate. */
+    onLayoutMeasured: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -67,25 +80,9 @@ internal fun LineViewV2(
     val onSurface    = theme.foreground
     val primary      = theme.accent
 
-    val cursorVisible: Float = if (cursorOffset >= 0) {
-        val infiniteTransition = rememberInfiniteTransition(label = "cursorBlink")
-        infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue  = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = keyframes {
-                    durationMillis = 1000
-                    1f at 0
-                    1f at 530
-                    0f at 600
-                    0f at 930
-                    1f at 1000
-                },
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "cursorAlpha",
-        ).value
-    } else 0f
+    // cursorVisible is provided by the caller (hoisted to EditorRendererV2).
+    // A value of -1f means no cursor on this line; treat as fully transparent.
+    val effectiveCursorAlpha = cursorVisible.coerceAtLeast(0f)
 
     val lineText: String = remember(version, docLine) {
         if (docLine < document.lineCount) document.lineText(docLine) else ""
@@ -132,6 +129,13 @@ internal fun LineViewV2(
         ).also { layoutResult = it }
     }
 
+    // Notify caller whenever the layout is (re-)computed so the drag handler
+    // in EditorRendererV2 can use getOffsetForPosition() instead of a
+    // hardcoded character-width estimate.
+    LaunchedEffect(measured) {
+        onLayoutMeasured?.invoke(measured)
+    }
+
     val lineLen    = lineText.length
     val lineEndOff = lineStartOffset + lineLen
     val renderLen  = measured.layoutInput.text.length
@@ -157,25 +161,27 @@ internal fun LineViewV2(
             .height(lineHeightDp)
             .pointerInput(lineStartOffset) {
                 awaitEachGesture {
-                    // ── DOWN: position cursor (always on press, not just confirmed tap) ──
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val lr0 = layoutResult ?: return@awaitEachGesture
                     val charOff0 = offsetInLayout(lr0, down.position)
-                    onTap(lineStartOffset + charOff0)
+                    val absOff0 = lineStartOffset + charOff0
+
+                    // Immediately place cursor on first press — no delay.
+                    // If a double-click follows, onWordSelect will override this placement.
+                    onTap(absOff0)
                     down.consume()
 
-                    // ── DRAG: extend selection as pointer moves ──
                     val lineHeightPx = with(density) { lineHeightDp.toPx() }
-                    var moved = false
+                    // Drain pointer events until release, handling drag selection
+                    // with zero startup delay (drag starts on the very first move event).
+                    var released = false
+                    var dragged  = false
                     do {
                         val event = awaitPointerEvent()
                         val ptr   = event.changes.firstOrNull() ?: break
-                        if (!ptr.pressed) break
+                        if (!ptr.pressed) { released = true; break }
                         if (ptr.position != ptr.previousPosition) {
-                            moved = true
-                            // Only handle intra-line drags (p.y within line bounds).
-                            // Cross-line drags (y outside [0, lineHeightPx]) are handled
-                            // by the global drag handler in EditorRendererV2.
+                            dragged = true
                             if (ptr.position.y in 0f..lineHeightPx) {
                                 val lr = layoutResult ?: break
                                 val charOff = offsetInLayout(lr, ptr.position)
@@ -184,6 +190,18 @@ internal fun LineViewV2(
                             ptr.consume()
                         }
                     } while (true)
+
+                    // After a clean tap (no drag), check for double-click within 300 ms.
+                    // A second press triggers word selection, overriding the initial cursor.
+                    if (released && !dragged && onWordSelect != null) {
+                        val secondDown = withTimeoutOrNull(300L) {
+                            awaitFirstDown(requireUnconsumed = false)
+                        }
+                        if (secondDown != null) {
+                            onWordSelect.invoke(absOff0)
+                            secondDown.consume()
+                        }
+                    }
                 }
             },
     ) {
@@ -203,10 +221,10 @@ internal fun LineViewV2(
 
             drawText(measured, topLeft = Offset.Zero)
 
-            if (cursorCol >= 0 && cursorVisible > 0f) {
+            if (cursorCol >= 0 && effectiveCursorAlpha > 0f) {
                 val cursorRect: Rect = measured.getCursorRect(cursorCol)
                 drawLine(
-                    color       = primary.copy(alpha = cursorVisible),
+                    color       = primary.copy(alpha = effectiveCursorAlpha),
                     start       = Offset(cursorRect.left, cursorRect.top),
                     end         = Offset(cursorRect.left, cursorRect.bottom),
                     strokeWidth = 2f,

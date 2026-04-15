@@ -5,8 +5,9 @@ object XmlMode : LanguageModeProvider {
     override val displayName = "XML"
     override val fileExtensions = listOf("xml", "xsl", "xslt", "xsd", "svg")
     override val mimeTypes = listOf("application/xml", "text/xml")
+    override val foldingStyle = FoldingStyle.XML
 
-    internal val VOID_ELEMENTS = setOf(
+    val VOID_ELEMENTS = setOf(
         "area", "base", "br", "col", "embed", "hr", "img", "input",
         "link", "meta", "param", "source", "track", "wbr",
     )
@@ -105,6 +106,9 @@ object XmlMode : LanguageModeProvider {
 
     override fun validate(text: String): List<InlineEditorError> {
         if (text.isBlank()) return emptyList()
+        val trimmedText = text.trim()
+        if (!trimmedText.startsWith("<") || !trimmedText.endsWith(">"))
+            return listOf(InlineEditorError(1, 1, "XML must begin with '<' and end with '>'"))
         val errors = mutableListOf<InlineEditorError>()
         val stack = ArrayDeque<Pair<String, Int>>()
         val stripped = stripComments(text)
@@ -139,5 +143,92 @@ object XmlMode : LanguageModeProvider {
                 i = end
             } else { append(text[i]); i++ }
         }
+    }
+
+    override fun format(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return trimmed
+        return try {
+            val sb = StringBuilder(trimmed.length * 2)
+            var indent = 0
+            val maxIndent = 500
+            var i = 0
+            val len = trimmed.length
+
+            while (i < len) {
+                if (trimmed[i].isWhitespace()) { i++; continue }
+
+                if (trimmed[i] != '<') {
+                    val start = i
+                    while (i < len && trimmed[i] != '<') i++
+                    val txt = trimmed.substring(start, i).trim()
+                    if (txt.isNotEmpty()) {
+                        appendFormatIndent(sb, indent, maxIndent)
+                        sb.append(txt).append('\n')
+                    }
+                    continue
+                }
+
+                val tagStart = i
+
+                if (trimmed.startsWith("<![CDATA[", i)) {
+                    val end = trimmed.indexOf("]]>", i + 9).let { if (it < 0) len else it + 3 }
+                    appendFormatIndent(sb, indent, maxIndent)
+                    sb.append(trimmed.substring(tagStart, end)).append('\n')
+                    i = end; continue
+                }
+
+                if (trimmed.startsWith("<!--", i)) {
+                    val end = trimmed.indexOf("-->", i + 4).let { if (it < 0) len else it + 3 }
+                    appendFormatIndent(sb, indent, maxIndent)
+                    sb.append(trimmed.substring(tagStart, end)).append('\n')
+                    i = end; continue
+                }
+
+                i++
+                while (i < len && trimmed[i] != '>') {
+                    if (trimmed[i] == '"') { i++; while (i < len && trimmed[i] != '"') i++ }
+                    else if (trimmed[i] == '\'') { i++; while (i < len && trimmed[i] != '\'') i++ }
+                    i++
+                }
+                if (i < len) i++
+
+                val tag = trimmed.substring(tagStart, i)
+                val isClosing = tag.startsWith("</")
+                val isSelfClosing = tag.endsWith("/>")
+                val isProcInstr = tag.startsWith("<?") || tag.startsWith("<!")
+                val tagName = tag.removePrefix("</").removePrefix("<")
+                    .takeWhile { it.isLetterOrDigit() || it == ':' || it == '-' || it == '_' }
+                    .lowercase()
+                val isVoid = tagName in VOID_ELEMENTS
+
+                if (isClosing) indent = (indent - 1).coerceAtLeast(0)
+
+                // Inline element: <tag>text</tag> kept on one line
+                if (!isClosing && !isSelfClosing && !isProcInstr && !isVoid) {
+                    val nextLt = trimmed.indexOf('<', i)
+                    if (nextLt >= i) {
+                        val closingTag = "</$tagName>"
+                        if (trimmed.regionMatches(nextLt, closingTag, 0, closingTag.length, ignoreCase = true)) {
+                            val inlineText = trimmed.substring(i, nextLt)
+                            appendFormatIndent(sb, indent, maxIndent)
+                            sb.append(tag).append(inlineText).append(closingTag).append('\n')
+                            i = nextLt + closingTag.length
+                            continue
+                        }
+                    }
+                }
+
+                appendFormatIndent(sb, indent, maxIndent)
+                sb.append(tag).append('\n')
+                if (!isClosing && !isSelfClosing && !isProcInstr && !isVoid) indent++
+            }
+
+            sb.toString().trimEnd()
+        } catch (_: Throwable) { text }
+    }
+
+    private fun appendFormatIndent(sb: StringBuilder, indent: Int, maxIndent: Int) {
+        repeat(indent.coerceAtMost(maxIndent)) { sb.append("  ") }
     }
 }

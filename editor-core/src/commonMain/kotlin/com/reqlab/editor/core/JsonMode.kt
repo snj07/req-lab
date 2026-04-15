@@ -1,13 +1,24 @@
 package com.reqlab.editor.core
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 object JsonMode : LanguageModeProvider {
     override val mode = LanguageMode.JSON
     override val displayName = "JSON"
     override val fileExtensions = listOf("json", "jsonc", "geojson")
     override val mimeTypes = listOf("application/json", "text/json")
+    override val foldingStyle = FoldingStyle.BRACE
     private const val LARGE_FILE_THRESHOLD = 1_000_000
+
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val prettyJson = Json { prettyPrint = true; prettyPrintIndent = "  " }
+
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    override fun format(text: String): String = try {
+        val element = prettyJson.decodeFromString(JsonElement.serializer(), text)
+        prettyJson.encodeToString(JsonElement.serializer(), element)
+    } catch (_: Throwable) { text }
 
     override fun tokenizeLine(line: String, lineNumber: Int, state: Any?): Pair<List<Token>, Any?> {
         val tokens = mutableListOf<Token>()

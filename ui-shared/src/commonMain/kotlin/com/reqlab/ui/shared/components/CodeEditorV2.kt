@@ -38,12 +38,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.editor.core.InlineEditorError
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.core.LanguageRegistry
+import com.reqlab.editor.ui.EditorColors
 import com.reqlab.editor.ui.EditorRendererV2
 import com.reqlab.editor.ui.EditorTheme
 import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.SyntaxHighlighterRegistry
 import com.reqlab.ui.shared.platform.copyToClipboard
 import com.reqlab.ui.shared.platform.readFromClipboard
+import com.reqlab.ui.shared.theme.LightAppColors
+import com.reqlab.ui.shared.theme.LocalAppColors
 import com.reqlab.ui.shared.theme.ReqLabColors
 
 /**
@@ -93,8 +96,8 @@ fun CodeEditorV2(
     // ── ViewModel lifecycle ───────────────────────────────────────
 
     val viewModel = remember(languageMode) {
-        if (!LanguageRegistry.hasProvider(com.reqlab.editor.core.LanguageMode.PLAIN_TEXT)) {
-            LanguageRegistry.registerBuiltins()
+        if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
+            SyntaxHighlighterRegistry.registerBuiltinHighlighters()
         }
         EditorViewModelV2(initialText = text, languageMode = languageMode)
     }
@@ -126,7 +129,7 @@ fun CodeEditorV2(
             viewModel      = viewModel,
             isReadOnly     = isReadOnly,
             language       = language.toLanguageMode(),
-            theme          = EditorTheme.Dark,
+            theme          = currentEditorTheme(),
             testTagPrefix  = testTagPrefix,
             modifier       = Modifier.weight(1f).fillMaxWidth(),
             onTextChange   = onTextChange,
@@ -203,13 +206,37 @@ private fun CodeEditorV2Toolbar(
 
 /**
  * Maps [SyntaxLanguage] (used by the legacy CodeEditor API) to [LanguageMode]
- * (used by editor-core).
+ * (used by editor-core).  Now delegated to [SyntaxLanguage.toLanguageMode].
  */
-internal fun SyntaxLanguage.toLanguageMode(): LanguageMode = when (this) {
-    SyntaxLanguage.JSON       -> LanguageMode.JSON
-    SyntaxLanguage.XML        -> LanguageMode.XML
-    SyntaxLanguage.HTML       -> LanguageMode.HTML
-    SyntaxLanguage.JAVASCRIPT,
-    SyntaxLanguage.GRAPHQL    -> LanguageMode.JAVASCRIPT
-    SyntaxLanguage.PLAIN      -> LanguageMode.PLAIN_TEXT
+// Removed: extension is now a member of SyntaxLanguage
+
+// ── Theme helper ──────────────────────────────────────────────────
+
+/**
+ * Builds an [EditorTheme] that matches the current [LocalAppColors] palette.
+ * Light palette  → [EditorTheme.Light].
+ * Dark palette   → colours derived from the palette so the editor background,
+ *                  gutter, and scrollbars all align with the rest of the app UI.
+ */
+@Composable
+private fun currentEditorTheme(): EditorTheme {
+    val p = LocalAppColors.current
+    return if (p === LightAppColors) {
+        EditorTheme.Light
+    } else {
+        EditorTheme(
+            background       = p.surface,           // 0xFF1E1F32 – matches cards/panels
+            foreground       = p.onSurface,          // 0xFFD4D4E4 – readable text
+            lineNumberFg     = p.onSurfaceDim,       // 0xFF6C6C85 – muted numbers
+            lineNumberBg     = p.surfaceVariant,     // 0xFF252640 – slightly off-surface
+            gutterBorder     = p.border,             // 0xFF383952
+            selectionBg      = p.primaryContainer,  // 0xFF3D4580 – visible highlight
+            cursorLine       = p.surfaceHigh,        // 0xFF30314D – subtle current-line bg
+            foldIndicator    = p.onSurfaceDim,
+            indentGuide      = p.borderLight,        // 0xFF45466A
+            errorUnderline   = p.error,              // 0xFFE06C75
+            warningUnderline = EditorColors.warningUnderline,
+            accent           = p.primary,            // 0xFF7B8DEF – cursor + selection accent
+        )
+    }
 }
