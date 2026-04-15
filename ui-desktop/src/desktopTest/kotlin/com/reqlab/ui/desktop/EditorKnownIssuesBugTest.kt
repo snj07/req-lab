@@ -15,9 +15,9 @@ import com.reqlab.core.model.BodyType
 import com.reqlab.editor.core.EditorDocument
 import com.reqlab.editor.core.JsonMode
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.ui.EditorRendererV2
+import com.reqlab.editor.ui.EditorRenderer
 import com.reqlab.editor.ui.EditorTheme
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorViewModel
 import com.reqlab.ui.shared.MainScreen
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestEditorTab
@@ -88,7 +88,7 @@ class EditorVerticalScrollBugTest {
      */
     @Test
     fun baseline_vm_cursor_advances_correctly_via_repeated_moveCursorDown() {
-        val vm = EditorViewModelV2(buildLinesText(80), LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(buildLinesText(80), LanguageMode.PLAIN_TEXT)
 
         repeat(74) { vm.moveCursorDown() }
 
@@ -105,11 +105,11 @@ class EditorVerticalScrollBugTest {
      */
     @Test
     fun baseline_first_line_gutter_label_is_rendered_on_load() {
-        val vm = EditorViewModelV2(buildLinesText(80), LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(buildLinesText(80), LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 300.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -141,20 +141,20 @@ class EditorVerticalScrollBugTest {
      *
      * Expected   : gutter text "51" is rendered ⇒ fetchSemanticsNodeList()
      *              returns a non-empty list ⇒ assertion PASSES.
-     * Actual     : no LaunchedEffect in EditorRendererV2 to call
+     * Actual     : no LaunchedEffect in EditorRenderer to call
      *              listState.animateScrollToItem(cursorLine) ⇒ gutter item 50
      *              is outside the 300 dp window and never composed ⇒ the list
      *              is EMPTY ⇒ assertion FAILS.
      */
     @Test
     fun bug_viewport_must_auto_scroll_to_show_cursor_line_after_moveCursorDown() {
-        val vm = EditorViewModelV2(buildLinesText(80), LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(buildLinesText(80), LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             // Constrain height to ~15 visible rows (20 dp/row) so line 50 is
             // definitely outside the initial viewport.
             Box(Modifier.size(600.dp, 300.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -186,7 +186,7 @@ class EditorVerticalScrollBugTest {
         } catch (e: AssertionError) {
             throw AssertionError(
                 "After cursor moved to doc line 50, gutter label '51' must be " +
-                "visible in the viewport — EditorRendererV2 must auto-scroll the " +
+                "visible in the viewport — EditorRenderer must auto-scroll the " +
                 "LazyColumn to follow the cursor. " +
                 "Fix: add LaunchedEffect(state.cursorOffset) { listState.animateScrollToItem(cursorLine) }.",
                 e
@@ -197,7 +197,7 @@ class EditorVerticalScrollBugTest {
     }
 
     /**
-     * BUG PROOF — The VerticalScrollbar in EditorRendererV2 has no test tag,
+     * BUG PROOF — The VerticalScrollbar in EditorRenderer has no test tag,
      * which makes scroll-position assertions impossible in automated tests.
      *
      * Expected: onNodeWithTag("iss1b-vscrollbar") finds an existing node.
@@ -206,11 +206,11 @@ class EditorVerticalScrollBugTest {
      */
     @Test
     fun bug_vertical_scrollbar_must_have_a_resolvable_test_tag() {
-        val vm = EditorViewModelV2(buildLinesText(80), LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(buildLinesText(80), LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 300.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -285,7 +285,7 @@ class EditorFoldGuideLineBugTest {
     // ── Bug proof: guide draws on the fold-START line ────────────────
 
     /**
-     * BUG PROOF — The inFoldRegion expression in EditorRendererV2 is:
+     * BUG PROOF — The inFoldRegion expression in EditorRenderer is:
      *
      *     docLine in (region.startLine - 1)..(region.endLine - 1)
      *
@@ -383,7 +383,7 @@ class EditorFoldGuideLineBugTest {
      */
     @Test
     fun bug_fold_guide_box_width_must_match_fold_indicator_column_width() {
-        // Values reflect the FIXED EditorRendererV2 source:
+        // Values reflect the FIXED EditorRenderer source:
         //   guide Canvas is drawn INSIDE the fold-indicator Box(20.dp)
         //   — no separate sibling guide box exists any more
         val guideBoxWidthDp      = 20
@@ -441,7 +441,7 @@ class EditorSelectionAndCopyBugTest {
     @Test
     fun baseline_selectAll_sets_full_document_selection_bounds() {
         val text = "alpha\nbeta\ngamma\n"
-        val vm   = EditorViewModelV2(text, LanguageMode.PLAIN_TEXT)
+        val vm   = EditorViewModel(text, LanguageMode.PLAIN_TEXT)
         vm.selectAll()
         val st = vm.state.value
         assertEquals(0, st.selectionStart,
@@ -458,7 +458,7 @@ class EditorSelectionAndCopyBugTest {
     @Test
     fun baseline_shift_arrow_extends_selection_char_by_char() {
         val text = "hello world\nfoo bar\n"
-        val vm   = EditorViewModelV2(text, LanguageMode.PLAIN_TEXT)
+        val vm   = EditorViewModel(text, LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(0)
         repeat(5) { vm.moveCursorRight(extendSelection = true) }
         val st = vm.state.value
@@ -476,7 +476,7 @@ class EditorSelectionAndCopyBugTest {
     @Test
     fun baseline_shift_down_selects_multiple_lines_in_viewmodel() {
         val text = "ALPHA_LINE\nBETA_LINE\nGAMMA_LINE"
-        val vm   = EditorViewModelV2(text, LanguageMode.PLAIN_TEXT)
+        val vm   = EditorViewModel(text, LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(0)
         vm.moveCursorDown(extendSelection = true)
         vm.moveCursorDown(extendSelection = true)
@@ -496,23 +496,23 @@ class EditorSelectionAndCopyBugTest {
     // ── Bug proof: no public getSelectedText() API on ViewModel ─────
 
     /**
-     * BUG PROOF — EditorViewModelV2 exposes no `getSelectedText(): String`
+     * BUG PROOF — EditorViewModel exposes no `getSelectedText(): String`
      * convenience method. Callers must manually read selectionStart/End and
      * call document.toFullString().substring(), exposing internal state.
      *
      * This test fails at runtime by checking for the method via reflection.
-     * Expected: EditorViewModelV2 has a member named "getSelectedText".
+     * Expected: EditorViewModel has a member named "getSelectedText".
      * Actual  : no such member ⇒ assertion FAILS.
      */
     @Test
     fun bug_viewmodel_must_expose_getSelectedText_convenience_method() {
-        val vm = EditorViewModelV2("alpha\nbeta\n", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("alpha\nbeta\n", LanguageMode.PLAIN_TEXT)
         vm.selectAll()
 
-        val hasMethod = EditorViewModelV2::class.members.any { it.name == "getSelectedText" }
+        val hasMethod = EditorViewModel::class.members.any { it.name == "getSelectedText" }
 
         assertTrue(hasMethod,
-            "EditorViewModelV2 must expose a public `getSelectedText(): String` " +
+            "EditorViewModel must expose a public `getSelectedText(): String` " +
             "convenience method. Currently missing — callers must access " +
             "document.toFullString().substring(selectionStart, selectionEnd) " +
             "directly, which leaks internal state and is error-prone.")
@@ -523,7 +523,7 @@ class EditorSelectionAndCopyBugTest {
     // ── Bug proof: Cmd+C after Cmd+A does not copy to clipboard ─────
 
     /**
-     * BUG PROOF — The key handler in EditorRendererV2 for Cmd+C is:
+     * BUG PROOF — The key handler in EditorRenderer for Cmd+C is:
      *
      *     meta && event.key == Key.C -> false   // passthrough, no copy action
      *
@@ -569,7 +569,7 @@ class EditorSelectionAndCopyBugTest {
             bodyText, clipboardContent,
             "Cmd+A + Cmd+C must place the selected text on the system clipboard. " +
             "Clipboard content: '$clipboardContent'. " +
-            "Bug: the meta+C branch in EditorRendererV2.onPreviewKeyEvent returns " +
+            "Bug: the meta+C branch in EditorRenderer.onPreviewKeyEvent returns " +
             "`false` (passthrough) without writing anything to the clipboard."
         )
     }
@@ -644,7 +644,7 @@ class EditorSelectionAndCopyBugTest {
      *
      * The test proves the tap handler ignores shift by calling moveCursorTo
      * with extendSelection = false (the only code path), and asserts that no
-     * PointerEvent modifier state is checked in LineViewV2.pointerInput.
+     * PointerEvent modifier state is checked in LineView.pointerInput.
      * We do this via ViewModel: set selection, then call moveCursorTo(offset)
      * WITHOUT extend — selection must be CLEARED.
      */
@@ -652,7 +652,7 @@ class EditorSelectionAndCopyBugTest {
     fun bug_tap_on_editor_always_clears_existing_selection_ignoring_shift() {
         // The ViewModel correctly supports extendSelection via moveCursorTo(offset, true).
         val text = "line0\nline1\nline2\nline3\n"
-        val vm   = EditorViewModelV2(text, LanguageMode.PLAIN_TEXT)
+        val vm   = EditorViewModel(text, LanguageMode.PLAIN_TEXT)
 
         // Set up a selection from offset 0 to offset 5.
         vm.moveCursorTo(0)
@@ -697,7 +697,7 @@ class EditorLineNumberAlignmentBugTest {
     @Test
     fun baseline_displayLineMap_skips_folded_lines_correctly() {
         val lines = (0 until 20).joinToString("\n") { "line_$it" }
-        val vm    = EditorViewModelV2(lines, LanguageMode.PLAIN_TEXT)
+        val vm    = EditorViewModel(lines, LanguageMode.PLAIN_TEXT)
 
         // Fold doc lines 5..9 (0-based). Lines 6-9 become hidden.
         vm.displayLineMap.setFolded(fromDocLine = 4, toDocLine = 9)
@@ -719,7 +719,7 @@ class EditorLineNumberAlignmentBugTest {
     // ── Bug proof: fold-indicator and spacer widths differ ───────────
 
     /**
-     * BUG PROOF — In EditorRendererV2 the gutter Row renders:
+     * BUG PROOF — In EditorRenderer the gutter Row renders:
      *
      *   foldable lines    : Box(Modifier.size(20.dp))  ← fold indicator ▾/▸
      *   non-foldable lines: Spacer(Modifier.size(18.dp))
@@ -740,7 +740,7 @@ class EditorLineNumberAlignmentBugTest {
      */
     @Test
     fun bug_gutter_fold_indicator_and_spacer_must_have_equal_widths() {
-        // Source truth from FIXED EditorRendererV2.kt:
+        // Source truth from FIXED EditorRenderer.kt:
         //   foldable:     Box(modifier = Modifier.size(20.dp) ...)
         //   non-foldable: Box(Modifier.size(20.dp))  ← was Spacer(18.dp)
         val foldIndicatorWidthDp = 20
@@ -773,11 +773,11 @@ class EditorLineNumberAlignmentBugTest {
     @Test
     fun bug_gutter_line_number_for_cursor_line_must_be_visible() {
         val lines = (0 until 50).joinToString("\n") { "content_$it" }
-        val vm    = EditorViewModelV2(lines, LanguageMode.PLAIN_TEXT)
+        val vm    = EditorViewModel(lines, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 300.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,

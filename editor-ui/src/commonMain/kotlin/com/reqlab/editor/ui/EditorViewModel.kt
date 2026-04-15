@@ -46,9 +46,9 @@ private data class EditCommand(
     val cursorAfter: Int,
 )
 
-// ── EditorViewModelV2 ────────────────────────────────────────────
+// ── EditorViewModel ────────────────────────────────────────────
 
-class EditorViewModelV2(
+class EditorViewModel(
     initialText: String,
     val languageMode: LanguageMode,
 ) {

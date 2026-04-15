@@ -122,7 +122,7 @@ private val NON_CHARACTER_KEYS = setOf(
  * It has no dependencies on any application-specific theme or platform APIs —
  * all customisation is provided via parameters.
  *
- * @param viewModel      State coordinator. Create with `remember { EditorViewModelV2(text, mode) }`.
+ * @param viewModel      State coordinator. Create with `remember { EditorViewModel(text, mode) }`.
  * @param isReadOnly     Disable all keyboard editing when true.
  * @param language       Language mode driving syntax highlighting.
  * @param theme          Color theme. Defaults to [EditorTheme.Dark].
@@ -134,8 +134,8 @@ private val NON_CHARACTER_KEYS = setOf(
  * @param modifier       Layout modifier.
  */
 @Composable
-fun EditorRendererV2(
-    viewModel: EditorViewModelV2,
+fun EditorRenderer(
+    viewModel: EditorViewModel,
     isReadOnly: Boolean,
     language: LanguageMode,
     theme: EditorTheme = EditorTheme.Dark,
@@ -158,7 +158,7 @@ fun EditorRendererV2(
     // Tracks the widest line seen (px) so the dummy spacer keeps hScrollState.maxValue correct.
     // Reset on every document edit (state.version) so deleted/replaced lines shrink the range.
     var hMaxContentWidthPx by remember(state.version) { mutableStateOf(0) }
-    // Cache of per-displayLine TextLayoutResults fed back from LineViewV2.
+    // Cache of per-displayLine TextLayoutResults fed back from LineView.
     // Used by the drag handler to map pointer coords → char offset accurately.
     val layoutResultCache = remember { mutableStateMapOf<Int, TextLayoutResult>() }
     // Context-menu state: show a DropdownMenu on secondary-button (right-click) press.
@@ -175,7 +175,7 @@ fun EditorRendererV2(
         if (!wordWrap) onHorizontalScroll?.invoke(hScrollState.value)
     }
 
-    // Cursor-blink animation hoisted from LineViewV2 so exactly ONE
+    // Cursor-blink animation hoisted from LineView so exactly ONE
     // InfiniteTransition exists for the whole editor instead of one per
     // visible line.  Lines that don't hold the cursor receive cursorVisible=-1f.
     val cursorBlink = rememberInfiniteTransition(label = "cursorBlink")
@@ -401,7 +401,7 @@ fun EditorRendererV2(
                     with(density) { 1.dp.toPx() }   // divider
                 ).toInt().coerceAtLeast(1)
 
-            // The text in LineViewV2 has padding(start = 8.dp, end = 16.dp) applied.
+            // The text in LineView has padding(start = 8.dp, end = 16.dp) applied.
             // The TextMeasurer must see the inner width (minus those pads) so that
             // soft-wrapped text fills the column without spilling into the gutter or
             // past the right edge.
@@ -452,7 +452,7 @@ fun EditorRendererV2(
                     .pointerInput(gutterWidthPx) {
                         awaitEachGesture {
                             // Observe DOWN without requiring it to be unconsumed
-                            // (LineViewV2.awaitFirstDown also uses requireUnconsumed=false)
+                            // (LineView.awaitFirstDown also uses requireUnconsumed=false)
                             val down = awaitFirstDown(requireUnconsumed = false)
                             // Only intercept if the press is in the text content area
                             val inContent = down.position.x > gutterWidthPx + with(density) { 2.dp.toPx() }
@@ -588,12 +588,12 @@ fun EditorRendererV2(
                             modifier = Modifier
                                 .weight(1f)
                                 .then(if (!wordWrap) Modifier.clipToBounds() else Modifier)
-                                // In no-wrap mode, LineViewV2 is only as wide as its text.
+                                // In no-wrap mode, LineView is only as wide as its text.
                                 // Clicks in the empty area to the RIGHT of a short line
-                                // don't hit LineViewV2. This fallback handler catches
+                                // don't hit LineView. This fallback handler catches
                                 // unconsumed taps and snaps cursor to line end.
                                 // detectTapGestures uses awaitFirstDown(requireUnconsumed=true)
-                                // so it only fires when LineViewV2 didn't already handle the tap.
+                                // so it only fires when LineView didn't already handle the tap.
                                 .then(
                                     if (!wordWrap && !isReadOnly)
                                         Modifier.pointerInput(lineStart, lineEnd) {
@@ -605,7 +605,7 @@ fun EditorRendererV2(
                                     else Modifier
                                 ),
                         ) {
-                            LineViewV2(
+                            LineView(
                                 docLine          = docLine,
                                 document         = viewModel.document,
                                 styleBuffer      = viewModel.styleBuffer,
@@ -776,7 +776,7 @@ private fun posToDragOffset(
     posX: Float,
     posY: Float,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    viewModel: EditorViewModelV2,
+    viewModel: EditorViewModel,
     density: androidx.compose.ui.unit.Density,
     gutterWidthPx: Float,
     hScrollValue: Int,
@@ -802,7 +802,7 @@ private fun posToDragOffset(
     val lr = layoutResultCache[displayLine]
     if (lr != null) {
         val xInCanvas = (posX - contentStartPx + hScrollValue).coerceAtLeast(0f)
-        // Subtract 1dp top-padding applied inside LineViewV2.
+        // Subtract 1dp top-padding applied inside LineView.
         val yInCanvas = (posY - item.offset - (1f * density.density)).coerceAtLeast(0f)
         val charOffset = lr.getOffsetForPosition(
             androidx.compose.ui.geometry.Offset(xInCanvas, yInCanvas)

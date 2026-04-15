@@ -9,7 +9,7 @@ package com.reqlab.editor.core
  *
  * Concurrency model:
  *  - All mutations ([insert], [delete], [rebuild]) must be called from a SINGLE
- *    coroutine at a time.  [EditorViewModelV2] uses a Mutex to guarantee this.
+ *    coroutine at a time.  [EditorViewModel] uses a Mutex to guarantee this.
  *  - Reads ([lineText], [lineStart], [lineCount], [length]) are safe from the UI
  *    thread AFTER the version StateFlow has been observed (i.e. after the memory
  *    barrier provided by StateFlow's atomic read).
