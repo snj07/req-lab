@@ -96,6 +96,32 @@ class DisplayLineMap(docLineCount: Int) {
     }
 
     /**
+     * Returns all currently-folded regions as a list of (startLine, endLine) pairs (0-based).
+     *
+     * A "fold" is a run of one or more consecutive hidden lines immediately following a
+     * visible line.  The returned pair `(start, end)` matches the contract of [setFolded] and
+     * [applyFolds]: `start` is the last **visible** line before the hidden run and `end` is
+     * the last **hidden** line in the run.  Calling `applyFolds(getFoldedRegions())` on a
+     * fresh [DisplayLineMap] therefore restores the identical fold shape.
+     */
+    fun getFoldedRegions(): List<Pair<Int, Int>> {
+        val regions = mutableListOf<Pair<Int, Int>>()
+        var i = 0
+        while (i < displayHeight.size) {
+            // A fold starts at the visible line that is immediately followed by hidden lines.
+            if (displayHeight[i] == 1 && i + 1 < displayHeight.size && displayHeight[i + 1] == 0) {
+                val foldStart = i
+                i++
+                while (i < displayHeight.size && displayHeight[i] == 0) i++
+                regions.add(Pair(foldStart, i - 1))
+            } else {
+                i++
+            }
+        }
+        return regions
+    }
+
+    /**
      * Apply a fold-set from [FoldingModel] (used to sync external fold state).
      * [collapsedRegions] is a list of (startLine, endLine) pairs (0-based).
      */

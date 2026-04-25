@@ -11,6 +11,7 @@ import com.reqlab.core.model.RequestDefinition
 import com.reqlab.core.network.NetworkEvent
 import com.reqlab.core.network.NetworkLogger
 import com.reqlab.core.network.RetryPolicy
+import com.reqlab.core.network.VariableResolver
 import com.reqlab.core.scripting.ReqLabScriptEngine
 import com.reqlab.core.scripting.ScriptContext
 import com.reqlab.ui.shared.network.NetworkClientFactory
@@ -388,7 +389,7 @@ private fun parseBinaryAttachment(content: String): Pair<String, String>? {
 
 /** Builds a cURL command string for the given tab, resolving {{vars}} from variable layers. */
 fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val parts = mutableListOf("curl", "-X ${tab.method.name}")
 
@@ -433,7 +434,7 @@ fun buildCurlCommandRaw(tab: RequestTabState): String = buildCurlCommand(tab, em
 
 /** Python `requests` snippet resolving {{vars}}. */
 fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val sb = StringBuilder()
     sb.appendLine("import requests")
@@ -468,7 +469,7 @@ fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, St
 
 /** HTTPie CLI snippet resolving {{vars}}. */
 fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val parts = mutableListOf("http", tab.method.name)
     val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
@@ -486,7 +487,7 @@ fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, St
 
 /** PowerShell `Invoke-WebRequest` snippet resolving {{vars}}. */
 fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val sb = StringBuilder()
     val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
@@ -512,19 +513,6 @@ fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String
 
 // ── Curl / format helpers ────────────────────────────────────────────
 
-/**
- * Resolves {{varName}} patterns using the provided variable layers
- * (first layer wins, matching Postman behaviour).
- */
-fun resolveVariables(text: String, variableLayers: List<Map<String, String>>, removeUnresolved: Boolean = false): String {
-    if (!text.contains("{{")) return text
-    val flatMap = mutableMapOf<String, String>()
-    variableLayers.asReversed().forEach { flatMap.putAll(it) }   // first layer wins after forEach
-    return Regex("""\{\{([^{}]+)}}""").replace(text) { match ->
-        flatMap[match.groupValues[1].trim()] ?: if (removeUnresolved) "" else match.value
-    }
-}
-
 private fun buildUrlWithParams(
     resolvedBase: String,
     tab: RequestTabState,
@@ -535,7 +523,7 @@ private fun buildUrlWithParams(
     if (enabledParams.isEmpty()) return resolvedBase
     val separator = if (resolvedBase.contains('?')) "&" else "?"
     val qs = enabledParams.joinToString("&") { p ->
-        "${resolveVariables(p.key, variableLayers, removeUnresolved)}=${resolveVariables(p.value, variableLayers, removeUnresolved)}"
+        "${VariableResolver.resolve(p.key, variableLayers, removeUnresolved)}=${VariableResolver.resolve(p.value, variableLayers, removeUnresolved)}"
     }
     return "$resolvedBase$separator$qs"
 }
@@ -545,7 +533,7 @@ private fun buildHeaderMap(
     variableLayers: List<Map<String, String>>,
     removeUnresolved: Boolean = false,
 ): Map<String, String> {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved)
     val map = linkedMapOf<String, String>()
     tab.headers.filter { it.enabled && it.key.isNotBlank() }
         .forEach { map[resolve(it.key)] = resolve(it.value) }

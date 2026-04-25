@@ -30,6 +30,10 @@ Located in UI modules:
 
 - Compose MPP shell per platform
 - Shared state and feature view models (next milestone)
+- **CodeEditor** — unified composable in `ui-shared` for request body, script, and response body editing
+  - `CodeEditor.kt`: toolbar, search bar, editable/read-only modes, line numbers, word wrap
+  - `SyntaxHighlighter.kt`: token-level highlighting for JSON, XML/HTML, GraphQL, JavaScript
+  - `CodeFolding.kt`: fold region detection (brace/tag/comment), fold state, visible-line computation
 
 ## Dependency Rules
 

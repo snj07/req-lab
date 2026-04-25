@@ -65,6 +65,8 @@ data class RequestDto(
     val userHeaders: List<Pair<String, String>> = emptyList(),
     val bodyType: String? = null,
     val bodyContent: String? = null,
+    /** Per-type raw body contents, keyed by BodyType.name (e.g. "JSON", "XML"). */
+    val rawContents: Map<String, String>? = null,
     val formDataEntries: List<FormDataEntryState> = emptyList(),
     val urlencodedEntries: List<FormDataEntryState> = emptyList(),
     val authType: String? = null,
@@ -337,6 +339,11 @@ object ImportExportRepository {
                 put("body", buildJsonObject {
                     put("type", bt.name)
                     node.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                    if (node.bodyContents.isNotEmpty()) {
+                        put("rawContents", buildJsonObject {
+                            node.bodyContents.forEach { (k, v) -> put(k, v) }
+                        })
+                    }
                     if (node.formDataEntries.isNotEmpty()) {
                         put("formDataEntries", buildJsonArray {
                             node.formDataEntries.forEach { e ->
@@ -452,6 +459,11 @@ object ImportExportRepository {
                 put("body", buildJsonObject {
                     put("type", bt)
                     dto.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                    if (!dto.rawContents.isNullOrEmpty()) {
+                        put("rawContents", buildJsonObject {
+                            dto.rawContents.forEach { (k, v) -> put(k, v) }
+                        })
+                    }
                     if (dto.formDataEntries.isNotEmpty()) {
                         put("formDataEntries", buildJsonArray {
                             dto.formDataEntries.forEach { e ->
@@ -555,6 +567,9 @@ object ImportExportRepository {
         val bodyObj = root["body"]?.jsonObject
         val bodyType = bodyObj?.get("type")?.jsonPrimitive?.contentOrNull
         val bodyContent = bodyObj?.get("content")?.jsonPrimitive?.contentOrNull
+        val rawContents = bodyObj?.get("rawContents")?.jsonObject
+            ?.mapValues { it.value.jsonPrimitive.content }
+            ?.takeIf { it.isNotEmpty() }
         val formDataEntries = bodyObj?.get("formDataEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
         val urlencodedEntries = bodyObj?.get("urlencodedEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
         val authObj = root["auth"]?.jsonObject
@@ -568,7 +583,7 @@ object ImportExportRepository {
             name = name, method = method, url = url,
             preRequestScript = preRequestScript, testScript = testScript,
             userHeaders = userHeaders,
-            bodyType = bodyType, bodyContent = bodyContent,
+            bodyType = bodyType, bodyContent = bodyContent, rawContents = rawContents,
             formDataEntries = formDataEntries,
             urlencodedEntries = urlencodedEntries,
             authType = authType,
@@ -636,6 +651,7 @@ object ImportExportRepository {
             userHeaders = dto.userHeaders,
             bodyType = bodyType,
             bodyContent = dto.bodyContent,
+            bodyContents = dto.rawContents ?: emptyMap(),
             formDataEntries = dto.formDataEntries,
             urlencodedEntries = dto.urlencodedEntries,
             authType = authType,

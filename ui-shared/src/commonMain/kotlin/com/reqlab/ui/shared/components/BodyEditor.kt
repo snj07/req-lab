@@ -57,6 +57,13 @@ import com.reqlab.ui.shared.theme.ReqLabColors
 
 private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
 
+/**
+ * Returns true when [contentLength] exceeds the inline-validation threshold (1 MB).
+ * Extracted as a package-level function so it can be unit-tested independently of
+ * the Compose composable that uses it (issue M-5).
+ */
+internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 1_000_000
+
 // ── Body categories (top-level chips) ──────────────────────────
 
 private enum class BodyCategory { NONE, RAW, FORM, URL_ENCODED, BINARY, GRAPHQL }
@@ -271,6 +278,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 // inline error logic is centralised and testable independently of the UI.
                 val editorEngine = remember { EditorEngine() }
                 var inlineErrors by remember { mutableStateOf<List<InlineEditorError>>(emptyList()) }
+                var validationPaused by remember { mutableStateOf(false) }
 
                 // Debounce validation — avoid calling EditorEngine.validate() on
                 // every keystroke.  For large files validation runs on Dispatchers.Default
@@ -280,11 +288,18 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 LaunchedEffect(tab.bodyContent, tab.bodyType) {
                     val content = tab.bodyContent
                     val bodyType = tab.bodyType
-                    if (content.isBlank() || content.length > 1_000_000) {
-                        // Clear stale errors immediately when content is empty or too large
+                    if (content.isBlank()) {
                         inlineErrors = emptyList()
+                        validationPaused = false
                         return@LaunchedEffect
                     }
+                    if (shouldPauseValidation(content.length)) {
+                        // Clear stale errors immediately and surface a paused indicator
+                        inlineErrors = emptyList()
+                        validationPaused = true
+                        return@LaunchedEffect
+                    }
+                    validationPaused = false
                     val delayMs = if (content.length > 100_000) 600L else 300L
                     kotlinx.coroutines.delay(delayMs)
                     // Re-read after delay — user may have continued typing
@@ -304,29 +319,41 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                     if (content == tab.bodyContent) inlineErrors = result
                 }
 
-                CodeEditor(
-                    text = tab.bodyContent,
-                    onTextChange = { tab.bodyContent = it; onDirty() },
-                    language = language,
-                    modifier = Modifier.fillMaxSize(),
-                    showToolbar = true,
-                    enableFolding = language != SyntaxLanguage.PLAIN,
-                    enableSearch = true,
-                    enableFormat = language != SyntaxLanguage.PLAIN,
-                    enableWordWrap = true,
-                    enableCopy = true,
-                    enableDownload = false,
-                    inlineErrors = inlineErrors,
-                    placeholder = when (tab.bodyType) {
-                        BodyType.JSON       -> "{\n  \n}"
-                        BodyType.XML        -> "<root>\n  \n</root>"
-                        BodyType.HTML       -> "<html>\n  <body></body>\n</html>"
-                        BodyType.JAVASCRIPT -> "// script\n"
-                        BodyType.GRAPHQL    -> "query {\n  \n}"
-                        else                -> "Enter request body\u2026"
-                    },
-                    testTagPrefix = "body-editor",
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (validationPaused) {
+                        Text(
+                            text = "\u26A0 Validation paused \u2014 file too large (> 1 MB)",
+                            fontSize = 11.sp,
+                            color = ReqLabColors.OnSurfaceDim,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                    CodeEditor(
+                        text = tab.bodyContent,
+                        onTextChange = { tab.bodyContent = it; onDirty() },
+                        language = language,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        showToolbar = true,
+                        enableFolding = language != SyntaxLanguage.PLAIN,
+                        enableSearch = true,
+                        enableFormat = language != SyntaxLanguage.PLAIN,
+                        enableWordWrap = true,
+                        enableCopy = true,
+                        enableDownload = false,
+                        inlineErrors = inlineErrors,
+                        placeholder = when (tab.bodyType) {
+                            BodyType.JSON       -> "{\n  \n}"
+                            BodyType.XML        -> "<root>\n  \n</root>"
+                            BodyType.HTML       -> "<html>\n  <body></body>\n</html>"
+                            BodyType.JAVASCRIPT -> "// script\n"
+                            BodyType.GRAPHQL    -> "query {\n  \n}"
+                            else                -> "Enter request body\u2026"
+                        },
+                        testTagPrefix = "body-editor",
+                    )
+                }
             }
         }
     }

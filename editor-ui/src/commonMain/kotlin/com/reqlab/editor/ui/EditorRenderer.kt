@@ -312,8 +312,11 @@ fun EditorRenderer(
                     event.key == Key.DirectionDown  -> { if (meta) viewModel.moveCursorToDocEnd(shift) else viewModel.moveCursorDown(shift); true }
                     event.key == Key.MoveHome       -> { viewModel.moveCursorToLineStart(shift); true }
                     event.key == Key.MoveEnd        -> { viewModel.moveCursorToLineEnd(shift); true }
+                    event.key == Key.PageUp         -> { viewModel.moveCursorPageUp(extendSelection = shift); true }
+                    event.key == Key.PageDown       -> { viewModel.moveCursorPageDown(extendSelection = shift); true }
                     event.key == Key.Backspace -> {
-                        viewModel.deleteBeforeCursor()
+                        if (meta || event.isAltPressed) viewModel.deleteWordBeforeCursor()
+                        else viewModel.deleteBeforeCursor()
                         true
                     }
                     event.key == Key.Delete -> {
@@ -321,11 +324,11 @@ fun EditorRenderer(
                         true
                     }
                     event.key == Key.Enter -> {
-                        viewModel.insertAtCursor("\n")
+                        viewModel.insertNewlineWithAutoIndent()
                         true
                     }
                     event.key == Key.Tab -> {
-                        viewModel.insertAtCursor("  ")
+                        if (shift) viewModel.dedentAtCursor() else viewModel.insertAtCursor("  ")
                         true
                     }
                     else -> {

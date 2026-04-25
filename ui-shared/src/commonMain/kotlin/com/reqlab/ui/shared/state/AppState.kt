@@ -79,6 +79,8 @@ data class CollectionNode(
     val userHeaders: List<Pair<String, String>> = emptyList(),
     val bodyType: BodyType? = null,
     val bodyContent: String? = null,
+    /** Per-type raw body contents keyed by [BodyType.name]. */
+    val bodyContents: Map<String, String> = emptyMap(),
     /** Structured form-data rows (FORM_DATA body type). */
     val formDataEntries: List<FormDataEntryState> = emptyList(),
     /** Structured urlencoded rows (X_WWW_FORM_URLENCODED body type). */
@@ -239,7 +241,7 @@ class RequestTabState(
         MutableKeyValue(SystemHeaderRules.USER_AGENT, "ReqLab/1.0", kind = HeaderKind.SYSTEM, keyLocked = true),
     )
 
-    var bodyType    by mutableStateOf(BodyType.JSON)
+    var bodyType    by mutableStateOf(BodyType.NONE)
 
     /**
      * Remembers the last-selected RAW sub-type (JSON, XML, HTML, JS, Text)
@@ -577,30 +579,24 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
      */
     fun mergeScriptVariables(vars: Map<String, String>) {
         val env = selectedEnvironment ?: return
-        vars.forEach { (key, value) ->
-            val existing = env.variables.firstOrNull { it.key == key }
-            if (existing != null) {
-                existing.value = value
-            } else {
-                env.variables.add(MutableKeyValue(key = key, value = value))
-            }
-        }
+        mergeInto(env.variables, vars)
     }
 
     fun mergeGlobalScriptVariables(vars: Map<String, String>) {
-        vars.forEach { (key, value) ->
-            val existing = globalVariables.firstOrNull { it.key == key }
-            if (existing != null) {
-                existing.value = value
-            } else {
-                globalVariables.add(MutableKeyValue(key = key, value = value))
-            }
-        }
+        mergeInto(globalVariables, vars)
     }
 
     fun mergeCollectionScriptVariables(vars: Map<String, String>) {
         vars.forEach { (key, value) ->
             collectionVariables[key] = value
+        }
+    }
+
+    private fun mergeInto(target: MutableList<MutableKeyValue>, vars: Map<String, String>) {
+        vars.forEach { (key, value) ->
+            val existing = target.firstOrNull { it.key == key }
+            if (existing != null) existing.value = value
+            else target.add(MutableKeyValue(key = key, value = value))
         }
     }
 
@@ -664,6 +660,9 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         // Populate body, headers, and auth from collection node
         node?.bodyType?.let { tab.bodyType = it; tab.syncSystemHeaders() }
         node?.bodyContent?.takeIf { it.isNotBlank() }?.let { tab.bodyContent = it }
+        node?.bodyContents?.forEach { (typeName, content) ->
+            runCatching { BodyType.valueOf(typeName) }.getOrNull()?.let { tab.bodyContents[it] = content }
+        }
         // Populate structured form rows from collection node
         if (!node?.formDataEntries.isNullOrEmpty()) {
             tab.formRows.clear()

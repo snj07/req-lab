@@ -298,6 +298,16 @@ class EditorViewModel(
 
         lastExternalText = old.substring(0, f) + insertText + old.substring(t)
 
+        // ── Fold-state preservation (C-2 fix) ────────────────────────────────
+        // Capture the current fold shape BEFORE touching the document so we can
+        // restore it – adjusted for any line-count delta – after the reset.
+        val savedFolds  = displayLineMap.getFoldedRegions()
+        val editDocLine = old.substring(0, f).count { it == '\n' }
+        val deletedNL   = beforeText.count { it == '\n' }
+        val insertedNL  = insertText.count { it == '\n' }
+        val lineDelta   = insertedNL - deletedNL
+        // ─────────────────────────────────────────────────────────────────────
+
         document.delete(f, t)
         if (insertText.isNotEmpty()) {
             document.insert(f, insertText)
@@ -306,6 +316,23 @@ class EditorViewModel(
         styleBuffer.invalidateFrom(f)
         styleBuffer.grow(document.length)
         displayLineMap.reset(document.lineCount)
+
+        // ── Restore folds after reset ─────────────────────────────────────────
+        if (savedFolds.isNotEmpty()) {
+            val newLineCount = document.lineCount
+            if (lineDelta == 0) {
+                displayLineMap.applyFolds(savedFolds)
+            } else {
+                val adjusted = savedFolds.mapNotNull { (start, end) ->
+                    val newStart = if (start >= editDocLine) (start + lineDelta).coerceAtLeast(0) else start
+                    val newEnd   = if (end   >= editDocLine) (end   + lineDelta).coerceAtLeast(0) else end
+                    if (newStart >= 0 && newEnd > newStart && newEnd < newLineCount) Pair(newStart, newEnd)
+                    else null
+                }
+                if (adjusted.isNotEmpty()) displayLineMap.applyFolds(adjusted)
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         _state.update {
             it.copy(
@@ -468,6 +495,104 @@ class EditorViewModel(
 
     fun moveCursorToDocEnd(extendSelection: Boolean = false) =
         moveCursorTo(document.length, extendSelection)
+
+    // ── M-1: Page movement ────────────────────────────────────────────────
+
+    fun moveCursorPageDown(pageSize: Int = 20, extendSelection: Boolean = false) {
+        val offset = _state.value.cursorOffset
+        val line   = document.lineAt(offset)
+        // Clamp: if paging down would go past the last line, go to end of document.
+        if (line + pageSize >= document.lineCount) {
+            moveCursorTo(document.length, extendSelection)
+            return
+        }
+        val col         = offset - document.lineStart(line)
+        val targetLine  = line + pageSize
+        val targetStart = document.lineStart(targetLine)
+        val targetLen   = document.lineText(targetLine).length
+        moveCursorTo(targetStart + minOf(col, targetLen), extendSelection)
+    }
+
+    fun moveCursorPageUp(pageSize: Int = 20, extendSelection: Boolean = false) {
+        val offset = _state.value.cursorOffset
+        val line   = document.lineAt(offset)
+        // Clamp: if paging up would go past line 0, go to start of document.
+        if (line - pageSize < 0) {
+            moveCursorTo(0, extendSelection)
+            return
+        }
+        val col         = offset - document.lineStart(line)
+        val targetLine  = line - pageSize
+        val targetStart = document.lineStart(targetLine)
+        val targetLen   = document.lineText(targetLine).length
+        moveCursorTo(targetStart + minOf(col, targetLen), extendSelection)
+    }
+
+    // ── M-2: Dedent (Shift+Tab) ───────────────────────────────────────────
+
+    fun dedentAtCursor() {
+        editSequence++
+        val st     = _state.value
+        val oldLen = lastExternalText.length
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
+        val line   = document.lineAt(cursor)
+        val lineStart = document.lineStart(line)
+        val lineText  = document.lineText(line)
+        val (removeCount, removeStart) = when {
+            lineText.startsWith("  ") -> Pair(2, lineStart)
+            lineText.startsWith("\t") -> Pair(1, lineStart)
+            else -> return   // nothing to dedent
+        }
+        applyReplace(
+            from = removeStart,
+            to   = removeStart + removeCount,
+            insertText = "",
+            cursorBefore = cursor,
+            cursorAfter  = (cursor - removeCount).coerceAtLeast(lineStart),
+            recordHistory = true,
+            clearRedo = true,
+        )
+    }
+
+    // ── M-3: Delete word before cursor (Alt/Cmd+Backspace) ───────────────
+
+    fun deleteWordBeforeCursor() {
+        val st = _state.value
+        if (st.selectionStart >= 0 && st.selectionEnd > st.selectionStart) {
+            deleteSelection()
+            return
+        }
+        editSequence++
+        val text   = lastExternalText
+        var cursor = st.cursorOffset.coerceIn(0, text.length)
+        if (cursor <= 0) return
+        val end = cursor
+        cursor--
+        // Skip trailing non-word chars, then skip the word
+        while (cursor > 0 && !isWordChar(text[cursor - 1])) cursor--
+        while (cursor > 0 && isWordChar(text[cursor - 1])) cursor--
+        applyReplace(
+            from = cursor,
+            to   = end,
+            insertText = "",
+            cursorBefore = end,
+            cursorAfter  = cursor,
+            recordHistory = true,
+            clearRedo = true,
+        )
+    }
+
+    // ── M-4: Newline with auto-indent (Enter) ────────────────────────────
+
+    fun insertNewlineWithAutoIndent() {
+        val cursorOffset = _state.value.cursorOffset.coerceIn(0, lastExternalText.length)
+        val line   = document.lineAt(cursorOffset)
+        val lineText = document.lineText(line)
+        val indent = lineText.takeWhile { it == ' ' || it == '\t' }
+        insertAtCursor("\n$indent")
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
 
     private fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '_'
 

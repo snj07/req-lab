@@ -59,8 +59,32 @@ import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.platform.copyToClipboard as platformCopyToClipboard
 import com.reqlab.ui.shared.platform.readFromClipboard
 import com.reqlab.ui.shared.theme.CodeFontFamily
+import com.reqlab.ui.shared.theme.LocalAppColors
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlinx.coroutines.launch
+
+// ── Theme Helper ─────────────────────────────────────────────────
+
+@Composable
+private fun editorTheme(): EditorTheme {
+    val p = LocalAppColors.current
+    val isDark = p.background.red < 0.5f
+    return EditorTheme(
+        background       = p.surface,
+        foreground       = p.onSurface,
+        lineNumberFg     = p.onSurfaceDim,
+        lineNumberBg     = p.surface,
+        gutterBorder     = p.border,
+        selectionBg      = p.selectedItem,
+        cursorLine       = p.surfaceVariant,
+        foldIndicator    = p.onSurfaceDim,
+        indentGuide      = p.borderLight,
+        errorUnderline   = p.error,
+        warningUnderline = p.tertiary,
+        accent           = p.primary,
+        tokenColors      = if (isDark) EditorTheme.Dark.tokenColors else EditorTheme.Light.tokenColors,
+    )
+}
 
 // ── Public API ──────────────────────────────────────────────────
 
@@ -147,6 +171,16 @@ fun CodeEditor(
             activeMatchIndex.coerceIn(0, searchMatches.size - 1) else 0
     }
 
+    // Scroll the editor to the active search match so the LazyColumn in
+    // EditorRenderer follows the cursor to the correct line.
+    LaunchedEffect(activeMatchIndex, searchMatches) {
+        val match = searchMatches.getOrNull(activeMatchIndex) ?: return@LaunchedEffect
+        val lineStart = viewModel.document.lineStart(
+            match.lineIndex.coerceIn(0, viewModel.document.lineCount - 1)
+        )
+        viewModel.moveCursorTo(lineStart + match.startOffset)
+    }
+
     // ── Layout ───────────────────────────────────────────────
     Column(modifier = modifier.testTag(testTagPrefix)) {
 
@@ -219,7 +253,7 @@ fun CodeEditor(
             viewModel      = viewModel,
             isReadOnly     = isReadOnly,
             language       = language.toLanguageMode(),
-            theme          = EditorTheme.Dark,
+            theme          = editorTheme(),
             wordWrap       = wordWrap,
             testTagPrefix  = testTagPrefix,
             modifier       = Modifier

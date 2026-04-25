@@ -12,12 +12,16 @@ import com.reqlab.editor.core.LanguageRegistry
  * so new languages and custom renderers can be plugged in without changing this file.
  */
 
+private fun ensureHighlighters(mode: LanguageMode) {
+    if (!SyntaxHighlighterRegistry.hasHighlighter(mode)) SyntaxHighlighterRegistry.registerBuiltinHighlighters()
+}
+
 /**
  * Highlight [text] for [mode].
  * Delegates to the [SyntaxHighlighter] registered for [mode] in [SyntaxHighlighterRegistry].
  */
 fun highlightText(text: String, mode: LanguageMode): AnnotatedString {
-    if (!SyntaxHighlighterRegistry.hasHighlighter(mode)) SyntaxHighlighterRegistry.registerBuiltinHighlighters()
+    ensureHighlighters(mode)
     return SyntaxHighlighterRegistry.getHighlighter(mode).highlight(text)
 }
 
@@ -26,7 +30,7 @@ fun highlightText(text: String, mode: LanguageMode): AnnotatedString {
  * Delegates to [SyntaxHighlighter.highlightLine].
  */
 fun highlightLine(line: String, mode: LanguageMode): AnnotatedString {
-    if (!SyntaxHighlighterRegistry.hasHighlighter(mode)) SyntaxHighlighterRegistry.registerBuiltinHighlighters()
+    ensureHighlighters(mode)
     return SyntaxHighlighterRegistry.getHighlighter(mode).highlightLine(line)
 }
 

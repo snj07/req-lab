@@ -7,7 +7,11 @@ private val variablePattern = Regex("\\{\\{\\s*([^{}]+?)\\s*\\}\\}")
 private val randomIntPattern = Regex("^\\$?randomInt\\(\\s*(-?\\d+)\\s*,\\s*(-?\\d+)\\s*\\)$", RegexOption.IGNORE_CASE)
 
 object VariableResolver {
-    fun resolve(value: String, variableLayers: List<Map<String, String>>): String {
+    fun resolve(
+        value: String,
+        variableLayers: List<Map<String, String>>,
+        removeUnresolved: Boolean = false,
+    ): String {
         if (value.isBlank()) {
             return value
         }
@@ -15,7 +19,7 @@ object VariableResolver {
         return variablePattern.replace(value) { matchResult ->
             val token = matchResult.groupValues[1].trim()
             val fromLayers = variableLayers.firstNotNullOfOrNull { layer -> layer[token] }
-            fromLayers ?: resolveDynamicToken(token) ?: matchResult.value
+            fromLayers ?: resolveDynamicToken(token) ?: if (removeUnresolved) "" else matchResult.value
         }
     }
 

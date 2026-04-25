@@ -8,52 +8,61 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
-class InMemoryRequestRepository : RequestRepository {
-    private val state = MutableStateFlow<Map<String, RequestDefinition>>(emptyMap())
+// ── Shared base ──────────────────────────────────────────────────
 
-    override fun observeAll(): Flow<List<RequestDefinition>> = state.map { values ->
-        values.values.sortedBy { it.updatedAtEpochMillis }
+/**
+ * Generic in-memory store backed by a [MutableStateFlow] of a keyed map.
+ *
+ * @param T        Entity type.
+ * @param getKey   Extracts the unique string key from an entity.
+ * @param sortKey  Returns the sort value used by [observeAllSorted]; lower values come first.
+ */
+abstract class InMemoryMapRepository<T>(
+    private val getKey: (T) -> String,
+    private val sortKey: (T) -> Long,
+) {
+    protected val store = MutableStateFlow<Map<String, T>>(emptyMap())
+
+    fun observeAllSorted(): Flow<List<T>> = store.map { m ->
+        m.values.sortedBy { sortKey(it) }
     }
 
-    override suspend fun upsert(request: RequestDefinition) {
-        state.value = state.value + (request.id to request)
+    suspend fun upsertEntity(entity: T) {
+        store.value = store.value + (getKey(entity) to entity)
     }
 
-    override suspend fun delete(requestId: String) {
-        state.value = state.value - requestId
-    }
-}
-
-class InMemoryCollectionRepository : CollectionRepository {
-    private val state = MutableStateFlow<Map<String, CollectionDefinition>>(emptyMap())
-
-    override fun observeAll(): Flow<List<CollectionDefinition>> = state.map { values ->
-        values.values.sortedBy { it.updatedAtEpochMillis }
-    }
-
-    override suspend fun upsert(collection: CollectionDefinition) {
-        state.value = state.value + (collection.id to collection)
-    }
-
-    override suspend fun delete(collectionId: String) {
-        state.value = state.value - collectionId
+    suspend fun deleteEntity(id: String) {
+        store.value = store.value - id
     }
 }
 
-class InMemoryEnvironmentRepository : EnvironmentRepository {
-    private val state = MutableStateFlow<Map<String, EnvironmentDefinition>>(emptyMap())
+// ── Concrete repositories ────────────────────────────────────────
 
-    override fun observeAll(): Flow<List<EnvironmentDefinition>> = state.map { values ->
-        values.values.sortedBy { it.updatedAtEpochMillis }
-    }
+class InMemoryRequestRepository : InMemoryMapRepository<RequestDefinition>(
+    getKey = { it.id },
+    sortKey = { it.updatedAtEpochMillis },
+), RequestRepository {
+    override fun observeAll() = observeAllSorted()
+    override suspend fun upsert(request: RequestDefinition) = upsertEntity(request)
+    override suspend fun delete(requestId: String) = deleteEntity(requestId)
+}
 
-    override suspend fun upsert(environment: EnvironmentDefinition) {
-        state.value = state.value + (environment.id to environment)
-    }
+class InMemoryCollectionRepository : InMemoryMapRepository<CollectionDefinition>(
+    getKey = { it.id },
+    sortKey = { it.updatedAtEpochMillis },
+), CollectionRepository {
+    override fun observeAll() = observeAllSorted()
+    override suspend fun upsert(collection: CollectionDefinition) = upsertEntity(collection)
+    override suspend fun delete(collectionId: String) = deleteEntity(collectionId)
+}
 
-    override suspend fun delete(environmentId: String) {
-        state.value = state.value - environmentId
-    }
+class InMemoryEnvironmentRepository : InMemoryMapRepository<EnvironmentDefinition>(
+    getKey = { it.id },
+    sortKey = { it.updatedAtEpochMillis },
+), EnvironmentRepository {
+    override fun observeAll() = observeAllSorted()
+    override suspend fun upsert(environment: EnvironmentDefinition) = upsertEntity(environment)
+    override suspend fun delete(environmentId: String) = deleteEntity(environmentId)
 }
 
 class InMemoryHistoryRepository : HistoryRepository {
