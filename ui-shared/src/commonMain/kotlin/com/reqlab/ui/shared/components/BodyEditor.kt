@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -397,8 +399,17 @@ private fun FormDataTableEditor(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        FormDataTableHeader(showTypeColumn = true)
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        AddRowButton(
+            onAdd = onAdd,
+            modifier = Modifier
+                .padding(bottom = 6.dp)
+                .testTag("body-form-add-row"),
+        )
+        FormDataTableHeader(
+            showTypeColumn = true,
+            modifier = Modifier.testTag("body-form-table-header"),
+        )
+        LazyColumn(modifier = Modifier.weight(1f).testTag("body-form-table-list")) {
             items(rows, key = { it.uid }) { row ->
                 FormDataRowItem(
                     row = row,
@@ -408,7 +419,6 @@ private fun FormDataTableEditor(
                 )
             }
         }
-        AddRowButton(onAdd = onAdd)
     }
 }
 
@@ -423,8 +433,17 @@ private fun UrlencodedTableEditor(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        FormDataTableHeader(showTypeColumn = false)
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        AddRowButton(
+            onAdd = onAdd,
+            modifier = Modifier
+                .padding(bottom = 6.dp)
+                .testTag("body-urlencoded-add-row"),
+        )
+        FormDataTableHeader(
+            showTypeColumn = false,
+            modifier = Modifier.testTag("body-urlencoded-table-header"),
+        )
+        LazyColumn(modifier = Modifier.weight(1f).testTag("body-urlencoded-table-list")) {
             items(rows, key = { it.uid }) { row ->
                 FormDataRowItem(
                     row = row,
@@ -434,16 +453,15 @@ private fun UrlencodedTableEditor(
                 )
             }
         }
-        AddRowButton(onAdd = onAdd)
     }
 }
 
 // ── Table header (fixed widths mirror row layout exactly) ───────
 
 @Composable
-private fun FormDataTableHeader(showTypeColumn: Boolean) {
+private fun FormDataTableHeader(showTypeColumn: Boolean, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(ReqLabColors.Surface)
             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -500,16 +518,16 @@ private fun FormDataRowItem(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         // Enabled toggle
-        Box(
-            modifier = Modifier
-                .width(TOGGLE_WIDTH)
-                .clickable { row.enabled = !row.enabled; onRowChange() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (row.enabled) "●" else "○",
-                color = if (row.enabled) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim,
-                fontSize = 10.sp,
+        Box(modifier = Modifier.width(TOGGLE_WIDTH), contentAlignment = Alignment.Center) {
+            Checkbox(
+                checked = row.enabled,
+                onCheckedChange = {
+                    row.enabled = it
+                    onRowChange()
+                },
+                modifier = Modifier
+                    .size(16.dp)
+                    .testTag("body-table-enabled-${row.uid}"),
             )
         }
 
@@ -674,10 +692,9 @@ private fun FilePickerCell(
 }
 
 @Composable
-private fun AddRowButton(onAdd: () -> Unit) {
+private fun AddRowButton(onAdd: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
-            .padding(top = 6.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(4.dp))
             .background(ReqLabColors.Surface)
             .clickable { onAdd() }

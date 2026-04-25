@@ -36,6 +36,8 @@ data class EditorDisplayState(
     val selectionEnd: Int      = -1,
     val diagnostics: List<InlineEditorError> = emptyList(),
     val totalDisplayLines: Int = 1,
+    /** True when at least one document line exceeds [EditorViewModel.DISPLAY_LINE_LENGTH_LIMIT] chars. */
+    val hasLineTruncation: Boolean = false,
 )
 
 private data class EditCommand(
@@ -74,6 +76,7 @@ class EditorViewModel(
         EditorDisplayState(
             version            = document.version,
             totalDisplayLines  = displayLineMap.totalDisplayLines,
+            hasLineTruncation  = computeHasLineTruncation(),
         )
     )
     val state: StateFlow<EditorDisplayState> = _state.asStateFlow()
@@ -86,6 +89,7 @@ class EditorViewModel(
 
     private var lastExternalText: String = initialText
     private var diagnosticsJob: Job? = null
+    private var foldRegionsJob: Job? = null
     private var editSequence: Long = 0L
     private val undoStack = ArrayDeque<EditCommand>()
     private val redoStack = ArrayDeque<EditCommand>()
@@ -117,18 +121,19 @@ class EditorViewModel(
             if (editSequence != capturedSeq) return@launch
             val newVersion = document.version
             val docLen = document.length
-            withContext(Dispatchers.Main) {
-                _state.update {
-                    it.copy(
-                        version = newVersion,
-                        styleClock = styleBuffer.styleClock,
-                        cursorOffset = it.cursorOffset.coerceIn(0, docLen),
-                        selectionStart = -1,
-                        selectionEnd = -1,
-                        diagnostics = emptyList(),
-                        totalDisplayLines = displayLineMap.totalDisplayLines,
-                    )
-                }
+            val hasTruncation = computeHasLineTruncation()
+            // StateFlow.update is @ThreadSafe — update directly on Default dispatcher
+            _state.update {
+                it.copy(
+                    version = newVersion,
+                    styleClock = styleBuffer.styleClock,
+                    cursorOffset = it.cursorOffset.coerceIn(0, docLen),
+                    selectionStart = -1,
+                    selectionEnd = -1,
+                    diagnostics = emptyList(),
+                    totalDisplayLines = displayLineMap.totalDisplayLines,
+                    hasLineTruncation = hasTruncation,
+                )
             }
             idleLexer.scheduleFrom(0, scope)
             scheduleDiagnostics()
@@ -314,7 +319,8 @@ class EditorViewModel(
         }
 
         styleBuffer.invalidateFrom(f)
-        styleBuffer.grow(document.length)
+        // grow() is background-only (IdleLexer calls it before any write); calling it here
+        // from the main thread races with IdleLexer's own grow() on the styles array reference.
         displayLineMap.reset(document.lineCount)
 
         // ── Restore folds after reset ─────────────────────────────────────────
@@ -334,6 +340,31 @@ class EditorViewModel(
         }
         // ─────────────────────────────────────────────────────────────────────
 
+        // ── Immediately adjust foldRegions line numbers for the edit ──────────
+        // This keeps fold-arrow positions correct after any insert/delete that
+        // changes the line count.  A debounced background recompute
+        // (scheduleFoldRegionsUpdate) will re-detect structural changes later.
+        val foldRegionsChanged = if (lineDelta != 0 && foldRegions.isNotEmpty()) {
+            val isAtLineStart = f == 0 || (f > 0 && old[f - 1] == '\n')
+            val newLineCount = document.lineCount
+            val updated = foldRegions.mapNotNull { region ->
+                val sl0 = region.startLine - 1   // 0-based line of the region header
+                val el0 = region.endLine - 1     // 0-based line of the region footer
+                // Shift a boundary if the insert/delete is on an earlier line, OR at
+                // the very start of the same line (the content moves down by lineDelta).
+                val shiftStart = editDocLine < sl0 || (editDocLine == sl0 && isAtLineStart)
+                val shiftEnd   = editDocLine < el0 || (editDocLine == el0 && isAtLineStart)
+                val newStart = if (shiftStart) region.startLine + lineDelta else region.startLine
+                val newEnd   = if (shiftEnd)   region.endLine   + lineDelta else region.endLine
+                if (newStart >= 1 && newEnd > newStart && newEnd <= newLineCount)
+                    region.copy(startLine = newStart, endLine = newEnd)
+                else null
+            }
+            foldRegions = updated
+            true
+        } else false
+        // ─────────────────────────────────────────────────────────────────────
+
         _state.update {
             it.copy(
                 version = document.version,
@@ -345,12 +376,16 @@ class EditorViewModel(
                 // leave red underlines on text that is now syntactically valid.
                 // They are re-populated after the 500 ms background validation pass.
                 diagnostics = emptyList(),
+                // Bump foldVersion only when arrow positions actually changed so the
+                // renderer re-reads foldRegions.
+                foldVersion = if (foldRegionsChanged) it.foldVersion + 1 else it.foldVersion,
             )
         }
 
         notifyTextChanged()
         idleLexer.scheduleFrom(f, scope)
         scheduleDiagnostics()
+        scheduleFoldRegionsUpdate()
     }
 
     private fun pushUndo(cmd: EditCommand) {
@@ -613,7 +648,9 @@ class EditorViewModel(
     private fun scheduleInitialFolds() {
         scope.launch(Dispatchers.Default) {
             computeAndApplyFolds()
-            withContext(Dispatchers.Main) { emitFoldUpdate() }
+            val hasTruncation = computeHasLineTruncation()
+            // StateFlow.update is @ThreadSafe — no Main dispatcher needed
+            emitFoldUpdate(hasTruncation)
         }
     }
 
@@ -628,11 +665,12 @@ class EditorViewModel(
         displayLineMap.reset(document.lineCount)
     }
 
-    private fun emitFoldUpdate() {
+    private fun emitFoldUpdate(hasTruncation: Boolean = false) {
         _state.update {
             it.copy(
                 foldVersion = it.foldVersion + 1,
                 totalDisplayLines = displayLineMap.totalDisplayLines,
+                hasLineTruncation = hasTruncation,
             )
         }
     }
@@ -664,10 +702,9 @@ class EditorViewModel(
     fun getSelectedText(): String {
         val st = _state.value
         if (st.selectionStart < 0 || st.selectionEnd <= st.selectionStart) return ""
-        val full = document.toFullString()
-        val s = st.selectionStart.coerceIn(0, full.length)
-        val e = st.selectionEnd.coerceIn(s, full.length)
-        return full.substring(s, e)
+        val s = st.selectionStart.coerceIn(0, document.length)
+        val e = st.selectionEnd.coerceIn(s, document.length)
+        return document.buffer.subSequence(s, e)
     }
 
     private fun notifyTextChanged() {
@@ -676,17 +713,55 @@ class EditorViewModel(
 
     private fun scheduleDiagnostics() {
         diagnosticsJob?.cancel()
+        val seq = editSequence   // capture before the delay
         diagnosticsJob = scope.launch(Dispatchers.Default) {
             delay(500L)
-            val text = document.toFullString()
+            // Discard if a newer edit arrived during the delay
+            if (editSequence != seq) return@launch
+            val text = lastExternalText
+            if (editSequence != seq) return@launch
             val errors = provider.validate(text)
-            withContext(Dispatchers.Main) {
+            // Json.parseToJsonElement is not coroutine-cancellable; guard against the
+            // stale-result race by checking the sequence AFTER the potentially-long parse.
+            if (editSequence == seq) {
                 _state.update { it.copy(diagnostics = errors) }
             }
         }
     }
 
+    /** Re-detect fold regions in the background and update [foldRegions] without
+     *  touching [displayLineMap] (collapsed state is preserved).  Debounced at 300 ms. */
+    private fun scheduleFoldRegionsUpdate() {
+        foldRegionsJob?.cancel()
+        val seq = editSequence
+        foldRegionsJob = scope.launch(Dispatchers.Default) {
+            delay(300L)
+            if (editSequence != seq) return@launch
+            val text = lastExternalText
+            if (editSequence != seq) return@launch
+            val editorDoc = com.reqlab.editor.core.EditorDocument.create(text)
+            val newRegions = provider.foldingRegions(editorDoc)
+            if (editSequence == seq) {
+                foldRegions = newRegions
+                _state.update { it.copy(foldVersion = it.foldVersion + 1) }
+            }
+        }
+    }
+
+    /** O(lineCount) check: scans line start offsets to find any line > [DISPLAY_LINE_LENGTH_LIMIT] chars. */
+    private fun computeHasLineTruncation(): Boolean {
+        val count = document.lineCount
+        for (line in 0 until count) {
+            val start = document.lineStart(line)
+            val end = if (line + 1 < count) document.lineStart(line + 1) - 1 else document.length
+            if ((end - start) > DISPLAY_LINE_LENGTH_LIMIT) return true
+        }
+        return false
+    }
+
     companion object {
+        /** Matches LineView.MAX_RENDER_CHARS_PER_LINE — lines longer than this are truncated in the renderer. */
+        const val DISPLAY_LINE_LENGTH_LIMIT = 50_000
         // Keep undo memory bounded for multi-MB documents while still allowing
         // long Cmd+Z/Cmd+Shift+Z chains.
         private const val MAX_UNDO_COMMANDS = 2_000

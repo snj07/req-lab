@@ -180,7 +180,30 @@
               "url": "{{baseUrl}}/api/form-data",
               "body": {
                 "type": "FORM_DATA",
-                "content": "name=Alice&role=tester&department=engineering"
+                "content": "name=Alice&role=tester&department=engineering",
+                "formDataEntries": [
+                  {
+                    "key": "name",
+                    "type": "TEXT",
+                    "value": "Alice",
+                    "description": "",
+                    "enabled": true
+                  },
+                  {
+                    "key": "role",
+                    "type": "TEXT",
+                    "value": "tester",
+                    "description": "",
+                    "enabled": true
+                  },
+                  {
+                    "key": "department",
+                    "type": "TEXT",
+                    "value": "engineering",
+                    "description": "",
+                    "enabled": true
+                  }
+                ]
               }
             }
           ]
@@ -195,7 +218,27 @@
               "url": "{{baseUrl}}/api/urlencoded",
               "body": {
                 "type": "X_WWW_FORM_URLENCODED",
-                "content": "username=alice&password=secret123&remember=true"
+                "content": "username=alice&password=secret123&remember=true",
+                "urlencodedEntries": [
+                  {
+                    "key": "username",
+                    "value": "alice",
+                    "description": "",
+                    "enabled": true
+                  },
+                  {
+                    "key": "password",
+                    "value": "secret123",
+                    "description": "",
+                    "enabled": true
+                  },
+                  {
+                    "key": "remember",
+                    "value": "true",
+                    "description": "",
+                    "enabled": true
+                  }
+                ]
               }
             }
           ]
@@ -507,6 +550,22 @@
           "name": "Slow Response - near-instant 100ms",
           "method": "GET",
           "url": "{{baseUrl}}/api/slow?ms=100"
+        }
+      ]
+    },
+    {
+      "name": "Large Payloads",
+      "folders": [],
+      "requests": [
+        {
+          "name": "GET Large JSON (10mb-sample.json)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/large-json"
+        },
+        {
+          "name": "GET Large XML (5mb.xml)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/large-xml"
         }
       ]
     },

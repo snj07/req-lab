@@ -4,7 +4,8 @@ This document summarizes how to run ReqLab tests locally.
 
 ## Test Layers
 
-- Core unit/module tests: `core-network`, `core-storage`, `core-scripting`
+- Core unit/module tests: `core-network`, `core-storage`, `core-model`, `core-scripting`
+- Editor unit/module tests: `editor-core`, `editor-ui`
 - Integration and E2E API tests: `qa-tests`
 - Desktop UI smoke tests: `ui-desktop`
 
@@ -13,9 +14,13 @@ This document summarizes how to run ReqLab tests locally.
 ```bash
 ./gradlew :core-network:allTests
 ./gradlew :core-storage:allTests
+./gradlew :core-model:allTests
 ./gradlew :core-scripting:allTests
+./gradlew :editor-core:desktopTest
+./gradlew :editor-ui:allTests
 ./gradlew :qa-tests:jvmTest
 ./gradlew :ui-desktop:desktopTest
+./gradlew :ui-web:wasmJsTest
 ```
 
 Run a focused validation bundle:
@@ -45,5 +50,11 @@ Run full project checks:
 - Variable interpolation and scripting runtime behavior
 - Retry/error handling and selected WebSocket flows
 - Desktop shell/UI smoke coverage
+
+Release-quality gate also validates:
+
+- `:editor-ui:allTests`
+- `:ui-shared:desktopTest`
+- `:ui-web:wasmJsTest`
 
 For broader strategy and endpoint matrix, see [docs/testing.md](docs/testing.md).

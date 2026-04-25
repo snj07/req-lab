@@ -62,6 +62,8 @@ internal fun LineView(
     onWordSelect: ((absoluteOffset: Int) -> Unit)? = null,
     language: LanguageMode,
     theme: EditorTheme = EditorTheme.Dark,
+    searchRanges: List<IntRange> = emptyList(),
+    activeSearchRange: IntRange? = null,
     wordWrap: Boolean = true,
     containerWidthPx: Int = 0,
     /**
@@ -91,7 +93,7 @@ internal fun LineView(
         if (docLine < document.lineCount) document.lineStart(docLine) else 0
     }
 
-    val annotated: AnnotatedString = remember(lineText, styleClock) {
+    val annotated: AnnotatedString = remember(lineText, styleClock, searchRanges, activeSearchRange, diagnostics) {
         buildLineAnnotatedString(
             lineText        = lineText,
             lineStartOffset = lineStartOffset,
@@ -99,6 +101,8 @@ internal fun LineView(
             language        = language,
             diagnostics     = diagnostics,
             onSurface       = onSurface,
+            searchRanges    = searchRanges,
+            activeSearchRange = activeSearchRange,
         )
     }
 
@@ -277,6 +281,8 @@ private fun buildLineAnnotatedString(
     language: LanguageMode,
     diagnostics: List<InlineEditorError>,
     onSurface: Color,
+    searchRanges: List<IntRange>,
+    activeSearchRange: IntRange?,
 ): AnnotatedString {
     if (lineText.isEmpty()) return AnnotatedString("")
 
@@ -319,6 +325,30 @@ private fun buildLineAnnotatedString(
                         color = color,
                         textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
                     ),
+                    spanStart,
+                    spanEnd,
+                )
+            }
+        }
+
+        for (range in searchRanges) {
+            val spanStart = range.first.coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            if (spanStart < spanEnd) {
+                addStyle(
+                    SpanStyle(background = SyntaxColors.searchMatch),
+                    spanStart,
+                    spanEnd,
+                )
+            }
+        }
+
+        activeSearchRange?.let { range ->
+            val spanStart = range.first.coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            if (spanStart < spanEnd) {
+                addStyle(
+                    SpanStyle(background = SyntaxColors.searchActive),
                     spanStart,
                     spanEnd,
                 )

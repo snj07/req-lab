@@ -79,10 +79,12 @@ fun TopToolbar(state: AppState) {
 
         // Logo
         Spacer(Modifier.width(4.dp))
+        BrandIcon()
+        Spacer(Modifier.width(8.dp))
         Text(
             text = Strings.appName,
-            color = ReqLabColors.Primary,
-            fontWeight = FontWeight.Bold,
+            color = ReqLabColors.OnSurface,
+            fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp,
         )
 
@@ -184,6 +186,9 @@ fun TopToolbar(state: AppState) {
             .background(ReqLabColors.Border)
     )
 }
+
+@Composable
+expect fun BrandIcon()
 
 @Composable
 private fun EnvironmentChip(state: AppState) {

@@ -50,7 +50,7 @@ editor-core/
 ui-shared/
 └── src/commonMain/kotlin/com/reqlab/ui/shared/components/
     ├── CodeEditor.kt          ← public CodeEditor() composable + internals
-    ├── CodeFolding.kt         ← fold detection + FoldState (read-only only)
+   ├── CodeFolding.kt         ← fold detection + FoldState
     └── SyntaxHighlighter.kt   ← tokenization, validation, formatting
 ```
 
@@ -99,7 +99,7 @@ Internally dispatches to two distinct rendering paths:
 | Mode | Composable | Folding | Inline errors |
 |------|-----------|---------|---------------|
 | Read-only | `ReadOnlyCodeContent` → `SmallCodeView` / `LargeCodeView` | ✅ full fold/unfold via `FoldState` | N/A (static content) |
-| Editable | `EditableCodeContent` | ✗ (see below) | ✅ red/amber underline spans |
+| Editable | `EditableCodeContent` / virtualized editor path | ✅ fold controls available when regions exist | ✅ red/amber underline spans |
 
 ---
 
@@ -144,18 +144,16 @@ re-renders with correct heights.  The transition is invisible to the user.
 
 ### Code Folding
 
-Folding is **read-only only**.  `BasicTextField` cannot hide arbitrary character
-ranges without a custom `VisualTransformation`; implementing a correct fold
-`VisualTransformation` is significantly complex and introduces cursor-offset
-mapping bugs.
+Folding is available in both read-only and editable flows when fold regions are
+detected for the current language/content.
 
-The toolbar's **Fold All / Unfold All** buttons are hidden when the editor is in
-editable mode (`isReadOnly = false`).  No misleading fold indicators appear in
-the editable gutter.
+- Toolbar **Fold All / Unfold All** is shown only when regions exist.
+- Gutter fold indicators are interactive on foldable lines.
+- Folding logic is driven by `CodeFolding.kt` (`FoldState`, `computeVisibleLines()`) and
+   integrated into both standard and large-document editor paths.
 
-Folding continues to work correctly in `ReadOnlyCodeContent` (both
-`SmallCodeView` and `LargeCodeView`) via `computeVisibleLines()` in
-`CodeFolding.kt`.
+Large/minified single-line payloads can still have zero fold regions by design
+(no multiline structure), so fold controls are hidden for those documents.
 
 ---
 

@@ -4,10 +4,10 @@
 
 ReqLab uses a layered validation strategy:
 
-1. Unit tests (`core-network`, `core-storage`)
-2. Integration tests (`qa-tests` against local dummy server)
-3. End-to-end API workflow tests (`qa-tests`)
-4. Desktop UI automation smoke tests (`ui-desktop`)
+1. Unit tests (`core-network`, `core-storage`, `core-model`, `core-scripting`)
+2. Shared UI/unit tests (`ui-shared`, `editor-core`, `editor-ui`)
+3. Integration and end-to-end API workflow tests (`qa-tests`)
+4. Desktop UI automation and regression tests (`ui-desktop`)
 
 ## Test Modules
 
@@ -15,6 +15,9 @@ ReqLab uses a layered validation strategy:
 - `core-network`: protocol behavior and request mapping tests
 - `core-storage`: repository and persistence behavior tests
 - `core-model`: model serialization and data structure tests
+- `core-scripting`: script runtime, assertions, and variable scope behavior tests
+- `editor-core`: editor engine/state/folding/performance micro-tests
+- `editor-ui`: editor renderer/viewmodel logic and regression tests
 - `ui-shared`: syntax highlighter, code folding, Postman import, i18n, and app state tests
 - `ui-desktop`: Compose Desktop UI automation smoke tests
 
@@ -55,6 +58,10 @@ Simulation parameters used by current endpoints:
 ```bash
 ./gradlew :core-network:allTests
 ./gradlew :core-storage:allTests
+./gradlew :core-model:allTests
+./gradlew :core-scripting:allTests
+./gradlew :editor-core:desktopTest
+./gradlew :editor-ui:allTests
 ./gradlew :ui-shared:desktopTest
 ./gradlew :qa-tests:jvmTest
 ./gradlew :ui-desktop:desktopTest
@@ -88,18 +95,23 @@ Implemented and tested:
 - Code folding: brace-based, tag-based, comment-based region detection and fold state management
 - Postman collection/environment import (v2/v2.1)
 
-Not yet fully testable because implementation is not complete yet:
+Quality-gate tests used by release packaging:
 
-- Collection drag-and-drop and rich tree operations
-- History search/re-run UI flows
-- Collection runner reporting UI
-- Importers (Postman/OpenAPI/curl) and code generators
-- Full response JSON tree explorer, diff viewer, resizable panes, command palette
+- `:editor-ui:allTests`
+- `:ui-shared:desktopTest`
+- `:ui-web:wasmJsTest`
+
+Partially covered or still evolving areas:
+
+- Advanced collection drag-and-drop edge cases under high node counts
+- Deeper web UI interaction parity (desktop-level interaction coverage is stronger)
+- Collection runner reporting UI depth
+- OpenAPI/curl import and code-generation feature surface
 - Persistent SQLDelight/SQLite restart durability
 
 ## CI
 
 GitHub Actions workflow: `.github/workflows/release.yml`
 
-- Push to `main`: artifact build validation across macOS, Ubuntu, and Windows.
-- Tag `v*`: artifact build + GitHub Release publication.
+- Push to `main`: quality gate, then artifact build validation across macOS, Ubuntu, and Windows.
+- Tag `v*`: quality gate, then artifact build + GitHub Release publication.

@@ -44,6 +44,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -166,6 +173,21 @@ fun CodeEditor(
     val searchMatches  = remember(visibleTexts, searchQuery) {
         findSearchMatches(visibleTexts, searchQuery)
     }
+    val searchMatchRangesByLine = remember(searchMatches) {
+        searchMatches
+            .groupBy { it.lineIndex }
+            .mapValues { (_, matchesForLine) ->
+                matchesForLine.map { it.startOffset until it.endOffset }
+            }
+    }
+    val activeSearchMatch = remember(searchMatches, activeMatchIndex) {
+        searchMatches.getOrNull(activeMatchIndex)?.let { it.lineIndex to (it.startOffset until it.endOffset) }
+    }
+
+    val toggleSearch: () -> Unit = {
+        showSearch = !showSearch
+        if (!showSearch) searchQuery = ""
+    }
     LaunchedEffect(searchMatches.size) {
         activeMatchIndex = if (searchMatches.isNotEmpty())
             activeMatchIndex.coerceIn(0, searchMatches.size - 1) else 0
@@ -182,7 +204,21 @@ fun CodeEditor(
     }
 
     // ── Layout ───────────────────────────────────────────────
-    Column(modifier = modifier.testTag(testTagPrefix)) {
+    Column(
+        modifier = modifier
+            .testTag(testTagPrefix)
+            .onPreviewKeyEvent { event ->
+                if (!enableSearch) return@onPreviewKeyEvent false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val isMeta = event.isMetaPressed || event.isCtrlPressed
+                if (isMeta && event.key == Key.F) {
+                    toggleSearch()
+                    true
+                } else {
+                    false
+                }
+            },
+    ) {
 
         // Toolbar
         if (showToolbar) {
@@ -206,10 +242,7 @@ fun CodeEditor(
                 } else null,
                 showSearch = showSearch,
                 onToggleSearch = if (enableSearch) {
-                    {
-                        showSearch = !showSearch
-                        if (!showSearch) searchQuery = ""
-                    }
+                    toggleSearch
                 } else null,
                 onCopy = if (enableCopy) {
                     { platformCopyToClipboard(viewModel.getFullText()) }
@@ -263,6 +296,8 @@ fun CodeEditor(
             onTextChange   = onTextChange,
             onPasteRequest = { readFromClipboard() },
             onCopyRequest  = { text -> platformCopyToClipboard(text) },
+            searchMatchRangesByLine = searchMatchRangesByLine,
+            activeSearchMatch = activeSearchMatch,
         )
     }
 }

@@ -122,7 +122,12 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
             }
         }
 
-        state.logNetworkEvent("→ $effectiveMethod $effectiveUrl")
+        val effectiveUrlForLog = resolveUrlForLog(
+            url = effectiveUrl,
+            variableLayers = state.activeVariableLayers(),
+            requestScopedVars = requestScopedScriptVars,
+        )
+        state.logNetworkEvent("→ $effectiveMethod $effectiveUrlForLog")
 
         try {
             val request = RequestDefinition(
@@ -427,6 +432,19 @@ fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, Stri
     val resolvedUrl = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
     parts += shellQuote(resolvedUrl)
     return parts.joinToString(" \\\n  ")
+}
+
+internal fun resolveUrlForLog(
+    url: String,
+    variableLayers: List<Map<String, String>>,
+    requestScopedVars: Map<String, String> = emptyMap(),
+): String {
+    val layers = if (requestScopedVars.isNotEmpty()) {
+        listOf(requestScopedVars) + variableLayers
+    } else {
+        variableLayers
+    }
+    return VariableResolver.resolve(url, layers, removeUnresolved = false)
 }
 
 /** cURL command with raw (unresolved) {{variables}} preserved – useful for sharing templates. */

@@ -145,6 +145,10 @@ fun EditorRenderer(
     onTextChange: ((String) -> Unit)? = null,
     onPasteRequest: (() -> String?)? = null,
     onCopyRequest: ((String) -> Unit)? = null,
+    /** Per-line search match ranges (lineIndex -> list of start..endExclusive ranges). */
+    searchMatchRangesByLine: Map<Int, List<IntRange>> = emptyMap(),
+    /** Currently active search match (lineIndex to start..endExclusive range). */
+    activeSearchMatch: Pair<Int, IntRange>? = null,
     /** Called whenever the horizontal scroll offset changes (no-wrap mode only). For testing. */
     onHorizontalScroll: ((Int) -> Unit)? = null,
     /** Called once after composition with the internal horizontal ScrollState. For testing. */
@@ -526,54 +530,51 @@ fun EditorRenderer(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             // ① Line number (right-aligned, fills available space)
+                            val lineNumberTag = if (testTagPrefix.isNotEmpty())
+                                "$testTagPrefix-line-number-$docLine" else ""
                             Text(
                                 text  = "${docLine + 1}",
                                 style = lineNumStyle,
+                                modifier = if (lineNumberTag.isNotEmpty()) Modifier.testTag(lineNumberTag) else Modifier,
                             )
 
                             // ② Fold indicator (or guide spacer) — rightmost column
-                            if (isFoldable) {
-                                val foldTag = if (testTagPrefix.isNotEmpty())
-                                    "$testTagPrefix-fold-indicator-$docLine" else ""
-                                Box(
-                                    modifier = Modifier
-                                        .padding(start = 4.dp)
-                                        .size(16.dp)
-                                        .then(
-                                            if (foldTag.isNotEmpty()) Modifier.testTag(foldTag)
-                                            else Modifier
-                                        )
-                                        .pointerInput(docLine) {
-                                            detectTapGestures {
-                                                focus.requestFocus()
-                                                viewModel.toggleFold(docLine)
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center,
-                                ) {
+                            val foldTag = if (testTagPrefix.isNotEmpty())
+                                "$testTagPrefix-fold-indicator-$docLine" else ""
+                            val foldColumnModifier = Modifier
+                                .padding(start = 4.dp)
+                                .size(16.dp)
+                                .then(
+                                    if (isFoldable && foldTag.isNotEmpty()) Modifier.testTag(foldTag)
+                                    else Modifier
+                                )
+                            Box(
+                                modifier = if (isFoldable) {
+                                    foldColumnModifier.pointerInput(docLine) {
+                                        detectTapGestures {
+                                            focus.requestFocus()
+                                            viewModel.toggleFold(docLine)
+                                        }
+                                    }
+                                } else foldColumnModifier,
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isFoldable) {
                                     Text(
                                         text  = if (isFolded) "▸" else "▾",
                                         color = if (isFolded) theme.accent else theme.lineNumberFg,
                                         fontSize = 10.sp,
                                     )
-                                }
-                            } else if (foldStartSet.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(start = 4.dp)
-                                        .size(16.dp),
-                                ) {
-                                    if (inFoldRegion) {
-                                        Canvas(modifier = Modifier.matchParentSize()) {
-                                            val x = size.width / 2f
-                                            drawLine(
-                                                color = foldGuideColor,
-                                                start = androidx.compose.ui.geometry.Offset(x, 0f),
-                                                end   = androidx.compose.ui.geometry.Offset(x, size.height),
-                                                strokeWidth = 1.5f,
-                                                pathEffect  = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f),
-                                            )
-                                        }
+                                } else if (inFoldRegion) {
+                                    Canvas(modifier = Modifier.matchParentSize()) {
+                                        val x = size.width / 2f
+                                        drawLine(
+                                            color = foldGuideColor,
+                                            start = androidx.compose.ui.geometry.Offset(x, 0f),
+                                            end   = androidx.compose.ui.geometry.Offset(x, size.height),
+                                            strokeWidth = 1.5f,
+                                            pathEffect  = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f),
+                                        )
                                     }
                                 }
                             }
@@ -631,6 +632,10 @@ fun EditorRenderer(
                                 },
                                 language         = language,
                                 theme            = theme,
+                                searchRanges     = searchMatchRangesByLine[docLine].orEmpty(),
+                                activeSearchRange = activeSearchMatch
+                                    ?.takeIf { it.first == docLine }
+                                    ?.second,
                                 wordWrap         = wordWrap,
                                 containerWidthPx = if (wordWrap) lineTextWidthPx else 0,
                                 // Blink alpha from the single hoisted InfiniteTransition.

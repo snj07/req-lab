@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
 package com.reqlab.ui.desktop
 
 import androidx.compose.ui.test.assertIsDisplayed
@@ -5,8 +7,11 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.input.key.Key
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.ResponseDefinition
@@ -16,7 +21,6 @@ import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestEditorTab
 import org.junit.Rule
 import org.junit.Test
-import org.junit.Ignore
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -729,6 +733,28 @@ class SearchBarUiTest {
 
         composeRule.onNodeWithTag("body-editor", useUnmergedTree = true).assertIsDisplayed()
     }
+
+    @Test
+    fun ctrl_or_cmd_f_opens_search_bar_same_as_toolbar_button() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{\n  \"name\": \"Alice\",\n  \"role\": \"admin\"\n}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performKeyInput {
+                keyDown(Key.CtrlLeft)
+                pressKey(Key.F)
+                keyUp(Key.CtrlLeft)
+            }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-bar", useUnmergedTree = true).assertIsDisplayed()
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -796,7 +822,6 @@ class LargeFileEditorQaTest {
 
     // ── 5 MB minified JSON (single-line, char-count threshold) ───────
 
-    @Ignore("Compose Desktop constraints overflow on minified multi-megabyte single-line payloads; covered by large synthetic capped-mode regressions")
     @Test
     fun five_mb_minified_json_array_renders_without_freeze() {
         val content = loadQaResource("5MB-min.json")
@@ -805,26 +830,35 @@ class LargeFileEditorQaTest {
         val state = AppState()
         composeRule.runOnUiThread {
             state.activeTab?.bodyType = BodyType.JSON
-            state.activeTab?.bodyContent = content
+            state.activeTab?.bodyContent = ""
             state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
         }
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
 
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performTextReplacement(content)
+        composeRule.waitForIdle()
+
         composeRule.onNodeWithTag("body-editor", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(content.length, state.activeTab?.bodyContent?.length,
+            "5MB minified payload must remain intact after rendering")
     }
 
-    @Ignore("Compose Desktop constraints overflow on minified multi-megabyte single-line payloads; covered by large synthetic capped-mode regressions")
     @Test
     fun five_mb_minified_json_uses_virtualized_editor_path() {
         val content = loadQaResource("5MB-min.json")
         val state = AppState()
         composeRule.runOnUiThread {
             state.activeTab?.bodyType = BodyType.JSON
-            state.activeTab?.bodyContent = content
+            state.activeTab?.bodyContent = ""
             state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
         }
         composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performTextReplacement(content)
         composeRule.waitForIdle()
 
         // The char-count threshold triggers unified editing; body-editor-input is always present
@@ -832,18 +866,22 @@ class LargeFileEditorQaTest {
             .assertIsDisplayed()
     }
 
-    @Ignore("Compose Desktop constraints overflow on minified multi-megabyte single-line payloads; covered by large synthetic capped-mode regressions")
     @Test
     fun five_mb_json_toolbar_is_displayed() {
         val content = loadQaResource("5MB-min.json")
         val state = AppState()
         composeRule.runOnUiThread {
             state.activeTab?.bodyType = BodyType.JSON
-            state.activeTab?.bodyContent = content
+            state.activeTab?.bodyContent = ""
             state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
         }
         composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performTextReplacement(content)
+        composeRule.waitForIdle()
+
         composeRule.onNodeWithTag("body-editor-toolbar", useUnmergedTree = true).assertIsDisplayed()
     }
 
@@ -1186,17 +1224,20 @@ class LargeFileEditorQaTest {
             "Editor must remain editable after JSON->HTML switch following large paste")
     }
 
-    @Ignore("Compose Desktop constraints overflow on minified multi-megabyte single-line payloads; covered by large synthetic capped-mode regressions")
     @Test
     fun five_mb_json_fold_all_does_not_modify_content() {
         val content = loadQaResource("5MB-min.json")
         val state = AppState()
         composeRule.runOnUiThread {
             state.activeTab?.bodyType = BodyType.JSON
-            state.activeTab?.bodyContent = content
+            state.activeTab?.bodyContent = ""
             state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
         }
         composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performTextReplacement(content)
         composeRule.waitForIdle()
 
         // 5MB-min.json is a single-line minified array — no fold regions exist, so
