@@ -24,6 +24,10 @@ class ToolbarTooltipUiTest {
         composeRule
             .onNodeWithTag("settings-button", useUnmergedTree = true)
             .performMouseInput { moveTo(Offset(10f, 10f)) }
+
+        // The tooltip has a 200 ms debounce delay before becoming visible.
+        // Advancing the test clock past that threshold lets the LaunchedEffect fire.
+        composeRule.mainClock.advanceTimeBy(250L)
         composeRule.waitForIdle()
 
         composeRule
