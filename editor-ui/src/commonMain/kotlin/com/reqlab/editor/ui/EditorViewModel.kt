@@ -632,7 +632,14 @@ class EditorViewModel(
     private fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '_'
 
     fun selectAll() {
-        _state.update { it.copy(selectionStart = 0, selectionEnd = document.length, cursorOffset = document.length) }
+        _state.update {
+            it.copy(
+                selectionStart = 0,
+                selectionEnd = document.length,
+                // Keep viewport stable: select all should not force-jump to doc end.
+                cursorOffset = it.cursorOffset.coerceIn(0, document.length),
+            )
+        }
     }
 
     fun onVisibleRangeChanged(firstDisplayLine: Int, lastDisplayLine: Int) {

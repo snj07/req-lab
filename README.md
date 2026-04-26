@@ -1,99 +1,27 @@
-# ReqLab
+<p align="center">
+  <img src="ui-desktop/src/desktopMain/resources/icons/reqlab-icon-128.png" alt="ReqLab" width="100" />
+</p>
 
-A lightweight API client built with Kotlin and Compose Multiplatform for desktop and web workflows.
+<h1 align="center">ReqLab</h1>
+
+<p align="center">
+  <strong>A desktop-first API client built with Kotlin and Compose Multiplatform.</strong><br/>
+  No accounts. No telemetry. No cloud lock-in. Just fast, scriptable HTTP.
+</p>
+
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)]()
+[![Kotlin](https://img.shields.io/badge/kotlin-2.1.21-purple.svg)](https://kotlinlang.org)
+[![Compose Multiplatform](https://img.shields.io/badge/compose--multiplatform-1.8.1-orange.svg)](https://www.jetbrains.com/lp/compose-multiplatform/)
+[![Build](https://github.com/snj07/req-lab/actions/workflows/release.yml/badge.svg)](https://github.com/snj07/req-lab/actions)
+
+---
 
 ## What is ReqLab?
 
-ReqLab helps you build, send, inspect, and validate HTTP requests without accounts, telemetry lock-in, or mandatory cloud sync.
+ReqLab is a Kotlin + Compose Multiplatform API client for desktop (macOS, Linux, Windows) and web. It is designed for fast request iteration, scriptable validations, and reproducible API test workflows — running entirely offline with no accounts required.
 
-## Core Features
-
-- HTTP request editor with methods, URL, params, headers, auth, and multiple body types.
-- Pre-request and post-request scripting with variable access and assertions.
-- Collections and history with multi-tab request workflow.
-- Environment and global variables with `{{variable}}` interpolation.
-- Response viewer plus request lifecycle logs and test results.
-
-## In-app Help & About
-
-ReqLab includes an in-app **Help & About** panel with:
-
-- About / feature overview
-- How-to usage flow
-- Keyboard shortcuts reference
-- Scripting overview
-- Version and build information
-
-You can open it from:
-
-- Top toolbar (`Help` icon)
-- Settings dialog (`Open Help & About`)
-
-## Keyboard Shortcuts
-
-These shortcuts are mapped in `MainScreen` and reflect current behavior:
-
-| Shortcut | Action |
-|---|---|
-| `⌘ + Enter` / `Ctrl + Enter` | Send request (or cancel in-flight request) |
-| `⌘ + Shift + [` / `Ctrl + Shift + [` | Move active tab left |
-| `⌘ + Shift + ]` / `Ctrl + Shift + ]` | Move active tab right |
-| `⌘ + S` / `Ctrl + S` | Save active request |
-| `⌘ + W` / `Ctrl + W` | Close active tab |
-| `⌘ + N` / `Ctrl + N` | Create a new request tab |
-| `⌘ + ,` / `Ctrl + ,` | Open Settings |
-
-## Importing from Postman
-
-ReqLab can import **Postman Collection v2 / v2.1** and **Postman Environment** files directly — no conversion step needed.
-
-- Open the sidebar and click the **Import** button in the Collections or Environments section.
-- Select any `.json` file exported from Postman; ReqLab detects the format automatically.
-- Both ReqLab-native and Postman formats are supported by the same button.
-
-**What is imported from a Postman collection:**
-- All folders and requests (arbitrarily nested)
-- URL, method, headers (disabled headers are skipped)
-- Request body (raw JSON, raw text, form-data, x-www-form-urlencoded, GraphQL, binary)
-- Authentication (bearer token, basic, API key; `noauth` → None)
-- Pre-request and post-request (test) scripts — `pm.*` calls are automatically rewritten to `reqlab.*`
-
-**Script conversion notes:**
-- `pm.test`, `pm.expect`, `pm.response`, `pm.request`, `pm.environment.*`, `pm.globals.*`, `pm.variables.*`, `pm.collectionVariables.*` → `reqlab.*` equivalents
-- `pm.sendRequest` is commented out (not supported in ReqLab)
-
-**What is imported from a Postman environment:**
-- Environment name and all enabled variables; disabled variables are skipped
-
-## Scripting
-
-ReqLab supports JavaScript pre-request and post-request scripts through a configurable namespace (default: `reqlab`).
-
-- Pre-request scripts: mutate request URL/headers/body/query/variables before dispatch.
-- Post-request scripts: assert status/body/headers/timing and persist extracted values.
-
-See the full guide: [docs/scripts.md](docs/scripts.md)
-
-## Testing
-
-ReqLab uses layered validation across core modules, integration tests, and UI checks.
-
-- Core module tests (`core-network`, `core-storage`, `core-scripting`)
-- Integration and E2E API tests (`qa-tests`)
-- Desktop UI automation smoke tests (`ui-desktop`)
-
-See the full guide: [docs/tests.md](docs/tests.md)
-
-## Documentation Index
-
-- Setup and development: [DEVELOPMENT.md](DEVELOPMENT.md)
-- Architecture: [docs/architecture.md](docs/architecture.md)
-- Testing guide: [docs/testing.md](docs/testing.md)
-- Scripting guide: [docs/scripts.md](docs/scripts.md)
-- Test execution reference: [docs/tests.md](docs/tests.md)
-- Shortcut reference: [docs/shortcuts.md](docs/shortcuts.md)
-
-## Run from Source
+## Quick Start
 
 Requirements: JDK 17+ (JDK 21 recommended).
 
@@ -103,9 +31,134 @@ cd req-lab
 ./gradlew :ui-desktop:run
 ```
 
+## Features
+
+### 🚀 HTTP Requests
+
+- Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`
+- URL editing with live query-parameter table synchronisation
+- Request headers editor (key/value table)
+- Body types: JSON, GraphQL, form-data, x-www-form-urlencoded, raw text, binary
+- Auth: None, Basic, Bearer Token, API Key, JWT
+- Retry controls and per-request timeout
+- Copy request as `curl`
+
+### 📬 Response Inspection
+
+- Status code, status text, and response headers
+- Response body with syntax-highlighted viewer (JSON, XML, HTML, GraphQL, JS)
+- Response timing (total, TTFB, DNS, TCP, TLS, body) and payload size
+- Structured pass/fail test result reporting from post-request scripts
+
+### ✏️ Code Editor
+
+A full-featured Compose-native code editor — no WebView, no Electron.
+
+- **Syntax highlighting**: JSON, XML/HTML, GraphQL, JavaScript
+- **Code folding**: brace-based (`{ }`, `[ ]`), tag-based, comment-based; Fold All / Unfold All
+- **In-editor search**: incremental match count, Previous/Next, keyboard-accessible
+- **Auto-format**: JSON pretty-print, XML/HTML indentation
+- Line numbers gutter, word wrap toggle, monospace font
+- Virtualized rendering (no jank on responses over 10 MB)
+- Full clipboard support (copy, cut, paste, select all) in both edit and read-only modes
+
+### 📜 Scripting
+
+JavaScript pre-request and post-request scripts through the `reqlab` namespace.
+
+- **Pre-request**: mutate URL, headers, body, query params, and auth before dispatch
+- **Post-request**: assert status, headers, timing, and body; persist extracted values
+- Console logging via `reqlab.console.log(...)`
+
+See the full guide: [docs/scripts.md](docs/scripts.md)
+
+### 🌱 Variables
+
+Four scopes, all interpolated as `{{variable}}` in URL, headers, body, and auth:
+
+| Scope | API | Lifetime |
+|---|---|---|
+| Environment | `reqlab.environment.*` | Persisted with selected environment |
+| Global | `reqlab.globals.*` | Persisted workspace-wide |
+| Collection | `reqlab.collectionVariables.*` | Session-scoped runtime map |
+
+### ✅ Assertions
+
+Named test blocks with a rich assertion chain:
+
+```javascript
+reqlab.test("status is 200", () => {
+    reqlab.expect(reqlab.response.status).to.equal(200);
+});
+```
+
+Assertions: `equal`, `eql`, `include`, `match`, `above`, `below`, `at.least`, `at.most`, `lengthOf`, `property`, `oneOf`, `ok`, `true`, `false`, `null`, `not.*`, and more.
+
+### 📁 Collections & History
+
+- Unlimited collections with nested folders
+- Multi-tab request workflow with tab reorder and persistence
+- Request history with badge counts and sidebar sync
+- Export and import as JSON (ReqLab-native or Postman format)
+
+### 📥 Postman Import
+
+Import **Postman Collection v2 / v2.1** and **Postman Environment** files directly.
+
+- All folders, requests, URLs, methods, headers, bodies, and auth types
+- `pm.*` script calls are automatically rewritten to `reqlab.*` equivalents
+- Disabled headers and variables are skipped; `pm.sendRequest` is commented out
+
+### ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `⌘ + Enter` / `Ctrl + Enter` | Send request (or cancel in-flight request) |
+| `⌘ + Shift + [` / `Ctrl + Shift + [` | Move active tab left |
+| `⌘ + Shift + ]` / `Ctrl + Shift + ]` | Move active tab right |
+| `⌘ + S` / `Ctrl + S` | Save active request |
+| `⌘ + W` / `Ctrl + W` | Close active tab |
+| `⌘ + N` / `Ctrl + N` | New request tab |
+| `⌘ + ,` / `Ctrl + ,` | Open Settings |
+
+Full shortcut reference (including editor shortcuts): [docs/shortcuts.md](docs/shortcuts.md)
+
+### ❓ In-App Help
+
+Open from the toolbar `Help` icon or via **Settings → Open Help & About**:
+
+- Feature overview and usage flow
+- Keyboard shortcuts reference
+- Scripting overview
+- Version and build info
+
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Build, run, and contribute locally |
+| [docs/architecture.md](docs/architecture.md) | Module structure and data flow |
+| [docs/editor-architecture.md](docs/editor-architecture.md) | Code editor internals |
+| [docs/scripts.md](docs/scripts.md) | Scripting API and variable scopes |
+| [docs/shortcuts.md](docs/shortcuts.md) | Keyboard shortcut reference |
+| [docs/testing.md](docs/testing.md) | Test strategy and coverage matrix |
+| [docs/tests.md](docs/tests.md) | Test run commands |
+
+---
+
 ## Contributing
 
-Issues and pull requests are welcome. For larger changes, open an issue first to align approach and scope.
+Contributions are welcome. Please use [GitHub Flow](https://guides.github.com/introduction/flow): create a branch, add commits, and open a pull request.
+
+For larger changes, open an issue first to align on approach and scope.
+
+## Continuous Integration
+
+ReqLab uses [GitHub Actions](https://github.com/features/actions) for CI. Push to `main` runs the quality gate; tags matching `v*` run the full build and publish a GitHub Release.
+
+See the workflow: [`.github/workflows/release.yml`](https://github.com/snj07/req-lab/actions)
 
 ## License
 

@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.persistence
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.ui.shared.platform.PlatformStorage
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.HeaderKind
 import com.reqlab.ui.shared.state.MutableKeyValue
@@ -20,11 +21,13 @@ class TabsRepositoryTest {
     @Before
     fun before() {
         if (storeFile.exists()) storeFile.delete()
+        PlatformStorage.remove("reqlab.tabs")
     }
 
     @After
     fun after() {
         if (storeFile.exists()) storeFile.delete()
+        PlatformStorage.remove("reqlab.tabs")
     }
 
     @Test
@@ -107,5 +110,33 @@ class TabsRepositoryTest {
 
         assertEquals(tab.bodyContent.length, loaded.bodyContent.length,
             "Large body content length must round-trip through persistence")
+    }
+
+    @Test
+    fun save_large_body_roundtrips_exact_content_via_file_backed_storage() {
+        // ~3 MB body — forces PlatformStorage to route through a backing file
+        val largeBody = "{\"rows\":[" + (0 until 50_000).joinToString(",") { "{\"n\":$it}" } + "]}"
+
+        val source = AppState()
+        val tab = source.activeTab!!
+        tab.bodyType = BodyType.JSON
+        tab.bodyContent = largeBody
+
+        assertTrue(TabsRepository.save(source), "save must return true for large body payload")
+
+        val loadedState = AppState()
+        TabsRepository.load(loadedState)
+        val loaded = loadedState.activeTab!!
+
+        assertEquals(
+            largeBody.length,
+            loaded.bodyContent.length,
+            "Large body length must survive TabsRepository save/load",
+        )
+        assertEquals(
+            largeBody,
+            loaded.bodyContent,
+            "Large body content must survive TabsRepository save/load exactly",
+        )
     }
 }

@@ -169,8 +169,16 @@ fun EditorRenderer(
     var contextMenuVisible by remember { mutableStateOf(false) }
     var contextMenuOffset  by remember { mutableStateOf(Offset.Zero) }
     var shiftPressed by remember { mutableStateOf(false) }
+    // Plain mutable object (non-state) — tracks previous doc shape to detect paste.
+    // Updated inside the scroll LaunchedEffect so there is no cross-coroutine race.
+    val prevDocState = remember {
+        object {
+            var length    = viewModel.document.length
+            var lineCount = viewModel.document.lineCount
+        }
+    }
 
-    // Add this LaunchedEffect:
+    // Clear the per-line layout cache whenever the document version changes.
     LaunchedEffect(state.version) {
         layoutResultCache.clear()
     }
@@ -221,9 +229,24 @@ fun EditorRenderer(
         try { focus.requestFocus() } catch (_: Exception) { }
     }
 
-    // Auto-scroll the LazyColumn to keep the cursor line in view,
-    // but ONLY when the cursor line leaves the currently visible range.
-    LaunchedEffect(state.cursorOffset) {
+    // Auto-scroll the LazyColumn to keep the cursor line in view, but suppress after
+    // paste.  Keying on BOTH cursorOffset and version means this single effect handles
+    // cursor navigation (only cursorOffset changes) and typed/pasted edits (both change).
+    // Because the paste guard and the scroll decision live in the SAME coroutine there
+    // is no possible race between a "set flag" effect and a "read flag" effect.
+    LaunchedEffect(state.cursorOffset, state.version) {
+        val newLen       = viewModel.document.length
+        val newLineCount = viewModel.document.lineCount
+        val charDelta = kotlin.math.abs(newLen - prevDocState.length)
+        val lineDelta = newLineCount - prevDocState.lineCount
+        prevDocState.length    = newLen
+        prevDocState.lineCount = newLineCount
+        // Suppress scroll for large edits OR multi-line insertions (paste).
+        // Pressing Enter adds exactly 1 line (lineDelta == 1) → still scrolls.
+        // Pasting any multi-line content adds ≥ 2 → scroll suppressed.
+        if (charDelta >= LARGE_EDIT_SCROLL_SUPPRESS_THRESHOLD_CHARS || lineDelta >= 2) {
+            return@LaunchedEffect
+        }
         val cursorDocLine = viewModel.document.lineAt(state.cursorOffset)
         val displayLine   = viewModel.displayLineMap.displayFromDoc(cursorDocLine)
         if (displayLine < 0) return@LaunchedEffect
@@ -253,11 +276,23 @@ fun EditorRenderer(
                 }
             }
             .onPreviewKeyEvent { event ->
-                if (isReadOnly) return@onPreviewKeyEvent false
                 shiftPressed = event.isShiftPressed
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val shift = event.isShiftPressed
                 val meta  = event.isMetaPressed || event.isCtrlPressed
+
+                // Keep copy/select-all shortcuts working in read-only viewers.
+                if (meta && event.key == Key.C) {
+                    val selected = viewModel.getSelectedText()
+                    if (selected.isNotEmpty()) onCopyRequest?.invoke(selected)
+                    return@onPreviewKeyEvent true
+                }
+                if (meta && event.key == Key.A) {
+                    viewModel.selectAll()
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isReadOnly) return@onPreviewKeyEvent false
                 when {
                     event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
                         event.key == Key.CtrlLeft || event.key == Key.CtrlRight ||
@@ -396,8 +431,11 @@ fun EditorRenderer(
                 fontFamily = FontFamily.Monospace,
                 textAlign  = TextAlign.End,
             )
-            val gutterWidth = remember(viewModel.document.lineCount.toString().length) {
-                (viewModel.document.lineCount.toString().length * 9 + 40).dp
+            // Always allocate for at least 2 digits so the gutter does not shift
+            // when crossing the 9→10 line boundary (single-digit to double-digit).
+            val gutterDigits = maxOf(viewModel.document.lineCount.toString().length, 4)
+            val gutterWidth = remember(gutterDigits) {
+                (gutterDigits * 9 + 40).dp
             }
             val foldStartSet = remember(state.version, state.foldVersion) {
                 viewModel.foldRegions.associate { it.startLine - 1 to it }
@@ -616,8 +654,8 @@ fun EditorRenderer(
                                 styleClock       = state.styleClock,
                                 version          = state.version,
                                 cursorOffset     = if (!isReadOnly) cursorHere else -1,
-                                selStart         = if (!isReadOnly) state.selectionStart else -1,
-                                selEnd           = if (!isReadOnly) state.selectionEnd else -1,
+                                selStart         = state.selectionStart,
+                                selEnd           = state.selectionEnd,
                                 diagnostics      = state.diagnostics.filter { it.line - 1 == docLine },
                                 onTap            = { abs ->
                                     focus.requestFocus()
@@ -771,6 +809,8 @@ fun EditorRenderer(
         }
     }
 }
+
+private const val LARGE_EDIT_SCROLL_SUPPRESS_THRESHOLD_CHARS = 100_000
 
 /**
  * Maps a pointer position within the LazyColumn coordinate space to a document character offset.

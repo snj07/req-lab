@@ -16,6 +16,7 @@ import com.reqlab.core.scripting.ReqLabScriptEngine
 import com.reqlab.core.scripting.ScriptContext
 import com.reqlab.ui.shared.network.NetworkClientFactory
 import com.reqlab.ui.shared.persistence.TabsRepository
+import com.reqlab.ui.shared.persistence.WorkspaceRepository
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.LogLevel
 import com.reqlab.ui.shared.state.RequestTabState
@@ -280,30 +281,28 @@ fun saveRequest(
     onSaved: (() -> Unit)? = null,
 ) {
     tab.syncSystemHeaders()
-    val saveJob = scope.launch {
-        try {
-            val ok = withContext(ioDispatcher) { TabsRepository.save(state) }
-            if (ok) {
-                tab.markSaved()
-                state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
-                onSaved?.invoke()
-            } else {
-                state.log("✗ Failed to save request: ${tab.name}", LogLevel.ERROR)
-                state.showError(
-                    title = "Save failed",
-                    message = "The request could not be saved. Please try again.",
-                )
+    scope.launch {
+        val ok = withContext(ioDispatcher) { TabsRepository.save(state) }
+        if (ok) {
+            // Sync edited content back to the CollectionNode so workspace
+            // export always reflects the latest saved state.
+            state.syncTabToCollectionNode(tab)
+            // Also persist the workspace immediately so export is up-to-date
+            // even before the auto-save snapshotFlow fires.
+            if (tab.collectionName != null) {
+                withContext(ioDispatcher) { WorkspaceRepository.save(state) }
             }
-        } finally {
-            state.finishOperation()
+            tab.markSaved()
+            state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
+            onSaved?.invoke()
+        } else {
+            state.log("✗ Failed to save request: ${tab.name}", LogLevel.ERROR)
+            state.showError(
+                title = "Save failed",
+                message = "The request could not be saved. Please try again.",
+            )
         }
     }
-
-    state.startOperation(
-        title = "Saving request",
-        message = "Please wait while request data is persisted...",
-        job = saveJob,
-    )
 }
 
 // ── Internal helpers ────────────────────────────────────────────

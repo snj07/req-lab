@@ -60,11 +60,11 @@ import com.reqlab.ui.shared.theme.ReqLabColors
 private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
 
 /**
- * Returns true when [contentLength] exceeds the inline-validation threshold (1 MB).
+ * Returns true when [contentLength] exceeds the inline-validation threshold (20 MB).
  * Extracted as a package-level function so it can be unit-tested independently of
  * the Compose composable that uses it (issue M-5).
  */
-internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 1_000_000
+internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 20_000_000
 
 // ── Body categories (top-level chips) ──────────────────────────
 
@@ -283,10 +283,9 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 var validationPaused by remember { mutableStateOf(false) }
 
                 // Debounce validation — avoid calling EditorEngine.validate() on
-                // every keystroke.  For large files validation runs on Dispatchers.Default
-                // so the main/UI thread is NEVER blocked by O(n) JSON/XML scanning.
-                // Files >1 MB are skipped entirely — inline errors in multi-MB bodies
-                // are impractical to act on and the scan would be too slow.
+                // every keystroke. For large files validation runs on Dispatchers.Default
+                // so the main/UI thread is NEVER blocked by O(n) validation work.
+                // We keep validation enabled up to 20 MB with a larger debounce window.
                 LaunchedEffect(tab.bodyContent, tab.bodyType) {
                     val content = tab.bodyContent
                     val bodyType = tab.bodyType
@@ -302,7 +301,12 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                         return@LaunchedEffect
                     }
                     validationPaused = false
-                    val delayMs = if (content.length > 100_000) 600L else 300L
+                    val delayMs = when {
+                        content.length > 5_000_000 -> 1200L
+                        content.length > 1_000_000 -> 900L
+                        content.length > 100_000 -> 600L
+                        else -> 300L
+                    }
                     kotlinx.coroutines.delay(delayMs)
                     // Re-read after delay — user may have continued typing
                     if (content != tab.bodyContent) return@LaunchedEffect
@@ -324,7 +328,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (validationPaused) {
                         Text(
-                            text = "\u26A0 Validation paused \u2014 file too large (> 1 MB)",
+                            text = "\u26A0 Validation paused \u2014 file too large (> 20 MB)",
                             fontSize = 11.sp,
                             color = ReqLabColors.OnSurfaceDim,
                             modifier = Modifier

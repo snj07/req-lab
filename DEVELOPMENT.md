@@ -23,10 +23,12 @@ req-lab/
 ├── core-network/        # Ktor-backed HTTP engine, interceptors, retry, WebSocket
 ├── core-storage/        # Persistence contracts and JSON file adapter
 ├── core-scripting/      # Script engine contracts (pre-request / post-request scripts)
+├── editor-core/         # Pure-Kotlin editor engine: document model, lexer, fold map, diagnostics
+├── editor-ui/           # Compose editor renderer: EditorRenderer, EditorViewModel, IdleLexer
 ├── feature-requests/    # Request use-cases wiring core-model + core-network
 ├── ui-shared/           # Shared Compose UI code (jvm + wasmJs) — 95% of all UI
-├── ui-desktop/          # Thin Compose Desktop launcher (~44 lines)
-├── ui-web/              # Thin Compose/Wasm browser launcher (CanvasBasedWindow)
+├── ui-desktop/          # Thin Compose Desktop launcher (~74 lines)
+├── ui-web/              # Thin Compose/Wasm browser launcher (~30 lines, CanvasBasedWindow)
 ├── qa-tests/            # JVM integration + end-to-end tests
 ├── sample-server/       # Standalone Ktor server for manual/exploratory testing
 ├── buildSrc/            # Shared Gradle build logic

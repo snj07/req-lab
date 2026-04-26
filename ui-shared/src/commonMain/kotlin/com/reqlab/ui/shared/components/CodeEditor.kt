@@ -152,8 +152,14 @@ fun CodeEditor(
     val displayText = remember(text, isFormatted, language) {
         if (isFormatted && isReadOnly) autoFormat(text, language) else text
     }
-    // Keep doc in sync with external text (or formatted text for read-only)
-    LaunchedEffect(displayText) { viewModel.onExternalTextChanged(displayText) }
+    // Keep doc in sync with external text (or formatted text for read-only),
+    // but skip no-op updates. Re-applying identical text after paste can
+    // trigger an extra cursor/layout cycle and visually shift the gutter.
+    LaunchedEffect(displayText) {
+        if (viewModel.getFullText() != displayText) {
+            viewModel.onExternalTextChanged(displayText)
+        }
+    }
 
     // ── Toolbar state ────────────────────────────────────────
     var wordWrap by remember { mutableStateOf(true) }
