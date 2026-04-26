@@ -22,7 +22,7 @@ import kotlin.time.TimeSource
  *    per iteration, yielding between chunks so the Compose frame scheduler can
  *    interleave rendering.
  * 4. [styleClock] is bumped after each chunk; the UI observes this via a StateFlow
- *    and triggers recomposition only of affected visible [LineViewV2] items.
+ *    and triggers recomposition only of affected visible [LineView] items.
  *
  * The per-chunk budget starts at [BUDGET_BYTES] and adapts using an EMA of actual
  * throughput (bytes styled per millisecond), targeting [BUDGET_MS] milliseconds

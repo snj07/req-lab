@@ -65,6 +65,8 @@ data class RequestDto(
     val userHeaders: List<Pair<String, String>> = emptyList(),
     val bodyType: String? = null,
     val bodyContent: String? = null,
+    /** Per-type raw body contents, keyed by BodyType.name (e.g. "JSON", "XML"). */
+    val rawContents: Map<String, String>? = null,
     val formDataEntries: List<FormDataEntryState> = emptyList(),
     val urlencodedEntries: List<FormDataEntryState> = emptyList(),
     val authType: String? = null,
@@ -337,6 +339,11 @@ object ImportExportRepository {
                 put("body", buildJsonObject {
                     put("type", bt.name)
                     node.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                    if (node.bodyContents.isNotEmpty()) {
+                        put("rawContents", buildJsonObject {
+                            node.bodyContents.forEach { (k, v) -> put(k, v) }
+                        })
+                    }
                     if (node.formDataEntries.isNotEmpty()) {
                         put("formDataEntries", buildJsonArray {
                             node.formDataEntries.forEach { e ->
@@ -452,6 +459,11 @@ object ImportExportRepository {
                 put("body", buildJsonObject {
                     put("type", bt)
                     dto.bodyContent?.takeIf { it.isNotBlank() }?.let { put("content", it) }
+                    if (!dto.rawContents.isNullOrEmpty()) {
+                        put("rawContents", buildJsonObject {
+                            dto.rawContents.forEach { (k, v) -> put(k, v) }
+                        })
+                    }
                     if (dto.formDataEntries.isNotEmpty()) {
                         put("formDataEntries", buildJsonArray {
                             dto.formDataEntries.forEach { e ->
@@ -555,8 +567,23 @@ object ImportExportRepository {
         val bodyObj = root["body"]?.jsonObject
         val bodyType = bodyObj?.get("type")?.jsonPrimitive?.contentOrNull
         val bodyContent = bodyObj?.get("content")?.jsonPrimitive?.contentOrNull
-        val formDataEntries = bodyObj?.get("formDataEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
-        val urlencodedEntries = bodyObj?.get("urlencodedEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
+        val rawContents = bodyObj?.get("rawContents")?.jsonObject
+            ?.mapValues { it.value.jsonPrimitive.content }
+            ?.takeIf { it.isNotEmpty() }
+        val explicitFormDataEntries = bodyObj?.get("formDataEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
+        val explicitUrlencodedEntries = bodyObj?.get("urlencodedEntries")?.jsonArray?.map { formEntryFromJson(it.jsonObject) } ?: emptyList()
+        // Backward compatibility: older reqLab exports (and hand-edited fixtures)
+        // may store form/urlencoded bodies only in body.content.
+        val formDataEntries = if (explicitFormDataEntries.isNotEmpty()) {
+            explicitFormDataEntries
+        } else if (bodyType.equals("FORM_DATA", ignoreCase = true)) {
+            parseLegacyFormDataContent(bodyContent)
+        } else emptyList()
+        val urlencodedEntries = if (explicitUrlencodedEntries.isNotEmpty()) {
+            explicitUrlencodedEntries
+        } else if (bodyType.equals("X_WWW_FORM_URLENCODED", ignoreCase = true)) {
+            parseLegacyUrlencodedContent(bodyContent)
+        } else emptyList()
         val authObj = root["auth"]?.jsonObject
         val authType = authObj?.get("type")?.jsonPrimitive?.contentOrNull
         val authUsername = authObj?.get("username")?.jsonPrimitive?.contentOrNull
@@ -568,7 +595,7 @@ object ImportExportRepository {
             name = name, method = method, url = url,
             preRequestScript = preRequestScript, testScript = testScript,
             userHeaders = userHeaders,
-            bodyType = bodyType, bodyContent = bodyContent,
+            bodyType = bodyType, bodyContent = bodyContent, rawContents = rawContents,
             formDataEntries = formDataEntries,
             urlencodedEntries = urlencodedEntries,
             authType = authType,
@@ -586,6 +613,57 @@ object ImportExportRepository {
         val description = obj["description"]?.jsonPrimitive?.contentOrNull ?: ""
         val enabled = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true
         return FormDataEntryState(key = key, type = type, value = value, description = description, enabled = enabled)
+    }
+
+    private fun parseLegacyFormDataContent(content: String?): List<FormDataEntryState> {
+        if (content.isNullOrBlank()) return emptyList()
+        val normalized = content.replace("\r\n", "\n")
+        val parts = normalized
+            .split('\n', '&')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        return parts.map { token ->
+            val eq = token.indexOf('=')
+            if (eq >= 0) {
+                FormDataEntryState(
+                    key = token.substring(0, eq).trim(),
+                    type = FormEntryType.TEXT,
+                    value = token.substring(eq + 1),
+                    enabled = true,
+                )
+            } else {
+                FormDataEntryState(
+                    key = token,
+                    type = FormEntryType.TEXT,
+                    value = "",
+                    enabled = true,
+                )
+            }
+        }.filter { it.key.isNotBlank() }
+    }
+
+    private fun parseLegacyUrlencodedContent(content: String?): List<FormDataEntryState> {
+        if (content.isNullOrBlank()) return emptyList()
+        val parts = content
+            .split('&')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        return parts.map { token ->
+            val eq = token.indexOf('=')
+            if (eq >= 0) {
+                FormDataEntryState(
+                    key = token.substring(0, eq).trim(),
+                    value = token.substring(eq + 1),
+                    enabled = true,
+                )
+            } else {
+                FormDataEntryState(
+                    key = token,
+                    value = "",
+                    enabled = true,
+                )
+            }
+        }.filter { it.key.isNotBlank() }
     }
 
     private fun environmentDtoFromJson(root: JsonObject): ReqLabEnvironmentDto {
@@ -636,6 +714,7 @@ object ImportExportRepository {
             userHeaders = dto.userHeaders,
             bodyType = bodyType,
             bodyContent = dto.bodyContent,
+            bodyContents = dto.rawContents ?: emptyMap(),
             formDataEntries = dto.formDataEntries,
             urlencodedEntries = dto.urlencodedEntries,
             authType = authType,

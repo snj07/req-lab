@@ -11,10 +11,12 @@ import com.reqlab.core.model.RequestDefinition
 import com.reqlab.core.network.NetworkEvent
 import com.reqlab.core.network.NetworkLogger
 import com.reqlab.core.network.RetryPolicy
+import com.reqlab.core.network.VariableResolver
 import com.reqlab.core.scripting.ReqLabScriptEngine
 import com.reqlab.core.scripting.ScriptContext
 import com.reqlab.ui.shared.network.NetworkClientFactory
 import com.reqlab.ui.shared.persistence.TabsRepository
+import com.reqlab.ui.shared.persistence.WorkspaceRepository
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.LogLevel
 import com.reqlab.ui.shared.state.RequestTabState
@@ -121,7 +123,12 @@ fun sendRequest(scope: CoroutineScope, state: AppState, tab: RequestTabState) {
             }
         }
 
-        state.logNetworkEvent("→ $effectiveMethod $effectiveUrl")
+        val effectiveUrlForLog = resolveUrlForLog(
+            url = effectiveUrl,
+            variableLayers = state.activeVariableLayers(),
+            requestScopedVars = requestScopedScriptVars,
+        )
+        state.logNetworkEvent("→ $effectiveMethod $effectiveUrlForLog")
 
         try {
             val request = RequestDefinition(
@@ -274,30 +281,28 @@ fun saveRequest(
     onSaved: (() -> Unit)? = null,
 ) {
     tab.syncSystemHeaders()
-    val saveJob = scope.launch {
-        try {
-            val ok = withContext(ioDispatcher) { TabsRepository.save(state) }
-            if (ok) {
-                tab.markSaved()
-                state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
-                onSaved?.invoke()
-            } else {
-                state.log("✗ Failed to save request: ${tab.name}", LogLevel.ERROR)
-                state.showError(
-                    title = "Save failed",
-                    message = "The request could not be saved. Please try again.",
-                )
+    scope.launch {
+        val ok = withContext(ioDispatcher) { TabsRepository.save(state) }
+        if (ok) {
+            // Sync edited content back to the CollectionNode so workspace
+            // export always reflects the latest saved state.
+            state.syncTabToCollectionNode(tab)
+            // Also persist the workspace immediately so export is up-to-date
+            // even before the auto-save snapshotFlow fires.
+            if (tab.collectionName != null) {
+                withContext(ioDispatcher) { WorkspaceRepository.save(state) }
             }
-        } finally {
-            state.finishOperation()
+            tab.markSaved()
+            state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
+            onSaved?.invoke()
+        } else {
+            state.log("✗ Failed to save request: ${tab.name}", LogLevel.ERROR)
+            state.showError(
+                title = "Save failed",
+                message = "The request could not be saved. Please try again.",
+            )
         }
     }
-
-    state.startOperation(
-        title = "Saving request",
-        message = "Please wait while request data is persisted...",
-        job = saveJob,
-    )
 }
 
 // ── Internal helpers ────────────────────────────────────────────
@@ -388,7 +393,7 @@ private fun parseBinaryAttachment(content: String): Pair<String, String>? {
 
 /** Builds a cURL command string for the given tab, resolving {{vars}} from variable layers. */
 fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val parts = mutableListOf("curl", "-X ${tab.method.name}")
 
@@ -428,12 +433,25 @@ fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, Stri
     return parts.joinToString(" \\\n  ")
 }
 
+internal fun resolveUrlForLog(
+    url: String,
+    variableLayers: List<Map<String, String>>,
+    requestScopedVars: Map<String, String> = emptyMap(),
+): String {
+    val layers = if (requestScopedVars.isNotEmpty()) {
+        listOf(requestScopedVars) + variableLayers
+    } else {
+        variableLayers
+    }
+    return VariableResolver.resolve(url, layers, removeUnresolved = false)
+}
+
 /** cURL command with raw (unresolved) {{variables}} preserved – useful for sharing templates. */
 fun buildCurlCommandRaw(tab: RequestTabState): String = buildCurlCommand(tab, emptyList())
 
 /** Python `requests` snippet resolving {{vars}}. */
 fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val sb = StringBuilder()
     sb.appendLine("import requests")
@@ -468,7 +486,7 @@ fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, St
 
 /** HTTPie CLI snippet resolving {{vars}}. */
 fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val parts = mutableListOf("http", tab.method.name)
     val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
@@ -486,7 +504,7 @@ fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, St
 
 /** PowerShell `Invoke-WebRequest` snippet resolving {{vars}}. */
 fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved = true)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val sb = StringBuilder()
     val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
@@ -512,19 +530,6 @@ fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String
 
 // ── Curl / format helpers ────────────────────────────────────────────
 
-/**
- * Resolves {{varName}} patterns using the provided variable layers
- * (first layer wins, matching Postman behaviour).
- */
-fun resolveVariables(text: String, variableLayers: List<Map<String, String>>, removeUnresolved: Boolean = false): String {
-    if (!text.contains("{{")) return text
-    val flatMap = mutableMapOf<String, String>()
-    variableLayers.asReversed().forEach { flatMap.putAll(it) }   // first layer wins after forEach
-    return Regex("""\{\{([^{}]+)}}""").replace(text) { match ->
-        flatMap[match.groupValues[1].trim()] ?: if (removeUnresolved) "" else match.value
-    }
-}
-
 private fun buildUrlWithParams(
     resolvedBase: String,
     tab: RequestTabState,
@@ -535,7 +540,7 @@ private fun buildUrlWithParams(
     if (enabledParams.isEmpty()) return resolvedBase
     val separator = if (resolvedBase.contains('?')) "&" else "?"
     val qs = enabledParams.joinToString("&") { p ->
-        "${resolveVariables(p.key, variableLayers, removeUnresolved)}=${resolveVariables(p.value, variableLayers, removeUnresolved)}"
+        "${VariableResolver.resolve(p.key, variableLayers, removeUnresolved)}=${VariableResolver.resolve(p.value, variableLayers, removeUnresolved)}"
     }
     return "$resolvedBase$separator$qs"
 }
@@ -545,7 +550,7 @@ private fun buildHeaderMap(
     variableLayers: List<Map<String, String>>,
     removeUnresolved: Boolean = false,
 ): Map<String, String> {
-    fun resolve(s: String) = resolveVariables(s, variableLayers, removeUnresolved)
+    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved)
     val map = linkedMapOf<String, String>()
     tab.headers.filter { it.enabled && it.key.isNotBlank() }
         .forEach { map[resolve(it.key)] = resolve(it.value) }

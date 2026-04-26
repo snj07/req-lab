@@ -241,6 +241,16 @@ class KtorApiClient(
         )
     }
 
+    private fun applyRawBody(
+        builder: HttpRequestBuilder,
+        contentType: ContentType,
+        rawContent: String?,
+        variableLayers: List<Map<String, String>>,
+    ) {
+        builder.contentType(contentType)
+        builder.setBody(VariableResolver.resolve(rawContent.orEmpty(), variableLayers))
+    }
+
     private fun applyBody(
         builder: HttpRequestBuilder,
         request: RequestDefinition,
@@ -249,35 +259,11 @@ class KtorApiClient(
         val body = request.body
         when (body.type) {
             BodyType.NONE -> Unit
-            BodyType.JSON -> {
-                builder.contentType(ContentType.Application.Json)
-                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
-                builder.setBody(payload)
-            }
-
-            BodyType.RAW_TEXT -> {
-                builder.contentType(ContentType.Text.Plain)
-                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
-                builder.setBody(payload)
-            }
-
-            BodyType.XML -> {
-                builder.contentType(ContentType.Application.Xml)
-                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
-                builder.setBody(payload)
-            }
-
-            BodyType.HTML -> {
-                builder.contentType(ContentType.Text.Html)
-                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
-                builder.setBody(payload)
-            }
-
-            BodyType.JAVASCRIPT -> {
-                builder.contentType(ContentType.parse("application/javascript"))
-                val payload = VariableResolver.resolve(body.content.orEmpty(), variableLayers)
-                builder.setBody(payload)
-            }
+            BodyType.JSON -> applyRawBody(builder, ContentType.Application.Json, body.content, variableLayers)
+            BodyType.RAW_TEXT -> applyRawBody(builder, ContentType.Text.Plain, body.content, variableLayers)
+            BodyType.XML -> applyRawBody(builder, ContentType.Application.Xml, body.content, variableLayers)
+            BodyType.HTML -> applyRawBody(builder, ContentType.Text.Html, body.content, variableLayers)
+            BodyType.JAVASCRIPT -> applyRawBody(builder, ContentType.parse("application/javascript"), body.content, variableLayers)
 
             BodyType.GRAPHQL -> {
                 builder.contentType(ContentType.Application.Json)

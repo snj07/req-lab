@@ -18,6 +18,8 @@ class DisplayLineMap(docLineCount: Int) {
     private var displayHeight = IntArray(maxOf(docLineCount, 1)) { 1 }
     // prefixSums[i] = sum of displayHeight[0..i-1] — number of display lines BEFORE doc line i
     private var prefixSums = IntArray(maxOf(docLineCount + 1, 2))
+    // logical (active) line count — may be less than displayHeight.size when the array is reused
+    private var logicalSize: Int = maxOf(docLineCount, 1)
 
     init {
         buildPrefixSums()
@@ -25,8 +27,11 @@ class DisplayLineMap(docLineCount: Int) {
 
     // ── Properties ────────────────────────────────────────────────
 
+    /** Physical capacity of the backing arrays (>= logicalSize). */
+    val capacity: Int get() = displayHeight.size
+
     /** Total number of display (visible) lines. */
-    val totalDisplayLines: Int get() = prefixSums[displayHeight.size]
+    val totalDisplayLines: Int get() = prefixSums[logicalSize]
 
     // ── Mappings ──────────────────────────────────────────────────
 
@@ -35,10 +40,10 @@ class DisplayLineMap(docLineCount: Int) {
      */
     fun docFromDisplay(displayLine: Int): Int {
         if (displayLine <= 0) return 0
-        if (displayLine >= totalDisplayLines) return displayHeight.size - 1
+        if (displayLine >= totalDisplayLines) return logicalSize - 1
         // Binary search: find the largest doc line i where prefixSums[i] <= displayLine
         var lo = 0
-        var hi = displayHeight.size - 1
+        var hi = logicalSize - 1
         while (lo < hi) {
             val mid = (lo + hi + 1) ushr 1
             if (prefixSums[mid] <= displayLine) lo = mid else hi = mid - 1
@@ -51,14 +56,14 @@ class DisplayLineMap(docLineCount: Int) {
      * or -1 if the line is hidden (folded).
      */
     fun displayFromDoc(docLine: Int): Int {
-        if (docLine < 0 || docLine >= displayHeight.size) return -1
+        if (docLine < 0 || docLine >= logicalSize) return -1
         if (displayHeight[docLine] == 0) return -1
         return prefixSums[docLine]
     }
 
     /** Whether doc line [docLine] is currently visible. */
     fun isVisible(docLine: Int): Boolean =
-        docLine in displayHeight.indices && displayHeight[docLine] != 0
+        docLine in 0 until logicalSize && displayHeight[docLine] != 0
 
     // ── Folding mutations ─────────────────────────────────────────
 
@@ -68,7 +73,7 @@ class DisplayLineMap(docLineCount: Int) {
      */
     fun setFolded(fromDocLine: Int, toDocLine: Int) {
         val f = (fromDocLine + 1).coerceAtLeast(0)
-        val t = toDocLine.coerceAtMost(displayHeight.size - 1)
+        val t = toDocLine.coerceAtMost(logicalSize - 1)
         if (f > t) return
         for (i in f..t) displayHeight[i] = 0
         rebuildPrefixSums(fromDocLine)
@@ -79,7 +84,7 @@ class DisplayLineMap(docLineCount: Int) {
      */
     fun setVisible(fromDocLine: Int, toDocLine: Int) {
         val f = (fromDocLine + 1).coerceAtLeast(0)
-        val t = toDocLine.coerceAtMost(displayHeight.size - 1)
+        val t = toDocLine.coerceAtMost(logicalSize - 1)
         if (f > t) return
         for (i in f..t) displayHeight[i] = 1
         rebuildPrefixSums(fromDocLine)
@@ -90,9 +95,42 @@ class DisplayLineMap(docLineCount: Int) {
      * Called when the document changes structurally (large paste / replace-all).
      */
     fun reset(newDocLineCount: Int) {
-        displayHeight = IntArray(maxOf(newDocLineCount, 1)) { 1 }
-        prefixSums = IntArray(displayHeight.size + 1)
+        logicalSize = maxOf(newDocLineCount, 1)
+        if (logicalSize > displayHeight.size) {
+            // Must grow: allocate new arrays (capacity insufficient)
+            displayHeight = IntArray(logicalSize) { 1 }
+            prefixSums = IntArray(logicalSize + 1)
+        } else {
+            // Reuse existing arrays in-place; fill only the active region
+            displayHeight.fill(1, 0, logicalSize)
+        }
         buildPrefixSums()
+    }
+
+    /**
+     * Returns all currently-folded regions as a list of (startLine, endLine) pairs (0-based).
+     *
+     * A "fold" is a run of one or more consecutive hidden lines immediately following a
+     * visible line.  The returned pair `(start, end)` matches the contract of [setFolded] and
+     * [applyFolds]: `start` is the last **visible** line before the hidden run and `end` is
+     * the last **hidden** line in the run.  Calling `applyFolds(getFoldedRegions())` on a
+     * fresh [DisplayLineMap] therefore restores the identical fold shape.
+     */
+    fun getFoldedRegions(): List<Pair<Int, Int>> {
+        val regions = mutableListOf<Pair<Int, Int>>()
+        var i = 0
+        while (i < logicalSize) {
+            // A fold starts at the visible line that is immediately followed by hidden lines.
+            if (displayHeight[i] == 1 && i + 1 < logicalSize && displayHeight[i + 1] == 0) {
+                val foldStart = i
+                i++
+                while (i < logicalSize && displayHeight[i] == 0) i++
+                regions.add(Pair(foldStart, i - 1))
+            } else {
+                i++
+            }
+        }
+        return regions
     }
 
     /**
@@ -100,12 +138,12 @@ class DisplayLineMap(docLineCount: Int) {
      * [collapsedRegions] is a list of (startLine, endLine) pairs (0-based).
      */
     fun applyFolds(collapsedRegions: List<Pair<Int, Int>>) {
-        // Reset all to visible first
-        displayHeight.fill(1)
+        // Reset visible region only (do not touch elements beyond logicalSize)
+        displayHeight.fill(1, 0, logicalSize)
         // Apply each fold
         for ((start, end) in collapsedRegions) {
             val f = (start + 1).coerceAtLeast(0)
-            val t = end.coerceAtMost(displayHeight.size - 1)
+            val t = end.coerceAtMost(logicalSize - 1)
             for (i in f..t) displayHeight[i] = 0
         }
         buildPrefixSums()
@@ -115,14 +153,14 @@ class DisplayLineMap(docLineCount: Int) {
 
     private fun buildPrefixSums() {
         prefixSums[0] = 0
-        for (i in displayHeight.indices) {
+        for (i in 0 until logicalSize) {
             prefixSums[i + 1] = prefixSums[i] + displayHeight[i]
         }
     }
 
     private fun rebuildPrefixSums(fromDocLine: Int) {
         val from = fromDocLine.coerceAtLeast(0)
-        for (i in from until displayHeight.size) {
+        for (i in from until logicalSize) {
             prefixSums[i + 1] = prefixSums[i] + displayHeight[i]
         }
     }

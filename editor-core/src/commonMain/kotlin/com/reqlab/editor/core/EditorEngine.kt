@@ -16,32 +16,12 @@ class EditorEngine {
         languageMode: LanguageMode,
         lineNumbersEnabled: Boolean = true,
         foldingEnabled: Boolean = true,
-    ): EditorState {
-        val document = EditorDocument.create(text)
-        val provider = LanguageRegistry.getProvider(languageMode)
-        val diagnostics = provider.validate(text)
-        val foldRegions = if (foldingEnabled) provider.foldingRegions(document) else emptyList()
-        return EditorState(
-            document = document,
-            languageMode = languageMode,
-            diagnostics = diagnostics,
-            folding = FoldingModel(regions = foldRegions),
-            lineNumbersEnabled = lineNumbersEnabled,
-            foldingEnabled = foldingEnabled,
-        )
-    }
+    ): EditorState = revalidate(
+        EditorState.fromText(text, languageMode, lineNumbersEnabled, foldingEnabled)
+    )
 
-    fun updateText(state: EditorState, text: String): EditorState {
-        val document = EditorDocument.create(text)
-        val provider = LanguageRegistry.getProvider(state.languageMode)
-        val diagnostics = provider.validate(text)
-        val foldRegions = if (state.foldingEnabled) provider.foldingRegions(document) else emptyList()
-        return state.copy(
-            document = document,
-            diagnostics = diagnostics,
-            folding = state.folding.updateRegions(foldRegions),
-        )
-    }
+    fun updateText(state: EditorState, text: String): EditorState =
+        revalidate(state.copy(document = EditorDocument.create(text)))
 
     fun insertText(state: EditorState, position: CursorPosition, insertText: String): EditorState {
         val offset = state.document.positionToOffset(position)

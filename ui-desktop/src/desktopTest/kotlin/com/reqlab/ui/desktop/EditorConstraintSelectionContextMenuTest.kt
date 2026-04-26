@@ -14,8 +14,8 @@ import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.ui.EditorRendererV2
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorRenderer
+import com.reqlab.editor.ui.EditorViewModel
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -50,12 +50,12 @@ class EditorLongLineConstraintTest {
     @Test
     fun long_single_line_does_not_crash_compose_constraints() {
         val content = "A".repeat(10_000)  // 10 K chars on one line
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         // Must not throw during composition or layout
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = true,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -80,11 +80,11 @@ class EditorLongLineConstraintTest {
     @Test
     fun long_single_line_word_wrap_mode_does_not_crash() {
         val content = "A".repeat(10_000)
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = true,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -129,7 +129,7 @@ class RightToLeftSelectionAnchorTest {
     @Test
     fun right_to_left_drag_selection_anchor_stays_fixed() {
         val content = "ABCDEFGHIJ"  // 10 chars, offsets 0-10
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         // Start: cursor at offset 8 (no selection)
         vm.moveCursorTo(8)
@@ -158,7 +158,7 @@ class RightToLeftSelectionAnchorTest {
     @Test
     fun selection_flips_correctly_when_drag_reverses_direction() {
         val content = "ABCDEFGHIJ"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         // Start cursor at 5
         vm.moveCursorTo(5)
@@ -188,11 +188,11 @@ class RightToLeftSelectionAnchorTest {
     @Test
     fun touch_drag_left_creates_growing_selection() {
         val content = "HELLO_WORLD_DRAG_LEFT"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -245,12 +245,12 @@ class EditorContextMenuTest {
     @Test
     fun right_click_copy_calls_onCopyRequest_with_selected_text() {
         val content = "COPY_ME_TEXT"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
         var copiedText = ""
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel      = vm,
                     isReadOnly     = false,
                     language       = LanguageMode.PLAIN_TEXT,
@@ -290,12 +290,12 @@ class EditorContextMenuTest {
     @Test
     fun right_click_cut_copies_and_removes_selected_text() {
         val content = "CUT_ME_TEXT"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
         var copiedText = ""
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel      = vm,
                     isReadOnly     = false,
                     language       = LanguageMode.PLAIN_TEXT,
@@ -331,11 +331,11 @@ class EditorContextMenuTest {
     @Test
     fun right_click_select_all_selects_entire_document() {
         val content = "LINE_ONE\nLINE_TWO"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -369,11 +369,11 @@ class EditorContextMenuTest {
     fun right_click_paste_inserts_clipboard_text() {
         val initial   = "START "
         val clipboard = "PASTED"
-        val vm = EditorViewModelV2(initial, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(initial, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel        = vm,
                     isReadOnly       = false,
                     language         = LanguageMode.PLAIN_TEXT,

@@ -1,4 +1,6 @@
-# Scripted Assertions
+# Scripted Assertions (Scripting Reference)
+
+> **Note:** This file documents post-request script assertions. For the full scripting guide including pre-request scripts and variable access, see [docs/scripts.md](../scripts.md).
 
 ReqLab post-request scripts are written using the `reqlab` namespace (configurable in **Settings → Scripts**).
 

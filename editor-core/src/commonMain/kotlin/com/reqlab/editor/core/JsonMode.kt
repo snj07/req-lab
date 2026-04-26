@@ -9,7 +9,6 @@ object JsonMode : LanguageModeProvider {
     override val fileExtensions = listOf("json", "jsonc", "geojson")
     override val mimeTypes = listOf("application/json", "text/json")
     override val foldingStyle = FoldingStyle.BRACE
-    private const val LARGE_FILE_THRESHOLD = 1_000_000
 
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val prettyJson = Json { prettyPrint = true; prettyPrintIndent = "  " }
@@ -100,7 +99,7 @@ object JsonMode : LanguageModeProvider {
 
     override fun validate(text: String): List<InlineEditorError> {
         if (text.isBlank()) return emptyList()
-        return if (text.length > LARGE_FILE_THRESHOLD) validateLightweight(text) else validateFull(text)
+        return validateFull(text)
     }
 
     private fun validateFull(text: String): List<InlineEditorError> {
@@ -110,39 +109,6 @@ object JsonMode : LanguageModeProvider {
             val pos = offsetToLineCol(text, offset)
             listOf(InlineEditorError(pos.first, pos.second, e.message ?: "Invalid JSON"))
         }
-    }
-
-    private fun validateLightweight(text: String): List<InlineEditorError> {
-        val errors = mutableListOf<InlineEditorError>()
-        val stack = ArrayDeque<Triple<Char, Int, Int>>()
-        var line = 1; var col = 0; var inStr = false; var escaped = false; var i = 0
-        while (i < text.length) {
-            val c = text[i]
-            if (c == '\n') { line++; col = 0 } else col++
-            if (escaped) { escaped = false; i++; continue }
-            if (c == '\\' && inStr) { escaped = true; i++; continue }
-            if (c == '"') { inStr = !inStr; i++; continue }
-            if (inStr) { i++; continue }
-            if (c.isWhitespace() || c == ':' || c == ',') { i++; continue }
-            when (c) {
-                '{', '[' -> stack.addLast(Triple(c, line, col))
-                '}', ']' -> {
-                    val m = if (c == '}') '{' else '['
-                    if (stack.isEmpty()) { errors += InlineEditorError(line, col, "Unexpected '$c'"); return errors }
-                    else if (stack.last().first != m) {
-                        val exp = if (stack.last().first == '{') '}' else ']'
-                        errors += InlineEditorError(line, col, "Expected '$exp' but got '$c' (opened at line ${stack.last().second})")
-                        return errors
-                    } else stack.removeLast()
-                }
-            }
-            i++
-        }
-        if (inStr) errors += InlineEditorError(line, col, "Unterminated string")
-        for ((open, l, c2) in stack.asReversed()) {
-            errors += InlineEditorError(l, c2, "Unclosed '$open' — expected '${if (open == '{') '}' else ']'}'")
-        }
-        return errors
     }
 
     private fun extractOffset(message: String): Int? {

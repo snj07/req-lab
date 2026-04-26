@@ -88,20 +88,60 @@ actual object PlatformStorage {
     private val prefs: Preferences =
         Preferences.userNodeForPackage(PlatformStorage::class.java)
 
+    // Values larger than this are written to a file in ~/.reqlab/pstore/ instead of being
+    // chunked into Preferences entries.  Java Preferences flushes to an XML plist on every
+    // write; storing MB-scale data there creates thousands of entries and freezes the UI.
+    private const val FILE_THRESHOLD = 65_536  // 64 KB
+    private val pstoreDir: File
+        get() = File(System.getProperty("user.home"), ".reqlab/pstore").also { it.mkdirs() }
+
+    private fun fileForKey(key: String): File {
+        val safeName = key.replace(".", "_").replace("/", "_")
+        return File(pstoreDir, safeName)
+    }
+
     actual fun putString(key: String, value: String) {
-        // Preferences has a max value size of ~8KB, so split large values
-        if (value.length > 7000) {
-            val chunks = value.chunked(7000)
-            prefs.putInt("${key}__chunks", chunks.size)
-            chunks.forEachIndexed { i, chunk -> prefs.put("${key}__$i", chunk) }
+        if (value.length > FILE_THRESHOLD) {
+            // Write to a plain file; mark it in Preferences so getString knows where to look.
+            fileForKey(key).writeText(value)
+            prefs.putBoolean("${key}__isFile", true)
+            // Remove any stale chunked or direct entry.
+            val oldChunks = prefs.getInt("${key}__chunks", -1)
+            if (oldChunks > 0) {
+                for (i in 0 until oldChunks) prefs.remove("${key}__$i")
+                prefs.remove("${key}__chunks")
+            }
+            prefs.remove(key)
         } else {
-            prefs.remove("${key}__chunks")
-            prefs.put(key, value)
+            // Remove any file-backed entry that may have existed before.
+            if (prefs.getBoolean("${key}__isFile", false)) {
+                fileForKey(key).delete()
+                prefs.remove("${key}__isFile")
+            }
+            // Preferences has a max value size of ~8 KB, so split moderate values.
+            if (value.length > 7000) {
+                val chunks = value.chunked(7000)
+                prefs.putInt("${key}__chunks", chunks.size)
+                chunks.forEachIndexed { i, chunk -> prefs.put("${key}__$i", chunk) }
+            } else {
+                val oldChunks = prefs.getInt("${key}__chunks", -1)
+                if (oldChunks > 0) {
+                    for (i in 0 until oldChunks) prefs.remove("${key}__$i")
+                    prefs.remove("${key}__chunks")
+                }
+                prefs.put(key, value)
+            }
         }
         prefs.flush()
     }
 
     actual fun getString(key: String): String? {
+        // File-backed large value?
+        if (prefs.getBoolean("${key}__isFile", false)) {
+            val f = fileForKey(key)
+            return if (f.exists()) f.readText() else null
+        }
+        // Chunked moderate value?
         val chunkCount = prefs.getInt("${key}__chunks", -1)
         return if (chunkCount > 0) {
             buildString { for (i in 0 until chunkCount) append(prefs.get("${key}__$i", "")) }
@@ -111,6 +151,10 @@ actual object PlatformStorage {
     }
 
     actual fun remove(key: String) {
+        if (prefs.getBoolean("${key}__isFile", false)) {
+            fileForKey(key).delete()
+            prefs.remove("${key}__isFile")
+        }
         prefs.remove(key)
         val chunkCount = prefs.getInt("${key}__chunks", -1)
         if (chunkCount > 0) {

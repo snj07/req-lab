@@ -12,7 +12,7 @@ package com.reqlab.editor.core
  * Thread-safety contract (no explicit locks):
  *  - [invalidateFrom] is called from the UI thread.
  *  - [applyStyle] / [grow] are called from a background coroutine (Dispatchers.Default).
- *  - A StateFlow update in [EditorViewModelV2] acts as the memory barrier: the
+ *  - A StateFlow update in [EditorViewModel] acts as the memory barrier: the
  *    background coroutine updates [styleClock] via the StateFlow, so the UI thread's
  *    next StateFlow read sees all preceding style writes (JVM happens-before chain).
  *  - Benign races on individual style bytes cause at most a one-frame stale colour,
@@ -42,7 +42,7 @@ class StyleBuffer(initialCapacity: Int) {
     // ── UI thread ─────────────────────────────────────────────────
 
     /**
-     * O(1): invalidate styles from [pos] onward.  Called by EditorViewModelV2 after
+     * O(1): invalidate styles from [pos] onward.  Called by EditorViewModel after
      * each document edit.
      */
     fun invalidateFrom(pos: Int) {

@@ -79,7 +79,7 @@ Supported mutators:
 
 Mutation semantics:
 - Pre-request scripts can mutate the outgoing request.
-- Test scripts can read `reqlab.request.*` values from the executed request context.
+- Post-request scripts can read `reqlab.request.*` values from the executed request context.
 
 ## Variable scopes
 

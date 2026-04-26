@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -124,6 +125,16 @@ private data class TreeNodeHitArea(
     val label: String,
 )
 
+private fun normalizeSidebarSearchQuery(raw: String): String {
+    // Strip invisible formatting characters so visually empty input cannot
+    // keep a stale filter active (e.g., zero-width spaces from paste/IME).
+    return raw
+        .filterNot { ch ->
+            ch == '\u200B' || ch == '\u200C' || ch == '\u200D' || ch == '\uFEFF'
+        }
+        .trim()
+}
+
 @Composable
 fun Sidebar(state: AppState) {
     SharedTooltipCoordinator()
@@ -192,7 +203,7 @@ fun Sidebar(state: AppState) {
         Column(modifier = Modifier.fillMaxSize()) {
             SearchBar(
                 query = state.sidebarSearchQuery,
-                onQueryChanged = { state.sidebarSearchQuery = it },
+                onQueryChanged = { state.sidebarSearchQuery = normalizeSidebarSearchQuery(it) },
                 modifier = Modifier.padding(8.dp),
             )
 
@@ -208,7 +219,7 @@ fun Sidebar(state: AppState) {
             if (state.historyExpanded) {
                 // M-4: Filter history items by the sidebar search query so the search
                 // bar works consistently across both Collections and History sections.
-                val historyQuery = state.sidebarSearchQuery.trim()
+                val historyQuery = normalizeSidebarSearchQuery(state.sidebarSearchQuery)
                 val visibleHistory = if (historyQuery.isBlank()) {
                     state.historyItems
                 } else {
@@ -286,7 +297,7 @@ fun Sidebar(state: AppState) {
                 )
             }
             if (state.collectionsExpanded) {
-                val query = state.sidebarSearchQuery.trim()
+                val query = normalizeSidebarSearchQuery(state.sidebarSearchQuery)
                 val visibleCollections = if (query.isBlank()) {
                     state.collections
                 } else {
@@ -748,12 +759,24 @@ private fun SearchBar(query: String, onQueryChanged: (String) -> Unit, modifier:
             singleLine = true,
             textStyle = TextStyle(color = ReqLabColors.OnSurface, fontSize = 13.sp),
             cursorBrush = SolidColor(ReqLabColors.Primary),
-            modifier = Modifier.testTag("sidebar-search-input"),
+            modifier = Modifier.weight(1f).testTag("sidebar-search-input"),
             decorationBox = { inner ->
                 if (query.isEmpty()) Text("${Strings.search}…", color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
                 inner()
             },
         )
+        if (query.isNotEmpty()) {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Clear search",
+                tint = ReqLabColors.OnSurfaceDim,
+                modifier = Modifier
+                    .size(14.dp)
+                    .clickable(onClick = { onQueryChanged("") })
+                    .testTag("sidebar-search-clear"),
+            )
+        }
     }
 }
 
@@ -1511,6 +1534,10 @@ fun filterCollectionNode(node: CollectionNode, query: String): CollectionNode? {
 
     val selfMatches = node.name.lowercase().contains(loweredQuery) ||
         (node.url?.lowercase()?.contains(loweredQuery) == true)
+
+    // If the folder/collection name itself matches, show it with ALL of its children
+    // so the user can see every request inside the matched container.
+    if (selfMatches && node.isFolder) return node
 
     val filteredChildren = node.children.mapNotNull { filterCollectionNode(it, loweredQuery) }.toMutableList()
     return if (selfMatches || filteredChildren.isNotEmpty()) {

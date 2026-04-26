@@ -192,4 +192,89 @@ class ImportExportRepositoryTest {
         assertTrue(target.globalVariables.any { it.key == "apiKey" && it.value == "abc123" })
         assertTrue(target.historyItems.any { it.requestId == "hist-1" && it.name == "Ping" })
     }
+
+    // ── Large-body export / import (pure serialisation — no PlatformStorage) ───
+
+    @Test
+    fun exportCollection_with_large_body_roundtrips_content_exactly() {
+        val largeBody = "{\"items\":[" + (0 until 30_000).joinToString(",") { "{\"id\":$it}" } + "]}"
+
+        val request = com.reqlab.ui.shared.state.CollectionNode(
+            id = "req-large-body-1",
+            name = "Large Body Request",
+            isFolder = false,
+            method = com.reqlab.core.model.HttpMethodType.POST,
+            url = "https://api.example.com/bulk",
+            bodyType = com.reqlab.core.model.BodyType.JSON,
+            bodyContent = largeBody,
+            bodyContents = mapOf(com.reqlab.core.model.BodyType.JSON.name to largeBody),
+        )
+        val collection = com.reqlab.ui.shared.state.CollectionNode(
+            id = "col-large-body-1",
+            name = "Large Body Collection",
+            isFolder = true,
+            children = androidx.compose.runtime.mutableStateListOf(request),
+        )
+        val source = AppState(openDefaultTab = false)
+        source.collections.add(collection)
+
+        val exported = ImportExportRepository.exportCollectionToString(source.collections.first())
+
+        val importState = AppState(openDefaultTab = false)
+        ImportExportRepository.importCollectionFromString(importState, exported)
+
+        val imported = importState.collections.first().children.first()
+        assertEquals(
+            largeBody.length,
+            imported.bodyContent?.length,
+            "Large body length must survive collection export/import",
+        )
+        assertEquals(
+            largeBody,
+            imported.bodyContent,
+            "Large body content must survive collection export/import exactly",
+        )
+    }
+
+    @Test
+    fun exportWorkspace_with_large_body_roundtrips_content_exactly() {
+        // 200 KB body embedded in the workspace JSON
+        val largeBody = "{\"data\":\"" + "W".repeat(200_000) + "\"}"
+
+        val request = com.reqlab.ui.shared.state.CollectionNode(
+            id = "req-ws-large-1",
+            name = "Large WS Body",
+            isFolder = false,
+            method = com.reqlab.core.model.HttpMethodType.POST,
+            url = "https://api.example.com/data",
+            bodyType = com.reqlab.core.model.BodyType.JSON,
+            bodyContent = largeBody,
+            bodyContents = mapOf(com.reqlab.core.model.BodyType.JSON.name to largeBody),
+        )
+        val collection = com.reqlab.ui.shared.state.CollectionNode(
+            id = "col-ws-large-1",
+            name = "Large WS Collection",
+            isFolder = true,
+            children = androidx.compose.runtime.mutableStateListOf(request),
+        )
+        val source = AppState(openDefaultTab = false)
+        source.collections.add(collection)
+
+        val exported = ImportExportRepository.exportWorkspaceToString(source)
+
+        val importState = AppState(openDefaultTab = false)
+        ImportExportRepository.importWorkspaceFromString(importState, exported)
+
+        val imported = importState.collections.first().children.first()
+        assertEquals(
+            largeBody.length,
+            imported.bodyContent?.length,
+            "Large body length must survive workspace export/import",
+        )
+        assertEquals(
+            largeBody,
+            imported.bodyContent,
+            "Large body content must survive workspace export/import exactly",
+        )
+    }
 }

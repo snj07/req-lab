@@ -79,6 +79,8 @@ data class CollectionNode(
     val userHeaders: List<Pair<String, String>> = emptyList(),
     val bodyType: BodyType? = null,
     val bodyContent: String? = null,
+    /** Per-type raw body contents keyed by [BodyType.name]. */
+    val bodyContents: Map<String, String> = emptyMap(),
     /** Structured form-data rows (FORM_DATA body type). */
     val formDataEntries: List<FormDataEntryState> = emptyList(),
     /** Structured urlencoded rows (X_WWW_FORM_URLENCODED body type). */
@@ -239,7 +241,7 @@ class RequestTabState(
         MutableKeyValue(SystemHeaderRules.USER_AGENT, "ReqLab/1.0", kind = HeaderKind.SYSTEM, keyLocked = true),
     )
 
-    var bodyType    by mutableStateOf(BodyType.JSON)
+    var bodyType    by mutableStateOf(BodyType.NONE)
 
     /**
      * Remembers the last-selected RAW sub-type (JSON, XML, HTML, JS, Text)
@@ -577,30 +579,24 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
      */
     fun mergeScriptVariables(vars: Map<String, String>) {
         val env = selectedEnvironment ?: return
-        vars.forEach { (key, value) ->
-            val existing = env.variables.firstOrNull { it.key == key }
-            if (existing != null) {
-                existing.value = value
-            } else {
-                env.variables.add(MutableKeyValue(key = key, value = value))
-            }
-        }
+        mergeInto(env.variables, vars)
     }
 
     fun mergeGlobalScriptVariables(vars: Map<String, String>) {
-        vars.forEach { (key, value) ->
-            val existing = globalVariables.firstOrNull { it.key == key }
-            if (existing != null) {
-                existing.value = value
-            } else {
-                globalVariables.add(MutableKeyValue(key = key, value = value))
-            }
-        }
+        mergeInto(globalVariables, vars)
     }
 
     fun mergeCollectionScriptVariables(vars: Map<String, String>) {
         vars.forEach { (key, value) ->
             collectionVariables[key] = value
+        }
+    }
+
+    private fun mergeInto(target: MutableList<MutableKeyValue>, vars: Map<String, String>) {
+        vars.forEach { (key, value) ->
+            val existing = target.firstOrNull { it.key == key }
+            if (existing != null) existing.value = value
+            else target.add(MutableKeyValue(key = key, value = value))
         }
     }
 
@@ -664,6 +660,9 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         // Populate body, headers, and auth from collection node
         node?.bodyType?.let { tab.bodyType = it; tab.syncSystemHeaders() }
         node?.bodyContent?.takeIf { it.isNotBlank() }?.let { tab.bodyContent = it }
+        node?.bodyContents?.forEach { (typeName, content) ->
+            runCatching { BodyType.valueOf(typeName) }.getOrNull()?.let { tab.bodyContents[it] = content }
+        }
         // Populate structured form rows from collection node
         if (!node?.formDataEntries.isNullOrEmpty()) {
             tab.formRows.clear()
@@ -1081,6 +1080,65 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             }
             if (node.isFolder && node.children.isNotEmpty()) {
                 if (renameRequestNodeById(node.children, requestId, newName)) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Writes the current tab editing state back into the matching [CollectionNode] in the
+     * collections tree so that workspace export reflects the latest saved content.
+     *
+     * Must be called from the main thread (it mutates Compose snapshot state).
+     * Returns `true` if the node was found and updated.
+     */
+    fun syncTabToCollectionNode(tab: RequestTabState): Boolean {
+        val updated = syncTabToNodeRecursive(collections, tab)
+        if (updated) notifyCollectionsChanged()
+        return updated
+    }
+
+    private fun syncTabToNodeRecursive(
+        nodes: MutableList<CollectionNode>,
+        tab: RequestTabState,
+    ): Boolean {
+        nodes.indices.forEach { index ->
+            val node = nodes[index]
+            if (!node.isFolder && node.id == tab.id) {
+                val userHeadersSnapshot = tab.headers
+                    .filter { it.kind == HeaderKind.USER }
+                    .map { it.key to it.value }
+                val bodyContentsSnapshot: Map<String, String> =
+                    tab.bodyContents.entries.associate { it.key.name to it.value }
+                val formEntriesSnapshot = tab.formRows.map { r ->
+                    FormDataEntryState(r.key, r.type, r.value, r.description, r.enabled)
+                }
+                val urlencodedSnapshot = tab.urlencodedRows.map { r ->
+                    FormDataEntryState(r.key, r.type, r.value, r.description, r.enabled)
+                }
+                nodes[index] = node.copy(
+                    name   = tab.name,
+                    method = tab.method,
+                    url    = tab.url,
+                    bodyType           = tab.bodyType.takeIf { it != BodyType.NONE },
+                    bodyContent        = tab.bodyContent.ifBlank { null },
+                    bodyContents       = bodyContentsSnapshot,
+                    formDataEntries    = formEntriesSnapshot,
+                    urlencodedEntries  = urlencodedSnapshot,
+                    authType           = tab.authType.takeIf { it != AuthType.NONE },
+                    authUsername       = tab.authUsername.ifBlank { null },
+                    authPassword       = tab.authPassword.ifBlank { null },
+                    authToken          = tab.authToken.ifBlank { null },
+                    authApiKey         = tab.authApiKey.ifBlank { null },
+                    authApiValue       = tab.authApiValue.ifBlank { null },
+                    userHeaders        = userHeadersSnapshot,
+                    preRequestScript   = tab.preRequestScript.ifBlank { null },
+                    testScript         = tab.testScript.ifBlank { null },
+                )
+                return true
+            }
+            if (node.isFolder && node.children.isNotEmpty()) {
+                if (syncTabToNodeRecursive(node.children, tab)) return true
             }
         }
         return false

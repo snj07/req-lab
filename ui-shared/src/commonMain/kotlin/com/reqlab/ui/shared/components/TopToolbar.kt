@@ -1,6 +1,7 @@
 package com.reqlab.ui.shared.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,8 +44,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.EnvState
@@ -79,10 +84,12 @@ fun TopToolbar(state: AppState) {
 
         // Logo
         Spacer(Modifier.width(4.dp))
+        BrandIcon()
+        Spacer(Modifier.width(8.dp))
         Text(
             text = Strings.appName,
-            color = ReqLabColors.Primary,
-            fontWeight = FontWeight.Bold,
+            color = ReqLabColors.OnSurface,
+            fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp,
         )
 
@@ -123,7 +130,9 @@ fun TopToolbar(state: AppState) {
 
         Spacer(Modifier.width(8.dp))
 
-        IconButton(
+        ToolbarIconButtonWithTooltip(
+            tooltip = Strings.t("toggle_response_layout"),
+            tooltipTag = "toolbar-tooltip-response-layout",
             onClick = {
                 state.settings.responseLayout =
                     if (state.settings.responseLayout == ResponseLayout.RIGHT) ResponseLayout.BOTTOM
@@ -145,7 +154,9 @@ fun TopToolbar(state: AppState) {
         Spacer(Modifier.width(4.dp))
 
         // Global variables
-        IconButton(
+        ToolbarIconButtonWithTooltip(
+            tooltip = Strings.globalVariables,
+            tooltipTag = "toolbar-tooltip-global-variables",
             onClick = { state.showGlobalVariablesDialog = true },
             modifier = Modifier.testTag("global-variables-button"),
         ) {
@@ -156,7 +167,11 @@ fun TopToolbar(state: AppState) {
             )
         }
 
-        IconButton(onClick = { state.showHelpDialog = true }) {
+        ToolbarIconButtonWithTooltip(
+            tooltip = "Help and About",
+            tooltipTag = "toolbar-tooltip-help-about",
+            onClick = { state.showHelpDialog = true },
+        ) {
             Icon(
                 Icons.Default.HelpOutline,
                 contentDescription = "Help and About",
@@ -166,7 +181,11 @@ fun TopToolbar(state: AppState) {
         }
 
         // Settings
-        IconButton(onClick = { state.showSettingsDialog = true }) {
+        ToolbarIconButtonWithTooltip(
+            tooltip = Strings.settings,
+            tooltipTag = "toolbar-tooltip-settings",
+            onClick = { state.showSettingsDialog = true },
+        ) {
             Icon(
                 Icons.Default.Settings,
                 contentDescription = Strings.settings,
@@ -184,6 +203,66 @@ fun TopToolbar(state: AppState) {
             .background(ReqLabColors.Border)
     )
 }
+
+@Composable
+private fun ToolbarIconButtonWithTooltip(
+    tooltip: String,
+    tooltipTag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    var tooltipVisible by remember { mutableStateOf(false) }
+
+    // Debounce: wait 200 ms before showing so edge-of-icon flicker is eliminated.
+    // Hide immediately when hover leaves so it doesn't linger.
+    LaunchedEffect(isHovered) {
+        if (isHovered) {
+            delay(200L)
+            tooltipVisible = true
+        } else {
+            tooltipVisible = false
+        }
+    }
+
+    Box {
+        IconButton(
+            onClick = onClick,
+            modifier = modifier.hoverable(interactionSource),
+        ) {
+            content()
+        }
+
+        if (tooltipVisible) {
+            Popup(
+                alignment = Alignment.BottomCenter,
+                offset = IntOffset(0, 40),
+                properties = PopupProperties(focusable = false),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(ReqLabColors.SurfaceHigh)
+                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                        .testTag(tooltipTag),
+                ) {
+                    Text(
+                        text = tooltip,
+                        color = ReqLabColors.OnSurface,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+expect fun BrandIcon()
 
 @Composable
 private fun EnvironmentChip(state: AppState) {
