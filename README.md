@@ -18,8 +18,12 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshots/reqlab-screenshot.png" alt="ReqLab — dark theme" width="49%" />
+  <img src="docs/screenshots/reqlab-screenshot.png" alt="ReqLab — dark theme" width="100%" />
+</p>
+
+<p align="center">
   <img src="docs/screenshots/reqlab-screenshot-light.png" alt="ReqLab — light theme" width="49%" />
+  <img src="docs/screenshots/reqlab-screenshot-light-2.png" alt="ReqLab — light theme GraphQL" width="49%" />
 </p>
 
 ---
