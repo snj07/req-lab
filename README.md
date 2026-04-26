@@ -17,6 +17,13 @@
 
 ---
 
+<p align="center">
+  <img src="docs/screenshots/reqlab-screenshot.png" alt="ReqLab — dark theme" width="49%" />
+  <img src="docs/screenshots/reqlab-screenshot-light.png" alt="ReqLab — light theme" width="49%" />
+</p>
+
+---
+
 ## What is ReqLab?
 
 ReqLab is a Kotlin + Compose Multiplatform API client for desktop (macOS, Linux, Windows) and web. It is designed for fast request iteration, scriptable validations, and reproducible API test workflows — running entirely offline with no accounts required.
