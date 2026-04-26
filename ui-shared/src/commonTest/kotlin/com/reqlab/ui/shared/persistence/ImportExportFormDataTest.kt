@@ -207,4 +207,68 @@ class ImportExportFormDataTest {
         assertTrue(imported.formDataEntries.isEmpty(), "Legacy collection without formDataEntries key should produce empty list")
         assertTrue(imported.urlencodedEntries.isEmpty(), "Legacy collection without urlencodedEntries key should produce empty list")
     }
+
+        @Test
+        fun legacy_form_data_content_is_parsed_into_formDataEntries() {
+                val legacyJson = """
+                {
+                    "type": "reqLabCollection",
+                    "version": "1.0",
+                    "name": "Legacy Form Content",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "Legacy Form Request",
+                            "method": "POST",
+                            "url": "http://example.com/form",
+                            "body": {
+                                "type": "FORM_DATA",
+                                "content": "name=Alice&role=tester&department=engineering"
+                            }
+                        }
+                    ]
+                }
+                """.trimIndent()
+
+                val state = AppState(openDefaultTab = false)
+                ImportExportRepository.importCollectionFromString(state, legacyJson)
+
+                val imported = state.collections.first().children.first()
+                assertEquals(3, imported.formDataEntries.size)
+                assertTrue(imported.formDataEntries.any { it.key == "name" && it.value == "Alice" })
+                assertTrue(imported.formDataEntries.any { it.key == "role" && it.value == "tester" })
+                assertTrue(imported.formDataEntries.any { it.key == "department" && it.value == "engineering" })
+        }
+
+        @Test
+        fun legacy_urlencoded_content_is_parsed_into_urlencodedEntries() {
+                val legacyJson = """
+                {
+                    "type": "reqLabCollection",
+                    "version": "1.0",
+                    "name": "Legacy Urlencoded Content",
+                    "folders": [],
+                    "requests": [
+                        {
+                            "name": "Legacy Urlencoded Request",
+                            "method": "POST",
+                            "url": "http://example.com/urlencoded",
+                            "body": {
+                                "type": "X_WWW_FORM_URLENCODED",
+                                "content": "username=alice&password=secret123&remember=true"
+                            }
+                        }
+                    ]
+                }
+                """.trimIndent()
+
+                val state = AppState(openDefaultTab = false)
+                ImportExportRepository.importCollectionFromString(state, legacyJson)
+
+                val imported = state.collections.first().children.first()
+                assertEquals(3, imported.urlencodedEntries.size)
+                assertTrue(imported.urlencodedEntries.any { it.key == "username" && it.value == "alice" })
+                assertTrue(imported.urlencodedEntries.any { it.key == "password" && it.value == "secret123" })
+                assertTrue(imported.urlencodedEntries.any { it.key == "remember" && it.value == "true" })
+        }
 }

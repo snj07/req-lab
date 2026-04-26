@@ -12,8 +12,8 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.ui.EditorRendererV2
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorRenderer
+import com.reqlab.editor.ui.EditorViewModel
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -27,10 +27,10 @@ import kotlin.test.assertTrue
 /**
  * Regression tests for double-click word selection.
  *
- * Root cause: `onWordSelect` callback was never passed from EditorRendererV2
- * to LineViewV2, so the double-click gesture detection fired but nothing
+ * Root cause: `onWordSelect` callback was never passed from EditorRenderer
+ * to LineView, so the double-click gesture detection fired but nothing
  * happened. Fixed by wiring `onWordSelect = { abs -> viewModel.selectWordAt(abs) }`
- * into the LineViewV2 call.
+ * into the LineView call.
  *
  * These tests verify the ViewModel-level word selection logic, which is the
  * invariant that the UI gesture handler delegates to.
@@ -40,7 +40,7 @@ class DoubleClickWordSelectTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun vm(content: String) = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+    private fun vm(content: String) = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
     // ── ViewModel-level: selectWordAt correctness ────────────────────────────
 
@@ -100,18 +100,18 @@ class DoubleClickWordSelectTest {
     // ── UI-level: double-click gesture routes to selectWordAt ────────────────
 
     /**
-     * This test validates that EditorRendererV2 now wires onWordSelect to
+     * This test validates that EditorRenderer now wires onWordSelect to
      * viewModel.selectWordAt. We call selectWordAt directly (which is what
      * the double-click gesture now routes to) and confirm state is updated.
      */
     @Test
     fun ui_word_select_wiring_produces_selection_state() {
         val text = "quick brown fox"
-        val vm   = EditorViewModelV2(text, LanguageMode.PLAIN_TEXT)
+        val vm   = EditorViewModel(text, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -152,13 +152,13 @@ class CmdXCutTest {
         content: String,
         prefix: String,
         copyCapture: (String) -> Unit = {},
-        setup: EditorViewModelV2.() -> Unit = {},
-    ): EditorViewModelV2 {
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        setup: EditorViewModel.() -> Unit = {},
+    ): EditorViewModel {
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
         vm.setup()
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -323,7 +323,7 @@ class ShiftClickSelectionTest {
 
     @Test
     fun moveCursorTo_with_extendSelection_true_creates_selection() {
-        val vm = EditorViewModelV2("Hello World", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello World", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(0)
         vm.moveCursorTo(5, extendSelection = true)
         assertEquals(0, vm.state.value.selectionStart)
@@ -334,7 +334,7 @@ class ShiftClickSelectionTest {
 
     @Test
     fun moveCursorTo_with_extendSelection_forward_then_reverse_makes_correct_anchor() {
-        val vm = EditorViewModelV2("ABCDEF", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("ABCDEF", LanguageMode.PLAIN_TEXT)
         // Place cursor at 3, extend to 6 (forward)
         vm.moveCursorTo(3)
         vm.moveCursorTo(6, extendSelection = true)
@@ -350,12 +350,12 @@ class ShiftClickSelectionTest {
 
     @Test
     fun shift_right_arrow_in_ui_extends_selection_by_one_char() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(0)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -381,12 +381,12 @@ class ShiftClickSelectionTest {
 
     @Test
     fun shift_left_arrow_in_ui_extends_selection_left() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -428,12 +428,12 @@ class ShiftModifierArrowSelectionTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun editorAt(content: String, cursor: Int, prefix: String): EditorViewModelV2 {
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+    private fun editorAt(content: String, cursor: Int, prefix: String): EditorViewModel {
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(cursor)
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -449,7 +449,7 @@ class ShiftModifierArrowSelectionTest {
 
     @Test
     fun vm_shiftWordRight_extends_selection_to_next_word_end() {
-        val vm = EditorViewModelV2("hello world foo", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("hello world foo", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(0)
         vm.moveCursorWordRight(extendSelection = true) // should reach end of "hello"
         val st = vm.state.value
@@ -460,7 +460,7 @@ class ShiftModifierArrowSelectionTest {
 
     @Test
     fun vm_shiftWordLeft_extends_selection_to_previous_word_start() {
-        val vm = EditorViewModelV2("hello world foo", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("hello world foo", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(11) // after "world"
         vm.moveCursorWordLeft(extendSelection = true) // back to start of "world" (index 6)
         val st = vm.state.value
@@ -472,7 +472,7 @@ class ShiftModifierArrowSelectionTest {
 
     @Test
     fun vm_shiftLineEnd_extends_selection_to_end_of_line() {
-        val vm = EditorViewModelV2("hello\nworld", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("hello\nworld", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(2) // 'l' in "hello"
         vm.moveCursorToLineEnd(extendSelection = true)
         assertEquals(2, vm.state.value.selectionStart)
@@ -483,7 +483,7 @@ class ShiftModifierArrowSelectionTest {
 
     @Test
     fun vm_shiftLineStart_extends_selection_to_start_of_line() {
-        val vm = EditorViewModelV2("hello world", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("hello world", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(7) // 'o' in "world"
         vm.moveCursorToLineStart(extendSelection = true)
         assertEquals(0, vm.state.value.selectionStart)

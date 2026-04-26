@@ -44,6 +44,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.File
 import java.time.Instant
 import java.util.Base64
 
@@ -536,6 +537,37 @@ fun Application.module() {
             })
         }
 
+        // ── Large fixture payloads (from qa-tests/src/resources) ──────────
+        get("/api/large-json") {
+            val payload = loadQaResourceText("10mb-sample.json")
+            if (payload == null) {
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    buildJsonObject {
+                        put("error", "Fixture not found")
+                        put("fixture", "qa-tests/src/resources/10mb-sample.json")
+                    },
+                )
+                return@get
+            }
+            call.respondText(payload, ContentType.Application.Json, HttpStatusCode.OK)
+        }
+
+        get("/api/large-xml") {
+            val payload = loadQaResourceText("5mb.xml")
+            if (payload == null) {
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    buildJsonObject {
+                        put("error", "Fixture not found")
+                        put("fixture", "qa-tests/src/resources/5mb.xml")
+                    },
+                )
+                return@get
+            }
+            call.respondText(payload, ContentType.Application.Xml, HttpStatusCode.OK)
+        }
+
         // ── Scripting / chaining helpers ───────────────────────────────────
 
         /**
@@ -849,4 +881,23 @@ private fun firstWordsPreview(text: String, limit: Int): String {
     if (words.isEmpty()) return ""
     val preview = words.take(limit).joinToString(" ")
     return if (words.size > limit) "$preview…" else preview
+}
+
+private fun loadQaResourceText(fileName: String): String? {
+    val classpathText = Application::class.java.classLoader
+        ?.getResourceAsStream(fileName)
+        ?.bufferedReader()
+        ?.use { it.readText() }
+    if (classpathText != null) return classpathText
+
+    val candidates = listOf(
+        "qa-tests/src/resources/$fileName",
+        "../qa-tests/src/resources/$fileName",
+        "../../qa-tests/src/resources/$fileName",
+    )
+    for (path in candidates) {
+        val file = File(path)
+        if (file.exists()) return file.readText()
+    }
+    return null
 }

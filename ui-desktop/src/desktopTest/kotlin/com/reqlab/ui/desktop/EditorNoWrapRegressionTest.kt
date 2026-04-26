@@ -15,9 +15,9 @@ import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.ui.EditorRendererV2
+import com.reqlab.editor.ui.EditorRenderer
 import com.reqlab.editor.ui.EditorTheme
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorViewModel
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -57,14 +57,14 @@ class NoWrapHorizontalScrollTest {
     fun mouse_wheel_horizontal_scroll_advances_scroll_state() {
         // A very wide single line that needs horizontal scroll.
         val content = "HORIZONTAL_".repeat(80)
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         var capturedState: ScrollState? = null
         var lastScrollOffset = -1
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel          = vm,
                     isReadOnly         = false,
                     language           = LanguageMode.PLAIN_TEXT,
@@ -109,14 +109,14 @@ class NoWrapHorizontalScrollTest {
     @Test
     fun repeated_wheel_scrolls_keep_advancing_offset() {
         val content = "REPEATED_".repeat(100)
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         var capturedState: ScrollState? = null
         val offsets = mutableListOf<Int>()
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel          = vm,
                     isReadOnly         = false,
                     language           = LanguageMode.PLAIN_TEXT,
@@ -173,11 +173,11 @@ class NoWrapClickRightOfTextTest {
         // Three short lines in no-wrap mode.
         val lines = listOf("Hello", "World", "Test")
         val content = lines.joinToString("\n")
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(500.dp, 150.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -221,11 +221,11 @@ class NoWrapClickRightOfTextTest {
         // Line 0: "AAA"   offsets 0..2, end=3
         // Line 1: "BBBBB" offsets 4..8, end=9
         // Line 2: "CCC"   offsets 10..12, end=13
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(500.dp, 150.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -287,11 +287,11 @@ class SoftWrapGutterOverflowTest {
     fun click_at_center_in_soft_wrap_does_not_snap_cursor_to_doc_end() {
         // Enough text so that lines wrap inside the viewport.
         val longLine = "The quick brown fox jumps over the lazy dog. ".repeat(10)
-        val vm = EditorViewModelV2(longLine.trimEnd(), LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(longLine.trimEnd(), LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 300.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -330,11 +330,11 @@ class SoftWrapGutterOverflowTest {
     @Test
     fun soft_wrap_home_key_returns_cursor_to_line_start() {
         val content = "Word ".repeat(60)
-        val vm = EditorViewModelV2(content.trimEnd(), LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content.trimEnd(), LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -383,11 +383,11 @@ class NoWrapContentNotUnderGutterTest {
     @Test
     fun content_starts_at_left_edge_when_cursor_at_zero() {
         val content = "LONGLINE_".repeat(60)
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,

@@ -12,8 +12,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.ui.EditorRendererV2
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorRenderer
+import com.reqlab.editor.ui.EditorViewModel
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertTrue
@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The EditorRendererV2 (prior to fix) applies `Modifier.horizontalScroll(hScrollState)`
+ * The EditorRenderer (prior to fix) applies `Modifier.horizontalScroll(hScrollState)`
  * to EACH ROW inside the LazyColumn. All rows share the SAME ScrollState instance.
  *
  * Root cause: Compose's `horizontalScroll` layout helper sets
@@ -39,7 +39,7 @@ class HorizontalScrollSharedStateBugTest {
     val composeRule = createComposeRule()
 
     /**
-     * Regression test — after fix, EditorRendererV2 with wordWrap=false must allow
+     * Regression test — after fix, EditorRenderer with wordWrap=false must allow
      * horizontal scroll when the document contains a very wide line followed by a short line.
      *
      * The bug was: per-row horizontalScroll(hScrollState) caused the last (shortest) row
@@ -54,11 +54,11 @@ class HorizontalScrollSharedStateBugTest {
         // Wide line (200 chars) followed by a short line — previously the short line
         // reset maxValue to 0, blocking all horizontal scrolling.
         val content = "W".repeat(200) + "\nX"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = true,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -97,11 +97,11 @@ class HorizontalScrollSharedStateBugTest {
     @Test
     fun bug_dispatchRawDelta_consumes_zero_when_maxvalue_is_zero_due_to_short_row() {
         val content = "W".repeat(200) + "\nX"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -143,7 +143,7 @@ class HorizontalScrollSharedStateBugTest {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * LineViewV2 uses `detectTapGestures` for pointer input. `detectTapGestures`
+ * LineView uses `detectTapGestures` for pointer input. `detectTapGestures`
  * only fires `onTap` when the user presses AND releases without significant
  * movement (a "tap"). It does NOT fire during drag gestures.
  *
@@ -171,11 +171,11 @@ class MouseDragSelectionBugTest {
     @Test
     fun bug_mouse_drag_does_not_extend_selection() {
         val content = "HELLO_WORLD_DRAG_SELECTION"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -203,7 +203,7 @@ class MouseDragSelectionBugTest {
             "(selectionStart=${st.selectionStart}, selectionEnd=${st.selectionEnd}). " +
             "Bug: detectTapGestures does not emit drag events — onTap is never called " +
             "during drag, so the cursor never moves and selection never starts. " +
-            "Fix: replace detectTapGestures with awaitEachGesture + drag() in LineViewV2.",
+            "Fix: replace detectTapGestures with awaitEachGesture + drag() in LineView.",
         )
         vm.dispose()
     }
@@ -219,11 +219,11 @@ class MouseDragSelectionBugTest {
     @Test
     fun baseline_single_click_positions_cursor() {
         val content = "ABCDE\nFGHIJ"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -258,11 +258,11 @@ class MouseDragSelectionBugTest {
     @Test
     fun bug_cross_line_drag_produces_no_selection() {
         val content = "LINE_ONE_TEXT\nLINE_TWO_TEXT\nLINE_THREE"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 300.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,

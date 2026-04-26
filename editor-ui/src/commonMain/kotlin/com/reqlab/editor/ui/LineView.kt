@@ -44,7 +44,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 
 
 @Composable
-internal fun LineViewV2(
+internal fun LineView(
     docLine: Int,
     document: DocumentModel,
     styleBuffer: StyleBuffer,
@@ -62,11 +62,13 @@ internal fun LineViewV2(
     onWordSelect: ((absoluteOffset: Int) -> Unit)? = null,
     language: LanguageMode,
     theme: EditorTheme = EditorTheme.Dark,
+    searchRanges: List<IntRange> = emptyList(),
+    activeSearchRange: IntRange? = null,
     wordWrap: Boolean = true,
     containerWidthPx: Int = 0,
     /**
      * Pre-computed cursor-blink alpha (0f..1f) from the hoisted InfiniteTransition
-     * in EditorRendererV2. -1f means "no cursor on this line" (draws nothing).
+     * in EditorRenderer. -1f means "no cursor on this line" (draws nothing).
      */
     cursorVisible: Float = -1f,
     /** Called after every (re-)measure with the new TextLayoutResult. Used by
@@ -80,7 +82,7 @@ internal fun LineViewV2(
     val onSurface    = theme.foreground
     val primary      = theme.accent
 
-    // cursorVisible is provided by the caller (hoisted to EditorRendererV2).
+    // cursorVisible is provided by the caller (hoisted to EditorRenderer).
     // A value of -1f means no cursor on this line; treat as fully transparent.
     val effectiveCursorAlpha = cursorVisible.coerceAtLeast(0f)
 
@@ -91,7 +93,7 @@ internal fun LineViewV2(
         if (docLine < document.lineCount) document.lineStart(docLine) else 0
     }
 
-    val annotated: AnnotatedString = remember(lineText, styleClock) {
+    val annotated: AnnotatedString = remember(lineText, styleClock, searchRanges, activeSearchRange, diagnostics) {
         buildLineAnnotatedString(
             lineText        = lineText,
             lineStartOffset = lineStartOffset,
@@ -99,6 +101,8 @@ internal fun LineViewV2(
             language        = language,
             diagnostics     = diagnostics,
             onSurface       = onSurface,
+            searchRanges    = searchRanges,
+            activeSearchRange = activeSearchRange,
         )
     }
 
@@ -130,7 +134,7 @@ internal fun LineViewV2(
     }
 
     // Notify caller whenever the layout is (re-)computed so the drag handler
-    // in EditorRendererV2 can use getOffsetForPosition() instead of a
+    // in EditorRenderer can use getOffsetForPosition() instead of a
     // hardcoded character-width estimate.
     LaunchedEffect(measured) {
         onLayoutMeasured?.invoke(measured)
@@ -277,6 +281,8 @@ private fun buildLineAnnotatedString(
     language: LanguageMode,
     diagnostics: List<InlineEditorError>,
     onSurface: Color,
+    searchRanges: List<IntRange>,
+    activeSearchRange: IntRange?,
 ): AnnotatedString {
     if (lineText.isEmpty()) return AnnotatedString("")
 
@@ -319,6 +325,30 @@ private fun buildLineAnnotatedString(
                         color = color,
                         textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
                     ),
+                    spanStart,
+                    spanEnd,
+                )
+            }
+        }
+
+        for (range in searchRanges) {
+            val spanStart = range.first.coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            if (spanStart < spanEnd) {
+                addStyle(
+                    SpanStyle(background = SyntaxColors.searchMatch),
+                    spanStart,
+                    spanEnd,
+                )
+            }
+        }
+
+        activeSearchRange?.let { range ->
+            val spanStart = range.first.coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            if (spanStart < spanEnd) {
+                addStyle(
+                    SpanStyle(background = SyntaxColors.searchActive),
                     spanStart,
                     spanEnd,
                 )

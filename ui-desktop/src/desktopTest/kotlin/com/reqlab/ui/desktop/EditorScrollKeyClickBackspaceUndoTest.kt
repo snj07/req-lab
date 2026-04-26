@@ -18,8 +18,8 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
 import com.reqlab.editor.core.LanguageMode
-import com.reqlab.editor.ui.EditorRendererV2
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorRenderer
+import com.reqlab.editor.ui.EditorViewModel
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -53,11 +53,11 @@ class HorizontalScrollResponsivenessTest {
     @Test
     fun horizontal_scroll_state_advances_immediately_on_first_wheel_event() {
         val content = "W".repeat(300)
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = true,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -95,12 +95,12 @@ class SpecialKeyInsertionBugTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun editorWith(content: String, prefix: String, block: EditorViewModelV2.() -> Unit = {}) : EditorViewModelV2 {
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+    private fun editorWith(content: String, prefix: String, block: EditorViewModel.() -> Unit = {}) : EditorViewModel {
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
         vm.block()
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -206,7 +206,7 @@ class ClickLastCharCursorTest {
     @Test
     fun click_at_last_char_puts_cursor_at_line_end_via_viewmodel() {
         val content = "Hello World"   // length = 11
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         // Simulate: line 0, offset = 11 (end of line) → cursor should be at 11
         vm.moveCursorTo(11)
@@ -229,11 +229,11 @@ class ClickLastCharCursorTest {
     @Test
     fun click_past_end_of_line_puts_cursor_at_line_end() {
         val content = "Hello"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -267,11 +267,11 @@ class ClickLastCharCursorTest {
     @Test
     fun click_inside_soft_wrapped_second_row_places_cursor_inside_text() {
         val content = "This is a very long line that should wrap into multiple visual rows in the editor"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(260.dp, 120.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel = vm,
                     isReadOnly = false,
                     language = LanguageMode.PLAIN_TEXT,
@@ -323,7 +323,7 @@ class BackspaceEdgeCaseTest {
      */
     @Test
     fun backspace_deletes_one_char_before_cursor() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(3)
         vm.deleteBeforeCursor()
         assertEquals("Helo", vm.getFullText(), "Backspace at 3 must delete char at index 2")
@@ -336,7 +336,7 @@ class BackspaceEdgeCaseTest {
      */
     @Test
     fun backspace_at_start_is_noop() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(0)
         vm.deleteBeforeCursor()
         assertEquals("Hello", vm.getFullText(), "Backspace at 0 must be no-op")
@@ -349,7 +349,7 @@ class BackspaceEdgeCaseTest {
      */
     @Test
     fun backspace_with_selection_deletes_selected_range() {
-        val vm = EditorViewModelV2("Hello World", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello World", LanguageMode.PLAIN_TEXT)
         // Select "World" (offsets 6..11)
         vm.moveCursorTo(6)
         vm.moveCursorTo(11, extendSelection = true)
@@ -365,7 +365,7 @@ class BackspaceEdgeCaseTest {
      */
     @Test
     fun backspace_at_end_of_document_deletes_last_char() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)   // end
         vm.deleteBeforeCursor()
         assertEquals("Hell", vm.getFullText(), "Backspace at end must delete last char")
@@ -380,7 +380,7 @@ class BackspaceEdgeCaseTest {
      */
     @Test
     fun backspace_with_cursor_past_document_length_does_not_corrupt() {
-        val vm = EditorViewModelV2("Hi", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hi", LanguageMode.PLAIN_TEXT)
         // Artificially push cursor past document length (simulates async insert lag)
         vm.moveCursorTo(100)
         // Cursor clamped to doc length, so pressing backspace should delete last char
@@ -399,7 +399,7 @@ class BackspaceEdgeCaseTest {
      */
     @Test
     fun multiple_backspaces_delete_sequentially() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
         repeat(5) { vm.deleteBeforeCursor() }
         assertEquals("", vm.getFullText(), "5 backspaces on 5-char string must produce empty string")
@@ -414,11 +414,11 @@ class BackspaceEdgeCaseTest {
     @Test
     fun no_wrap_backspace_after_horizontal_scroll_keeps_text_consistent() {
         val content = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".repeat(20)
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(420.dp, 100.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel = vm,
                     isReadOnly = false,
                     language = LanguageMode.PLAIN_TEXT,
@@ -463,11 +463,11 @@ class FnGlobeKeyRegressionTest {
      */
     @Test
     fun unknown_special_key_does_not_insert_question_mark() {
-        val vm = EditorViewModelV2("ABC", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("ABC", LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(400.dp, 120.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel = vm,
                     isReadOnly = false,
                     language = LanguageMode.PLAIN_TEXT,
@@ -509,11 +509,11 @@ class HorizontalScrollJerkRegressionTest {
         val lines = (1..120).joinToString("\n") { idx ->
             "LINE-$idx " + "W".repeat(220)
         }
-        val vm = EditorViewModelV2(lines, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(lines, LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(420.dp, 110.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel = vm,
                     isReadOnly = false,
                     language = LanguageMode.PLAIN_TEXT,
@@ -562,7 +562,7 @@ class UndoRedoTest {
      */
     @Test
     fun undo_single_insert_restores_original() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
         vm.insertAtCursor(" World")
         assertEquals("Hello World", vm.getFullText())
@@ -577,7 +577,7 @@ class UndoRedoTest {
      */
     @Test
     fun undo_single_delete_restores_char() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
         vm.deleteBeforeCursor()   // deletes 'o' → "Hell"
         assertEquals("Hell", vm.getFullText())
@@ -593,7 +593,7 @@ class UndoRedoTest {
     @Test
     fun undo_after_select_all_and_delete_restores_full_content() {
         val content = "Line 1\nLine 2\nLine 3"
-        val vm = EditorViewModelV2(content, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
         vm.selectAll()
         vm.deleteBeforeCursor()
         assertEquals("", vm.getFullText(), "Select-all + delete must produce empty document")
@@ -608,7 +608,7 @@ class UndoRedoTest {
      */
     @Test
     fun undo_100_consecutive_inserts_restores_original() {
-        val vm = EditorViewModelV2("", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("", LanguageMode.PLAIN_TEXT)
         repeat(100) { i ->
             vm.insertAtCursor("$i ")
         }
@@ -625,7 +625,7 @@ class UndoRedoTest {
      */
     @Test
     fun redo_reapplies_undone_insert() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
         vm.insertAtCursor(" World")
         vm.undo()
@@ -640,7 +640,7 @@ class UndoRedoTest {
      */
     @Test
     fun new_edit_after_undo_clears_redo_stack() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
         vm.insertAtCursor(" World")
         vm.undo()      // undo: back to "Hello"
@@ -656,7 +656,7 @@ class UndoRedoTest {
      */
     @Test
     fun multiple_undo_redo_cycles_remain_consistent() {
-        val vm = EditorViewModelV2("A", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("A", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(1)
         vm.insertAtCursor("B")   // "AB"
         vm.insertAtCursor("C")   // "ABC"
@@ -679,7 +679,7 @@ class UndoRedoTest {
     @Test
     fun undo_large_content_select_all_delete() {
         val big = "X".repeat(5_000)
-        val vm = EditorViewModelV2(big, LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel(big, LanguageMode.PLAIN_TEXT)
         vm.selectAll()
         vm.deleteBeforeCursor()
         assertEquals("", vm.getFullText())
@@ -695,7 +695,7 @@ class UndoRedoTest {
      */
     @Test
     fun undo_beyond_stack_is_noop() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         repeat(10) { vm.undo() }   // no edits made — all must be no-ops
         assertEquals("Hello", vm.getFullText(), "Undo with empty stack must be no-op")
         vm.dispose()
@@ -706,7 +706,7 @@ class UndoRedoTest {
      */
     @Test
     fun redo_beyond_stack_is_noop() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
         vm.moveCursorTo(5)
         vm.insertAtCursor(" World")
         repeat(10) { vm.redo() }   // no undone edits — all must be no-ops
@@ -719,11 +719,11 @@ class UndoRedoTest {
      */
     @Test
     fun cmd_z_in_ui_triggers_undo() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,
@@ -755,11 +755,11 @@ class UndoRedoTest {
      */
     @Test
     fun cmd_shift_z_in_ui_triggers_redo() {
-        val vm = EditorViewModelV2("Hello", LanguageMode.PLAIN_TEXT)
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
 
         composeRule.setContent {
             Box(Modifier.size(600.dp, 200.dp)) {
-                EditorRendererV2(
+                EditorRenderer(
                     viewModel     = vm,
                     isReadOnly    = false,
                     language      = LanguageMode.PLAIN_TEXT,

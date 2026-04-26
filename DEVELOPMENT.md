@@ -23,10 +23,12 @@ req-lab/
 ├── core-network/        # Ktor-backed HTTP engine, interceptors, retry, WebSocket
 ├── core-storage/        # Persistence contracts and JSON file adapter
 ├── core-scripting/      # Script engine contracts (pre-request / post-request scripts)
+├── editor-core/         # Pure-Kotlin editor engine: document model, lexer, fold map, diagnostics
+├── editor-ui/           # Compose editor renderer: EditorRenderer, EditorViewModel, IdleLexer
 ├── feature-requests/    # Request use-cases wiring core-model + core-network
 ├── ui-shared/           # Shared Compose UI code (jvm + wasmJs) — 95% of all UI
-├── ui-desktop/          # Thin Compose Desktop launcher (~44 lines)
-├── ui-web/              # Thin Compose/Wasm browser launcher (CanvasBasedWindow)
+├── ui-desktop/          # Thin Compose Desktop launcher (~74 lines)
+├── ui-web/              # Thin Compose/Wasm browser launcher (~30 lines, CanvasBasedWindow)
 ├── qa-tests/            # JVM integration + end-to-end tests
 ├── sample-server/       # Standalone Ktor server for manual/exploratory testing
 ├── buildSrc/            # Shared Gradle build logic
@@ -55,11 +57,29 @@ Build all modules:
 ./gradlew build
 ```
 
+If build fails with `:kotlinStoreYarnLock` and a message that the lock file changed, refresh and store the lock, then rerun:
+
+```bash
+./gradlew kotlinUpgradeYarnLock
+./gradlew kotlinStoreYarnLock
+./gradlew build
+```
+
 Compile only the shared UI module (fast check during development):
 
 ```bash
 ./gradlew :ui-shared:compileKotlinDesktop
 ```
+
+## Branding Assets
+
+App icons are versioned in:
+
+- `ui-desktop/src/desktopMain/resources/icons/` (PNG sizes + `.icns` + `.ico`)
+- `ui-web/src/wasmJsMain/resources/icons/` (favicon and PWA icons)
+
+Desktop window icon is loaded from `Main.kt`; native package icons are configured in
+`ui-desktop/build.gradle.kts` under `nativeDistributions`.
 
 ---
 
@@ -179,8 +199,8 @@ Production bundle:
 
 GitHub Actions release packaging is defined in [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-- **Push to `main`** — builds desktop artifacts for macOS/Linux/Windows.
-- **Push tag `v*`** — builds artifacts and publishes a GitHub release.
+- **Push to `main`** — runs a quality gate first, then builds desktop artifacts for macOS/Linux/Windows.
+- **Push tag `v*`** — runs the same quality gate, then builds artifacts and publishes a GitHub release.
 - **Manual dispatch** — allows on-demand artifact builds.
 
 ---

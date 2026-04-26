@@ -60,6 +60,7 @@ compose.desktop {
 
             macOS {
                 bundleID = "com.reqlab.reqlab"
+                iconFile.set(project.file("src/desktopMain/resources/icons/reqlab.icns"))
                 // dmgPackageVersion inherits packageVersion automatically
             }
             windows {
@@ -67,11 +68,13 @@ compose.desktop {
                 perUserInstall     = true
                 shortcut           = true
                 menuGroup          = "ReqLab"
+                iconFile.set(project.file("src/desktopMain/resources/icons/reqlab.ico"))
             }
             linux {
                 packageName        = "reqlab"
                 debMaintainer      = "reqlab@users.noreply.github.com"
                 appCategory        = "Development"
+                iconFile.set(project.file("src/desktopMain/resources/icons/reqlab-icon-256.png"))
             }
         }
     }
@@ -95,4 +98,14 @@ tasks.register<Copy>("packageReqLabJar") {
 
 tasks.withType<Test>().configureEach {
     useJUnit()
+}
+
+tasks.withType<JavaExec>().configureEach {
+    if (name == "run") {
+        jvmArgs(
+            "-Dapple.awt.application.name=ReqLab",
+            "-Djava.awt.application.name=ReqLab",
+            "-Xdock:name=ReqLab",
+        )
+    }
 }

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +58,13 @@ import com.reqlab.ui.shared.state.RequestTabState
 import com.reqlab.ui.shared.theme.ReqLabColors
 
 private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
+
+/**
+ * Returns true when [contentLength] exceeds the inline-validation threshold (20 MB).
+ * Extracted as a package-level function so it can be unit-tested independently of
+ * the Compose composable that uses it (issue M-5).
+ */
+internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 20_000_000
 
 // ── Body categories (top-level chips) ──────────────────────────
 
@@ -271,21 +280,33 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 // inline error logic is centralised and testable independently of the UI.
                 val editorEngine = remember { EditorEngine() }
                 var inlineErrors by remember { mutableStateOf<List<InlineEditorError>>(emptyList()) }
+                var validationPaused by remember { mutableStateOf(false) }
 
                 // Debounce validation — avoid calling EditorEngine.validate() on
-                // every keystroke.  For large files validation runs on Dispatchers.Default
-                // so the main/UI thread is NEVER blocked by O(n) JSON/XML scanning.
-                // Files >1 MB are skipped entirely — inline errors in multi-MB bodies
-                // are impractical to act on and the scan would be too slow.
+                // every keystroke. For large files validation runs on Dispatchers.Default
+                // so the main/UI thread is NEVER blocked by O(n) validation work.
+                // We keep validation enabled up to 20 MB with a larger debounce window.
                 LaunchedEffect(tab.bodyContent, tab.bodyType) {
                     val content = tab.bodyContent
                     val bodyType = tab.bodyType
-                    if (content.isBlank() || content.length > 1_000_000) {
-                        // Clear stale errors immediately when content is empty or too large
+                    if (content.isBlank()) {
                         inlineErrors = emptyList()
+                        validationPaused = false
                         return@LaunchedEffect
                     }
-                    val delayMs = if (content.length > 100_000) 600L else 300L
+                    if (shouldPauseValidation(content.length)) {
+                        // Clear stale errors immediately and surface a paused indicator
+                        inlineErrors = emptyList()
+                        validationPaused = true
+                        return@LaunchedEffect
+                    }
+                    validationPaused = false
+                    val delayMs = when {
+                        content.length > 5_000_000 -> 1200L
+                        content.length > 1_000_000 -> 900L
+                        content.length > 100_000 -> 600L
+                        else -> 300L
+                    }
                     kotlinx.coroutines.delay(delayMs)
                     // Re-read after delay — user may have continued typing
                     if (content != tab.bodyContent) return@LaunchedEffect
@@ -304,29 +325,41 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                     if (content == tab.bodyContent) inlineErrors = result
                 }
 
-                CodeEditor(
-                    text = tab.bodyContent,
-                    onTextChange = { tab.bodyContent = it; onDirty() },
-                    language = language,
-                    modifier = Modifier.fillMaxSize(),
-                    showToolbar = true,
-                    enableFolding = language != SyntaxLanguage.PLAIN,
-                    enableSearch = true,
-                    enableFormat = language != SyntaxLanguage.PLAIN,
-                    enableWordWrap = true,
-                    enableCopy = true,
-                    enableDownload = false,
-                    inlineErrors = inlineErrors,
-                    placeholder = when (tab.bodyType) {
-                        BodyType.JSON       -> "{\n  \n}"
-                        BodyType.XML        -> "<root>\n  \n</root>"
-                        BodyType.HTML       -> "<html>\n  <body></body>\n</html>"
-                        BodyType.JAVASCRIPT -> "// script\n"
-                        BodyType.GRAPHQL    -> "query {\n  \n}"
-                        else                -> "Enter request body\u2026"
-                    },
-                    testTagPrefix = "body-editor",
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (validationPaused) {
+                        Text(
+                            text = "\u26A0 Validation paused \u2014 file too large (> 20 MB)",
+                            fontSize = 11.sp,
+                            color = ReqLabColors.OnSurfaceDim,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                    CodeEditor(
+                        text = tab.bodyContent,
+                        onTextChange = { tab.bodyContent = it; onDirty() },
+                        language = language,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        showToolbar = true,
+                        enableFolding = language != SyntaxLanguage.PLAIN,
+                        enableSearch = true,
+                        enableFormat = language != SyntaxLanguage.PLAIN,
+                        enableWordWrap = true,
+                        enableCopy = true,
+                        enableDownload = false,
+                        inlineErrors = inlineErrors,
+                        placeholder = when (tab.bodyType) {
+                            BodyType.JSON       -> "{\n  \n}"
+                            BodyType.XML        -> "<root>\n  \n</root>"
+                            BodyType.HTML       -> "<html>\n  <body></body>\n</html>"
+                            BodyType.JAVASCRIPT -> "// script\n"
+                            BodyType.GRAPHQL    -> "query {\n  \n}"
+                            else                -> "Enter request body\u2026"
+                        },
+                        testTagPrefix = "body-editor",
+                    )
+                }
             }
         }
     }
@@ -370,8 +403,17 @@ private fun FormDataTableEditor(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        FormDataTableHeader(showTypeColumn = true)
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        AddRowButton(
+            onAdd = onAdd,
+            modifier = Modifier
+                .padding(bottom = 6.dp)
+                .testTag("body-form-add-row"),
+        )
+        FormDataTableHeader(
+            showTypeColumn = true,
+            modifier = Modifier.testTag("body-form-table-header"),
+        )
+        LazyColumn(modifier = Modifier.weight(1f).testTag("body-form-table-list")) {
             items(rows, key = { it.uid }) { row ->
                 FormDataRowItem(
                     row = row,
@@ -381,7 +423,6 @@ private fun FormDataTableEditor(
                 )
             }
         }
-        AddRowButton(onAdd = onAdd)
     }
 }
 
@@ -396,8 +437,17 @@ private fun UrlencodedTableEditor(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        FormDataTableHeader(showTypeColumn = false)
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        AddRowButton(
+            onAdd = onAdd,
+            modifier = Modifier
+                .padding(bottom = 6.dp)
+                .testTag("body-urlencoded-add-row"),
+        )
+        FormDataTableHeader(
+            showTypeColumn = false,
+            modifier = Modifier.testTag("body-urlencoded-table-header"),
+        )
+        LazyColumn(modifier = Modifier.weight(1f).testTag("body-urlencoded-table-list")) {
             items(rows, key = { it.uid }) { row ->
                 FormDataRowItem(
                     row = row,
@@ -407,16 +457,15 @@ private fun UrlencodedTableEditor(
                 )
             }
         }
-        AddRowButton(onAdd = onAdd)
     }
 }
 
 // ── Table header (fixed widths mirror row layout exactly) ───────
 
 @Composable
-private fun FormDataTableHeader(showTypeColumn: Boolean) {
+private fun FormDataTableHeader(showTypeColumn: Boolean, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(ReqLabColors.Surface)
             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -473,16 +522,16 @@ private fun FormDataRowItem(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         // Enabled toggle
-        Box(
-            modifier = Modifier
-                .width(TOGGLE_WIDTH)
-                .clickable { row.enabled = !row.enabled; onRowChange() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (row.enabled) "●" else "○",
-                color = if (row.enabled) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim,
-                fontSize = 10.sp,
+        Box(modifier = Modifier.width(TOGGLE_WIDTH), contentAlignment = Alignment.Center) {
+            Checkbox(
+                checked = row.enabled,
+                onCheckedChange = {
+                    row.enabled = it
+                    onRowChange()
+                },
+                modifier = Modifier
+                    .size(16.dp)
+                    .testTag("body-table-enabled-${row.uid}"),
             )
         }
 
@@ -647,10 +696,9 @@ private fun FilePickerCell(
 }
 
 @Composable
-private fun AddRowButton(onAdd: () -> Unit) {
+private fun AddRowButton(onAdd: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
-            .padding(top = 6.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(4.dp))
             .background(ReqLabColors.Surface)
             .clickable { onAdd() }

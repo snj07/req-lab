@@ -122,7 +122,7 @@ private val NON_CHARACTER_KEYS = setOf(
  * It has no dependencies on any application-specific theme or platform APIs —
  * all customisation is provided via parameters.
  *
- * @param viewModel      State coordinator. Create with `remember { EditorViewModelV2(text, mode) }`.
+ * @param viewModel      State coordinator. Create with `remember { EditorViewModel(text, mode) }`.
  * @param isReadOnly     Disable all keyboard editing when true.
  * @param language       Language mode driving syntax highlighting.
  * @param theme          Color theme. Defaults to [EditorTheme.Dark].
@@ -134,8 +134,8 @@ private val NON_CHARACTER_KEYS = setOf(
  * @param modifier       Layout modifier.
  */
 @Composable
-fun EditorRendererV2(
-    viewModel: EditorViewModelV2,
+fun EditorRenderer(
+    viewModel: EditorViewModel,
     isReadOnly: Boolean,
     language: LanguageMode,
     theme: EditorTheme = EditorTheme.Dark,
@@ -145,6 +145,10 @@ fun EditorRendererV2(
     onTextChange: ((String) -> Unit)? = null,
     onPasteRequest: (() -> String?)? = null,
     onCopyRequest: ((String) -> Unit)? = null,
+    /** Per-line search match ranges (lineIndex -> list of start..endExclusive ranges). */
+    searchMatchRangesByLine: Map<Int, List<IntRange>> = emptyMap(),
+    /** Currently active search match (lineIndex to start..endExclusive range). */
+    activeSearchMatch: Pair<Int, IntRange>? = null,
     /** Called whenever the horizontal scroll offset changes (no-wrap mode only). For testing. */
     onHorizontalScroll: ((Int) -> Unit)? = null,
     /** Called once after composition with the internal horizontal ScrollState. For testing. */
@@ -158,15 +162,23 @@ fun EditorRendererV2(
     // Tracks the widest line seen (px) so the dummy spacer keeps hScrollState.maxValue correct.
     // Reset on every document edit (state.version) so deleted/replaced lines shrink the range.
     var hMaxContentWidthPx by remember(state.version) { mutableStateOf(0) }
-    // Cache of per-displayLine TextLayoutResults fed back from LineViewV2.
+    // Cache of per-displayLine TextLayoutResults fed back from LineView.
     // Used by the drag handler to map pointer coords → char offset accurately.
     val layoutResultCache = remember { mutableStateMapOf<Int, TextLayoutResult>() }
     // Context-menu state: show a DropdownMenu on secondary-button (right-click) press.
     var contextMenuVisible by remember { mutableStateOf(false) }
     var contextMenuOffset  by remember { mutableStateOf(Offset.Zero) }
     var shiftPressed by remember { mutableStateOf(false) }
+    // Plain mutable object (non-state) — tracks previous doc shape to detect paste.
+    // Updated inside the scroll LaunchedEffect so there is no cross-coroutine race.
+    val prevDocState = remember {
+        object {
+            var length    = viewModel.document.length
+            var lineCount = viewModel.document.lineCount
+        }
+    }
 
-    // Add this LaunchedEffect:
+    // Clear the per-line layout cache whenever the document version changes.
     LaunchedEffect(state.version) {
         layoutResultCache.clear()
     }
@@ -175,7 +187,7 @@ fun EditorRendererV2(
         if (!wordWrap) onHorizontalScroll?.invoke(hScrollState.value)
     }
 
-    // Cursor-blink animation hoisted from LineViewV2 so exactly ONE
+    // Cursor-blink animation hoisted from LineView so exactly ONE
     // InfiniteTransition exists for the whole editor instead of one per
     // visible line.  Lines that don't hold the cursor receive cursorVisible=-1f.
     val cursorBlink = rememberInfiniteTransition(label = "cursorBlink")
@@ -217,9 +229,24 @@ fun EditorRendererV2(
         try { focus.requestFocus() } catch (_: Exception) { }
     }
 
-    // Auto-scroll the LazyColumn to keep the cursor line in view,
-    // but ONLY when the cursor line leaves the currently visible range.
-    LaunchedEffect(state.cursorOffset) {
+    // Auto-scroll the LazyColumn to keep the cursor line in view, but suppress after
+    // paste.  Keying on BOTH cursorOffset and version means this single effect handles
+    // cursor navigation (only cursorOffset changes) and typed/pasted edits (both change).
+    // Because the paste guard and the scroll decision live in the SAME coroutine there
+    // is no possible race between a "set flag" effect and a "read flag" effect.
+    LaunchedEffect(state.cursorOffset, state.version) {
+        val newLen       = viewModel.document.length
+        val newLineCount = viewModel.document.lineCount
+        val charDelta = kotlin.math.abs(newLen - prevDocState.length)
+        val lineDelta = newLineCount - prevDocState.lineCount
+        prevDocState.length    = newLen
+        prevDocState.lineCount = newLineCount
+        // Suppress scroll for large edits OR multi-line insertions (paste).
+        // Pressing Enter adds exactly 1 line (lineDelta == 1) → still scrolls.
+        // Pasting any multi-line content adds ≥ 2 → scroll suppressed.
+        if (charDelta >= LARGE_EDIT_SCROLL_SUPPRESS_THRESHOLD_CHARS || lineDelta >= 2) {
+            return@LaunchedEffect
+        }
         val cursorDocLine = viewModel.document.lineAt(state.cursorOffset)
         val displayLine   = viewModel.displayLineMap.displayFromDoc(cursorDocLine)
         if (displayLine < 0) return@LaunchedEffect
@@ -249,11 +276,23 @@ fun EditorRendererV2(
                 }
             }
             .onPreviewKeyEvent { event ->
-                if (isReadOnly) return@onPreviewKeyEvent false
                 shiftPressed = event.isShiftPressed
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val shift = event.isShiftPressed
                 val meta  = event.isMetaPressed || event.isCtrlPressed
+
+                // Keep copy/select-all shortcuts working in read-only viewers.
+                if (meta && event.key == Key.C) {
+                    val selected = viewModel.getSelectedText()
+                    if (selected.isNotEmpty()) onCopyRequest?.invoke(selected)
+                    return@onPreviewKeyEvent true
+                }
+                if (meta && event.key == Key.A) {
+                    viewModel.selectAll()
+                    return@onPreviewKeyEvent true
+                }
+
+                if (isReadOnly) return@onPreviewKeyEvent false
                 when {
                     event.key == Key.ShiftLeft || event.key == Key.ShiftRight ||
                         event.key == Key.CtrlLeft || event.key == Key.CtrlRight ||
@@ -312,8 +351,11 @@ fun EditorRendererV2(
                     event.key == Key.DirectionDown  -> { if (meta) viewModel.moveCursorToDocEnd(shift) else viewModel.moveCursorDown(shift); true }
                     event.key == Key.MoveHome       -> { viewModel.moveCursorToLineStart(shift); true }
                     event.key == Key.MoveEnd        -> { viewModel.moveCursorToLineEnd(shift); true }
+                    event.key == Key.PageUp         -> { viewModel.moveCursorPageUp(extendSelection = shift); true }
+                    event.key == Key.PageDown       -> { viewModel.moveCursorPageDown(extendSelection = shift); true }
                     event.key == Key.Backspace -> {
-                        viewModel.deleteBeforeCursor()
+                        if (meta || event.isAltPressed) viewModel.deleteWordBeforeCursor()
+                        else viewModel.deleteBeforeCursor()
                         true
                     }
                     event.key == Key.Delete -> {
@@ -321,11 +363,11 @@ fun EditorRendererV2(
                         true
                     }
                     event.key == Key.Enter -> {
-                        viewModel.insertAtCursor("\n")
+                        viewModel.insertNewlineWithAutoIndent()
                         true
                     }
                     event.key == Key.Tab -> {
-                        viewModel.insertAtCursor("  ")
+                        if (shift) viewModel.dedentAtCursor() else viewModel.insertAtCursor("  ")
                         true
                     }
                     else -> {
@@ -389,8 +431,11 @@ fun EditorRendererV2(
                 fontFamily = FontFamily.Monospace,
                 textAlign  = TextAlign.End,
             )
-            val gutterWidth = remember(viewModel.document.lineCount.toString().length) {
-                (viewModel.document.lineCount.toString().length * 9 + 40).dp
+            // Always allocate for at least 2 digits so the gutter does not shift
+            // when crossing the 9→10 line boundary (single-digit to double-digit).
+            val gutterDigits = maxOf(viewModel.document.lineCount.toString().length, 4)
+            val gutterWidth = remember(gutterDigits) {
+                (gutterDigits * 9 + 40).dp
             }
             val foldStartSet = remember(state.version, state.foldVersion) {
                 viewModel.foldRegions.associate { it.startLine - 1 to it }
@@ -401,7 +446,7 @@ fun EditorRendererV2(
                     with(density) { 1.dp.toPx() }   // divider
                 ).toInt().coerceAtLeast(1)
 
-            // The text in LineViewV2 has padding(start = 8.dp, end = 16.dp) applied.
+            // The text in LineView has padding(start = 8.dp, end = 16.dp) applied.
             // The TextMeasurer must see the inner width (minus those pads) so that
             // soft-wrapped text fills the column without spilling into the gutter or
             // past the right edge.
@@ -452,7 +497,7 @@ fun EditorRendererV2(
                     .pointerInput(gutterWidthPx) {
                         awaitEachGesture {
                             // Observe DOWN without requiring it to be unconsumed
-                            // (LineViewV2.awaitFirstDown also uses requireUnconsumed=false)
+                            // (LineView.awaitFirstDown also uses requireUnconsumed=false)
                             val down = awaitFirstDown(requireUnconsumed = false)
                             // Only intercept if the press is in the text content area
                             val inContent = down.position.x > gutterWidthPx + with(density) { 2.dp.toPx() }
@@ -523,54 +568,51 @@ fun EditorRendererV2(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             // ① Line number (right-aligned, fills available space)
+                            val lineNumberTag = if (testTagPrefix.isNotEmpty())
+                                "$testTagPrefix-line-number-$docLine" else ""
                             Text(
                                 text  = "${docLine + 1}",
                                 style = lineNumStyle,
+                                modifier = if (lineNumberTag.isNotEmpty()) Modifier.testTag(lineNumberTag) else Modifier,
                             )
 
                             // ② Fold indicator (or guide spacer) — rightmost column
-                            if (isFoldable) {
-                                val foldTag = if (testTagPrefix.isNotEmpty())
-                                    "$testTagPrefix-fold-indicator-$docLine" else ""
-                                Box(
-                                    modifier = Modifier
-                                        .padding(start = 4.dp)
-                                        .size(16.dp)
-                                        .then(
-                                            if (foldTag.isNotEmpty()) Modifier.testTag(foldTag)
-                                            else Modifier
-                                        )
-                                        .pointerInput(docLine) {
-                                            detectTapGestures {
-                                                focus.requestFocus()
-                                                viewModel.toggleFold(docLine)
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center,
-                                ) {
+                            val foldTag = if (testTagPrefix.isNotEmpty())
+                                "$testTagPrefix-fold-indicator-$docLine" else ""
+                            val foldColumnModifier = Modifier
+                                .padding(start = 4.dp)
+                                .size(16.dp)
+                                .then(
+                                    if (isFoldable && foldTag.isNotEmpty()) Modifier.testTag(foldTag)
+                                    else Modifier
+                                )
+                            Box(
+                                modifier = if (isFoldable) {
+                                    foldColumnModifier.pointerInput(docLine) {
+                                        detectTapGestures {
+                                            focus.requestFocus()
+                                            viewModel.toggleFold(docLine)
+                                        }
+                                    }
+                                } else foldColumnModifier,
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isFoldable) {
                                     Text(
                                         text  = if (isFolded) "▸" else "▾",
                                         color = if (isFolded) theme.accent else theme.lineNumberFg,
                                         fontSize = 10.sp,
                                     )
-                                }
-                            } else if (foldStartSet.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(start = 4.dp)
-                                        .size(16.dp),
-                                ) {
-                                    if (inFoldRegion) {
-                                        Canvas(modifier = Modifier.matchParentSize()) {
-                                            val x = size.width / 2f
-                                            drawLine(
-                                                color = foldGuideColor,
-                                                start = androidx.compose.ui.geometry.Offset(x, 0f),
-                                                end   = androidx.compose.ui.geometry.Offset(x, size.height),
-                                                strokeWidth = 1.5f,
-                                                pathEffect  = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f),
-                                            )
-                                        }
+                                } else if (inFoldRegion) {
+                                    Canvas(modifier = Modifier.matchParentSize()) {
+                                        val x = size.width / 2f
+                                        drawLine(
+                                            color = foldGuideColor,
+                                            start = androidx.compose.ui.geometry.Offset(x, 0f),
+                                            end   = androidx.compose.ui.geometry.Offset(x, size.height),
+                                            strokeWidth = 1.5f,
+                                            pathEffect  = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f),
+                                        )
                                     }
                                 }
                             }
@@ -588,12 +630,12 @@ fun EditorRendererV2(
                             modifier = Modifier
                                 .weight(1f)
                                 .then(if (!wordWrap) Modifier.clipToBounds() else Modifier)
-                                // In no-wrap mode, LineViewV2 is only as wide as its text.
+                                // In no-wrap mode, LineView is only as wide as its text.
                                 // Clicks in the empty area to the RIGHT of a short line
-                                // don't hit LineViewV2. This fallback handler catches
+                                // don't hit LineView. This fallback handler catches
                                 // unconsumed taps and snaps cursor to line end.
                                 // detectTapGestures uses awaitFirstDown(requireUnconsumed=true)
-                                // so it only fires when LineViewV2 didn't already handle the tap.
+                                // so it only fires when LineView didn't already handle the tap.
                                 .then(
                                     if (!wordWrap && !isReadOnly)
                                         Modifier.pointerInput(lineStart, lineEnd) {
@@ -605,15 +647,15 @@ fun EditorRendererV2(
                                     else Modifier
                                 ),
                         ) {
-                            LineViewV2(
+                            LineView(
                                 docLine          = docLine,
                                 document         = viewModel.document,
                                 styleBuffer      = viewModel.styleBuffer,
                                 styleClock       = state.styleClock,
                                 version          = state.version,
                                 cursorOffset     = if (!isReadOnly) cursorHere else -1,
-                                selStart         = if (!isReadOnly) state.selectionStart else -1,
-                                selEnd           = if (!isReadOnly) state.selectionEnd else -1,
+                                selStart         = state.selectionStart,
+                                selEnd           = state.selectionEnd,
                                 diagnostics      = state.diagnostics.filter { it.line - 1 == docLine },
                                 onTap            = { abs ->
                                     focus.requestFocus()
@@ -628,6 +670,10 @@ fun EditorRendererV2(
                                 },
                                 language         = language,
                                 theme            = theme,
+                                searchRanges     = searchMatchRangesByLine[docLine].orEmpty(),
+                                activeSearchRange = activeSearchMatch
+                                    ?.takeIf { it.first == docLine }
+                                    ?.second,
                                 wordWrap         = wordWrap,
                                 containerWidthPx = if (wordWrap) lineTextWidthPx else 0,
                                 // Blink alpha from the single hoisted InfiniteTransition.
@@ -764,6 +810,8 @@ fun EditorRendererV2(
     }
 }
 
+private const val LARGE_EDIT_SCROLL_SUPPRESS_THRESHOLD_CHARS = 100_000
+
 /**
  * Maps a pointer position within the LazyColumn coordinate space to a document character offset.
  * Used by the global drag handler to extend selection across line boundaries.
@@ -776,7 +824,7 @@ private fun posToDragOffset(
     posX: Float,
     posY: Float,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    viewModel: EditorViewModelV2,
+    viewModel: EditorViewModel,
     density: androidx.compose.ui.unit.Density,
     gutterWidthPx: Float,
     hScrollValue: Int,
@@ -802,7 +850,7 @@ private fun posToDragOffset(
     val lr = layoutResultCache[displayLine]
     if (lr != null) {
         val xInCanvas = (posX - contentStartPx + hScrollValue).coerceAtLeast(0f)
-        // Subtract 1dp top-padding applied inside LineViewV2.
+        // Subtract 1dp top-padding applied inside LineView.
         val yInCanvas = (posY - item.offset - (1f * density.density)).coerceAtLeast(0f)
         val charOffset = lr.getOffsetForPosition(
             androidx.compose.ui.geometry.Offset(xInCanvas, yInCanvas)

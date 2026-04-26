@@ -9,7 +9,7 @@ import com.reqlab.editor.core.DocumentModel
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.ui.shared.MainScreen
 import com.reqlab.editor.ui.EditorDisplayState
-import com.reqlab.editor.ui.EditorViewModelV2
+import com.reqlab.editor.ui.EditorViewModel
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestEditorTab
 import org.junit.Rule
@@ -19,7 +19,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
- * Regression tests for EditorRendererV2 bugs fixed in April 2026:
+ * Regression tests for EditorRenderer bugs fixed in April 2026:
  *
  *  1. Content disappears when word-wrap is toggled off
  *  2. Fold guide lines not visible (foldVersion not emitted)
@@ -82,7 +82,7 @@ class EditorV2RegressionTest {
 
     @Test
     fun foldVersion_increments_after_initial_fold_computation() {
-        val vm = EditorViewModelV2(
+        val vm = EditorViewModel(
             initialText = "{\n  \"a\": 1,\n  \"b\": 2\n}",
             languageMode = LanguageMode.JSON,
         )
@@ -100,7 +100,7 @@ class EditorV2RegressionTest {
 
     @Test
     fun toggleFold_increments_foldVersion() {
-        val vm = EditorViewModelV2(
+        val vm = EditorViewModel(
             initialText = "{\n  \"a\": 1,\n  \"b\": 2\n}",
             languageMode = LanguageMode.JSON,
         )
@@ -162,7 +162,7 @@ class EditorV2RegressionTest {
 
     @Test
     fun onExternalTextChanged_preserves_cursor_position() {
-        val vm = EditorViewModelV2(
+        val vm = EditorViewModel(
             initialText = "hello world",
             languageMode = LanguageMode.PLAIN_TEXT,
         )
@@ -187,7 +187,7 @@ class EditorV2RegressionTest {
 
     @Test
     fun editSequence_prevents_stale_external_text_overwrite() {
-        val vm = EditorViewModelV2(
+        val vm = EditorViewModel(
             initialText = "original",
             languageMode = LanguageMode.PLAIN_TEXT,
         )
@@ -231,7 +231,7 @@ class EditorV2RegressionTest {
 
     @Test
     fun rapid_inserts_produce_correct_document_content() {
-        val vm = EditorViewModelV2(
+        val vm = EditorViewModel(
             initialText = "",
             languageMode = LanguageMode.PLAIN_TEXT,
         )
@@ -254,7 +254,7 @@ class EditorV2RegressionTest {
 
     @Test
     fun rapid_insert_then_newline_then_more_chars_all_present() {
-        val vm = EditorViewModelV2(
+        val vm = EditorViewModel(
             initialText = "",
             languageMode = LanguageMode.PLAIN_TEXT,
         )

@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -291,22 +292,24 @@ private fun ConsoleRow(entry: ConsoleEntry) {
     }
     val timeStr = formatTimestamp(entry.timestamp)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 1.dp)
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(timeStr, color = ReqLabColors.OnSurfaceDim, fontSize = 11.sp, fontFamily = CodeFontFamily)
-        Text(
-            prefix,
-            color = color,
-            fontSize = 11.sp,
-            fontFamily = CodeFontFamily,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(entry.message, color = color, fontSize = 11.sp, fontFamily = CodeFontFamily)
+    SelectionContainer {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 1.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(timeStr, color = ReqLabColors.OnSurfaceDim, fontSize = 11.sp, fontFamily = CodeFontFamily)
+            Text(
+                prefix,
+                color = color,
+                fontSize = 11.sp,
+                fontFamily = CodeFontFamily,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(entry.message, color = color, fontSize = 11.sp, fontFamily = CodeFontFamily)
+        }
     }
 }
 
