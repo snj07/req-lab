@@ -85,9 +85,7 @@ class EditorEngineIntegrationTest {
         assertEquals(null, tab.response, "Response must be null before execution")
         // The user cannot set response.bodyText directly through tab state —
         // it comes only from the network layer via tab.response assignment.
-        // Verifying that the tab has no setter that would allow UI mutation directly.
-        val responseClass = tab.response?.javaClass
-        assertEquals(null, responseClass, "No response object present before execution")
+        // The null assertion above already verifies the read-only contract.
     }
 
     // ── 6. Mode switch re-validates ─────────────────────────────
