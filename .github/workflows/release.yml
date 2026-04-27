@@ -260,5 +260,4 @@ jobs:
             artifacts/*.dmg
             artifacts/*.msi
             artifacts/*.deb
-            artifacts/*.rpm
             artifacts/*.jar
