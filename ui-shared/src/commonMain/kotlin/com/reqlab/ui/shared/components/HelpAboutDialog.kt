@@ -33,7 +33,7 @@ import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.theme.ReqLabColors
 
-private const val APP_VERSION = "1.1.0"
+private const val APP_VERSION = "1.2.0"
 
 @Composable
 fun HelpAboutDialog(state: AppState) {

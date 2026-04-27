@@ -49,6 +49,13 @@ Note for macOS users: If you see a warning that the app "cannot be opened becaus
 - Right-click the app -> Open -> Open (bypasses the warning once), or
 - Go to System Settings -> Privacy & Security -> "Open Anyway" (after attempting to open the app).
 
+### Sample Files to Get Started
+
+You can import these sample fixtures from the repo:
+
+- Collection sample: [qa-tests/fixtures/reqlab-test-collection.json](qa-tests/fixtures/reqlab-test-collection.json)
+- Environment sample: [qa-tests/fixtures/reqlab-test-environment.json](qa-tests/fixtures/reqlab-test-environment.json)
+
 ## Features
 
 ### 🚀 HTTP Requests
