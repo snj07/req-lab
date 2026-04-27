@@ -27,6 +27,10 @@ fun main() {
     System.setProperty("apple.awt.application.name", "ReqLab")
     System.setProperty("java.awt.application.name", "ReqLab")
 
+    // Set the dock/taskbar icon from the classpath so that `java -jar ReqLab.jar`
+    // shows the correct icon on all OSes without extra JVM flags.
+    applyAppIcon()
+
     application {
     val state = remember {
         AppState(openDefaultTab = false).also {
@@ -70,5 +74,29 @@ fun main() {
             MainScreen(state)
         }
     }
+    }
+}
+
+/**
+ * Sets the application dock / taskbar icon from the bundled classpath resource so that
+ * running `java -jar ReqLab.jar` shows the correct icon on all supported OSes without
+ * requiring any extra JVM flags (e.g. `-Xdock:icon` on macOS).
+ *
+ * Uses [java.awt.Taskbar] (available since Java 9).  Any unsupported platform or JVM
+ * silently swallows the exception and falls back to the Compose [Window] icon.
+ */
+private fun applyAppIcon() {
+    try {
+        val iconUrl = object {}::class.java.classLoader
+            .getResource("icons/reqlab-icon-256.png") ?: return
+        val image = javax.imageio.ImageIO.read(iconUrl) ?: return
+        if (java.awt.Taskbar.isTaskbarSupported()) {
+            val taskbar = java.awt.Taskbar.getTaskbar()
+            if (taskbar.isSupported(java.awt.Taskbar.Feature.ICON_IMAGE)) {
+                taskbar.iconImage = image
+            }
+        }
+    } catch (_: Exception) {
+        // Non-GUI environment or JVM / OS that does not support Taskbar — ignore.
     }
 }

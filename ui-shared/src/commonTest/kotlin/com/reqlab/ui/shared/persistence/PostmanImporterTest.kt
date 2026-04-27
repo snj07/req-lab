@@ -346,7 +346,107 @@ class PostmanImporterTest {
         assertEquals("", PostmanImporter.convertScript(""))
     }
 
-    // ── importEnvironment ──────────────────────────────────────────────────────
+    // ── convertScript – legacy postman.* namespace ─────────────────────────────
+
+    @Test
+    fun `convertScript replaces postman_setEnvironmentVariable`() {
+        assertEquals(
+            "reqlab.environment.set('SESSION', jsonData.sessionId);",
+            PostmanImporter.convertScript("postman.setEnvironmentVariable('SESSION', jsonData.sessionId);")
+        )
+    }
+
+    @Test
+    fun `convertScript replaces postman_getEnvironmentVariable`() {
+        assertEquals(
+            "reqlab.environment.get('USERNAME')",
+            PostmanImporter.convertScript("postman.getEnvironmentVariable('USERNAME')")
+        )
+    }
+
+    @Test
+    fun `convertScript replaces postman_clearEnvironmentVariable`() {
+        assertEquals(
+            "reqlab.environment.unset('key')",
+            PostmanImporter.convertScript("postman.clearEnvironmentVariable('key')")
+        )
+    }
+
+    @Test
+    fun `convertScript replaces postman_setGlobalVariable`() {
+        assertEquals(
+            "reqlab.environment.set('g','v')",
+            PostmanImporter.convertScript("postman.setGlobalVariable('g','v')")
+        )
+    }
+
+    @Test
+    fun `convertScript replaces postman_getGlobalVariable`() {
+        assertEquals(
+            "reqlab.environment.get('g')",
+            PostmanImporter.convertScript("postman.getGlobalVariable('g')")
+        )
+    }
+
+    @Test
+    fun `convertScript comments out postman_setNextRequest`() {
+        val result = PostmanImporter.convertScript("postman.setNextRequest(null);")
+        assertTrue(result.contains("// postman.setNextRequest is not supported in ReqLab"))
+    }
+
+    @Test
+    fun `convertScript replaces responseCode_code`() {
+        assertEquals("response.code", PostmanImporter.convertScript("responseCode.code"))
+    }
+
+    @Test
+    fun `convertScript replaces responseCode_name`() {
+        assertEquals("response.status", PostmanImporter.convertScript("responseCode.name"))
+    }
+
+    @Test
+    fun `convertScript replaces standalone responseBody`() {
+        assertEquals(
+            "JSON.parse(response.text())",
+            PostmanImporter.convertScript("JSON.parse(responseBody)")
+        )
+    }
+
+    @Test
+    fun `convertScript does not replace responseBody inside longer identifier`() {
+        // e.g. a user variable named responseBodyData should not be touched
+        val input = "var responseBodyData = 1;"
+        assertEquals(input, PostmanImporter.convertScript(input))
+    }
+
+    @Test
+    fun `convertScript handles full legacy login script`() {
+        val input = """
+            var jsonData = JSON.parse(responseBody);
+            if (responseCode.code === 200) {
+                postman.setEnvironmentVariable('SESSION_ID', jsonData.sessionId);
+                postman.setEnvironmentVariable('ORG_ID', jsonData.orgId);
+                console.log("Logged in as " + postman.getEnvironmentVariable('USERNAME'));
+            } else {
+                postman.setNextRequest(null);
+                console.log("Login failed");
+            }
+        """.trimIndent()
+        val result = PostmanImporter.convertScript(input)
+        // All postman.* and old globals must be gone
+        assertFalse(result.contains("postman.setEnvironmentVariable"), "should not contain old setEnvVar")
+        assertFalse(result.contains("postman.getEnvironmentVariable"), "should not contain old getEnvVar")
+        assertFalse(result.contains("responseCode.code"), "should not contain responseCode.code")
+        assertFalse(Regex("""\bresponseBody\b""").containsMatchIn(result), "should not contain standalone responseBody")
+        // Converted calls must be present
+        assertTrue(result.contains("reqlab.environment.set"), "set converted")
+        assertTrue(result.contains("reqlab.environment.get"), "get converted")
+        assertTrue(result.contains("response.code"), "responseCode.code converted")
+        assertTrue(result.contains("response.text()"), "responseBody converted")
+        assertTrue(result.contains("// postman.setNextRequest is not supported in ReqLab"), "setNextRequest commented")
+    }
+
+
 
     @Test
     fun `importEnvironment parses name and variables`() {

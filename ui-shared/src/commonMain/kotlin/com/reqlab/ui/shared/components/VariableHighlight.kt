@@ -63,38 +63,84 @@ import com.reqlab.ui.shared.theme.ReqLabColors
 // ── Constants ─────────────────────────────────────────────────────
 
 /**
- * Strict variable-name pattern — only `[a-zA-Z0-9_]` characters are valid
- * (Issue 5). Tokens like `{{my var}}` or `{{a-b}}` are intentionally excluded.
+ * Variable token pattern used across URL/body/header editors.
+ *
+ * Postman exports and real-world projects frequently use names like
+ * `{{base-url}}`, `{{api.version}}`, or `{{ my_var }}`. We accept any
+ * non-brace content inside `{{...}}` and normalize surrounding whitespace.
  */
-private val VARIABLE_REGEX = Regex("""\{\{([a-zA-Z0-9_]+)\}\}""")
+private val VARIABLE_REGEX = Regex("""\{\{\s*([^{}\r\n]+?)\s*\}\}""")
 private const val VARIABLE_TAG = "variable"
 private fun normalizeVariableDisplayName(rawName: String): String =
     rawName.trim().trim('{', '}').trim()
 
 
-/** Orange token colour — mirrors Postman's variable highlight style. */
-internal val VariableHighlightColor = Color(0xFFE67E22)
+/** Orange token colour — bright amber so it clearly stands out against both dark and light editor backgrounds. */
+internal val VariableHighlightColor = Color(0xFFF97316)
+
+/** Red token colour — shown when the variable has no value in the active environment. */
+internal val VariableUnresolvedColor = Color(0xFFEF4444)
 
 private val VARIABLE_SPAN_STYLE = SpanStyle(
     color = VariableHighlightColor,
     fontWeight = FontWeight.SemiBold,
-    background = VariableHighlightColor.copy(alpha = 0.10f),
+    background = VariableHighlightColor.copy(alpha = 0.15f),
+)
+
+private val VARIABLE_UNRESOLVED_SPAN_STYLE = SpanStyle(
+    color = VariableUnresolvedColor,
+    fontWeight = FontWeight.SemiBold,
+    background = VariableUnresolvedColor.copy(alpha = 0.12f),
 )
 
 // ── Public utilities (also used in unit tests) ─────────────────────
 
-/**
- * Returns every `{{name}}` variable name found in [text], in order of
- * appearance. Only strict [a-zA-Z0-9_] variable names are matched.
- */
+/** Returns every `{{name}}` variable name found in [text], in order. */
 fun parseVariableNames(text: String): List<String> =
-    VARIABLE_REGEX.findAll(text).map { it.groupValues[1] }.toList()
+    VARIABLE_REGEX.findAll(text)
+        .map { normalizeVariableDisplayName(it.groupValues[1]) }
+        .filter { it.isNotEmpty() }
+        .toList()
+
+/** Returns the variable name under [offset], if the cursor is inside `{{...}}`. */
+fun variableNameAtOffset(text: String, offset: Int): String? {
+    if (offset < 0 || offset > text.length) return null
+    for (match in VARIABLE_REGEX.findAll(text)) {
+        val start = match.range.first
+        val endExclusive = match.range.last + 1
+        if (offset in start..endExclusive) {
+            val name = normalizeVariableDisplayName(match.groupValues[1])
+            if (name.isNotEmpty()) return name
+        }
+    }
+    return null
+}
+
+/**
+ * Returns per-character-range color spans for every `{{...}}` token in [line].
+ *
+ * Tokens whose name is present in [definedNames] use [VariableHighlightColor] (orange).
+ * Tokens that are not defined anywhere use [VariableUnresolvedColor] (red), so the user
+ * can immediately see which variables are missing from the active environment.
+ */
+fun variableRangesForLine(
+    line: String,
+    definedNames: Set<String>,
+): List<Pair<IntRange, Color>> =
+    VARIABLE_REGEX.findAll(line).mapNotNull { match ->
+        val name = normalizeVariableDisplayName(match.groupValues[1])
+        if (name.isEmpty()) return@mapNotNull null
+        val color = if (name in definedNames) VariableHighlightColor else VariableUnresolvedColor
+        match.range to color
+    }.toList()
 
 /**
  * Builds an [AnnotatedString] that colour-highlights every `{{variable}}`
- * token with [VARIABLE_SPAN_STYLE] and attaches a VARIABLE_TAG string
- * annotation (containing the variable name) to each span so click/cursor
- * detection can retrieve the name.
+ * token with [VARIABLE_SPAN_STYLE] (orange) and attaches a VARIABLE_TAG string
+ * annotation containing the variable name for click/cursor detection.
+ *
+ * All tokens are treated as resolved. Use [highlightVariablesWithStatus] when
+ * you have the set of defined variable names available.
  */
 fun highlightVariables(text: String): AnnotatedString = buildAnnotatedString {
     var lastIndex = 0
@@ -102,11 +148,42 @@ fun highlightVariables(text: String): AnnotatedString = buildAnnotatedString {
         append(text.substring(lastIndex, match.range.first))
         val spanStart = length
         withStyle(VARIABLE_SPAN_STYLE) { append(match.value) }
-        addStringAnnotation(VARIABLE_TAG, match.groupValues[1], spanStart, length)
+        val variableName = normalizeVariableDisplayName(match.groupValues[1])
+        if (variableName.isNotEmpty()) {
+            addStringAnnotation(VARIABLE_TAG, variableName, spanStart, length)
+        }
         lastIndex = match.range.last + 1
     }
     if (lastIndex < text.length) append(text.substring(lastIndex))
 }
+
+/**
+ * Builds an [AnnotatedString] that colour-highlights every `{{variable}}` token
+ * using **two colours** depending on resolution status:
+ *  - **Orange** ([VARIABLE_SPAN_STYLE]) — the name appears in [definedNames] (resolved)
+ *  - **Red** ([VARIABLE_UNRESOLVED_SPAN_STYLE]) — the name is absent from [definedNames]
+ *
+ * Also attaches VARIABLE_TAG string annotations so click-to-edit works the same way.
+ */
+fun highlightVariablesWithStatus(text: String, definedNames: Set<String>): AnnotatedString =
+    buildAnnotatedString {
+        var lastIndex = 0
+        for (match in VARIABLE_REGEX.findAll(text)) {
+            append(text.substring(lastIndex, match.range.first))
+            val spanStart = length
+            val varName = normalizeVariableDisplayName(match.groupValues[1])
+            val spanStyle = if (varName.isNotEmpty() && varName in definedNames)
+                VARIABLE_SPAN_STYLE
+            else
+                VARIABLE_UNRESOLVED_SPAN_STYLE
+            withStyle(spanStyle) { append(match.value) }
+            if (varName.isNotEmpty()) {
+                addStringAnnotation(VARIABLE_TAG, varName, spanStart, length)
+            }
+            lastIndex = match.range.last + 1
+        }
+        if (lastIndex < text.length) append(text.substring(lastIndex))
+    }
 
 // ── VariableAwareTextField ────────────────────────────────────────────
 
@@ -148,11 +225,20 @@ fun VariableAwareTextField(
     ),
     state: AppState? = null,
 ) {
+    // Resolved variable names from whatever environment/collection layers are active.
+    // Reading mutableState properties of AppState inside the composable body automatically
+    // registers this composable for recomposition when the environment changes.
+    val definedNames: Set<String> = if (state != null)
+        state.activeVariableLayers().flatMap { it.keys }.toSet()
+    else
+        emptySet()
+
     // Internal TextFieldValue that carries the highlighted AnnotatedString.
     var fieldValue by remember {
         mutableStateOf(
             TextFieldValue(
-                if (state != null) highlightVariables(value) else AnnotatedString(value),
+                if (state != null) highlightVariablesWithStatus(value, definedNames)
+                else AnnotatedString(value),
             ),
         )
     }
@@ -166,12 +252,20 @@ fun VariableAwareTextField(
     // triggers an unnecessary recomposition.
     val pendingClickRef = remember { object { var value = false } }
 
-    // Sync when an external value change overrides the text (e.g. params table
-    // updates the URL, or a saved request is loaded). Rebuilds highlighting only
-    // when the plain text has actually changed to avoid losing cursor position.
+    // Sync when the external text value changes (e.g. params table updates the URL).
     LaunchedEffect(value) {
         if (fieldValue.text != value) {
-            val annotated = if (state != null) highlightVariables(value) else AnnotatedString(value)
+            val annotated = if (state != null) highlightVariablesWithStatus(value, definedNames)
+                            else AnnotatedString(value)
+            fieldValue = fieldValue.copy(annotatedString = annotated)
+        }
+    }
+
+    // Re-colour when the active environment/variables change without a text change
+    // (e.g. user activates a different env or adds a new variable).
+    LaunchedEffect(definedNames) {
+        if (state != null) {
+            val annotated = highlightVariablesWithStatus(fieldValue.text, definedNames)
             fieldValue = fieldValue.copy(annotatedString = annotated)
         }
     }
@@ -185,7 +279,8 @@ fun VariableAwareTextField(
         BasicTextField(
             value = fieldValue,
             onValueChange = { new ->
-                val annotated = if (state != null) highlightVariables(new.text) else AnnotatedString(new.text)
+                val annotated = if (state != null) highlightVariablesWithStatus(new.text, definedNames)
+                                else AnnotatedString(new.text)
                 val newFieldValue = TextFieldValue(
                     annotatedString = annotated,
                     selection = new.selection,

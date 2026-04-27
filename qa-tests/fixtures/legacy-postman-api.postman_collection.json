@@ -1,0 +1,82 @@
+{
+  "info": {
+    "name": "Legacy Postman API Demo",
+    "description": "Fixture collection that uses the old postman.* sandbox API (pre-pm era). Used to verify ReqLab import converts all legacy calls correctly. All URLs, header names, and variable names are generic placeholders.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "url": "{{api_base_url}}/api/auth/login",
+        "header": [
+          { "key": "Content-Type", "value": "application/json", "disabled": false },
+          { "key": "X-Client-Id", "value": "{{client_id}}", "disabled": false }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"{{login_user}}\", \"password\": \"{{login_pass}}\"}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var jsonData = JSON.parse(responseBody);",
+              "if (responseCode.code === 200) {",
+              "    console.log(\"Login succeeded for user \" + postman.getEnvironmentVariable('login_user'));",
+              "    postman.setEnvironmentVariable('session_token', jsonData.token);",
+              "    postman.setEnvironmentVariable('user_session_id', jsonData.token);",
+              "    postman.setEnvironmentVariable('tenant_id', jsonData.tenantId);",
+              "} else {",
+              "    postman.setNextRequest(null);",
+              "    console.log(\"Login failed for user \" + postman.getEnvironmentVariable('login_user') + \", abort process\");",
+              "    console.log(jsonData);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Profile",
+      "request": {
+        "method": "GET",
+        "url": "{{api_base_url}}/api/users/me",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{session_token}}", "disabled": false },
+          { "key": "X-Tenant-Id", "value": "{{tenant_id}}", "disabled": false }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var tenantId = postman.getEnvironmentVariable('tenant_id');",
+              "postman.setGlobalVariable('last_tenant_id', tenantId);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var body = JSON.parse(responseBody);",
+              "postman.setEnvironmentVariable('display_name', body.displayName);"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

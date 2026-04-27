@@ -64,7 +64,7 @@ private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
  * Extracted as a package-level function so it can be unit-tested independently of
  * the Compose composable that uses it (issue M-5).
  */
-internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 1_000_000
+internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 20_000_000
 
 // ── Body categories (top-level chips) ──────────────────────────
 
@@ -281,6 +281,12 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 val editorEngine = remember { EditorEngine() }
                 var inlineErrors by remember { mutableStateOf<List<InlineEditorError>>(emptyList()) }
                 var validationPaused by remember { mutableStateOf(false) }
+                var bodyPopupVariable by remember { mutableStateOf<String?>(null) }
+                // Compute the set of all defined variable names from all active layers
+                // (env → collection → globals). Used to colour tokens orange (resolved)
+                // vs red (unresolved) inside the code editor.
+                val definedVarNames: Set<String> = state?.activeVariableLayers()
+                    ?.flatMap { it.keys }?.toSet() ?: emptySet()
 
                 // Debounce validation — avoid calling EditorEngine.validate() on
                 // every keystroke. For large files validation runs on Dispatchers.Default
@@ -336,29 +342,46 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                         )
                     }
-                    CodeEditor(
-                        text = tab.bodyContent,
-                        onTextChange = { tab.bodyContent = it; onDirty() },
-                        language = language,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        showToolbar = true,
-                        enableFolding = language != SyntaxLanguage.PLAIN,
-                        enableSearch = true,
-                        enableFormat = language != SyntaxLanguage.PLAIN,
-                        enableWordWrap = true,
-                        enableCopy = true,
-                        enableDownload = false,
-                        inlineErrors = inlineErrors,
-                        placeholder = when (tab.bodyType) {
-                            BodyType.JSON       -> "{\n  \n}"
-                            BodyType.XML        -> "<root>\n  \n</root>"
-                            BodyType.HTML       -> "<html>\n  <body></body>\n</html>"
-                            BodyType.JAVASCRIPT -> "// script\n"
-                            BodyType.GRAPHQL    -> "query {\n  \n}"
-                            else                -> "Enter request body\u2026"
-                        },
-                        testTagPrefix = "body-editor",
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        CodeEditor(
+                            text = tab.bodyContent,
+                            onTextChange = { tab.bodyContent = it; onDirty() },
+                            language = language,
+                            modifier = Modifier.fillMaxSize(),
+                            showToolbar = true,
+                            enableFolding = language != SyntaxLanguage.PLAIN,
+                            enableSearch = true,
+                            enableFormat = language != SyntaxLanguage.PLAIN,
+                            enableWordWrap = true,
+                            enableCopy = true,
+                            enableDownload = false,
+                            inlineErrors = inlineErrors,
+                            placeholder = when (tab.bodyType) {
+                                BodyType.JSON       -> "{\n  \n}"
+                                BodyType.XML        -> "<root>\n  \n</root>"
+                                BodyType.HTML       -> "<html>\n  <body></body>\n</html>"
+                                BodyType.JAVASCRIPT -> "// script\n"
+                                BodyType.GRAPHQL    -> "query {\n  \n}"
+                                else                -> "Enter request body\u2026"
+                            },
+                            testTagPrefix = "body-editor",
+                            onCursorTap = { offset ->
+                                bodyPopupVariable = variableNameAtOffset(tab.bodyContent, offset)
+                            },
+                            lineVariableSpans = if (state != null && tab.bodyContent.contains("{{")) {
+                                { line, _ -> variableRangesForLine(line, definedVarNames) }
+                            } else null,
+                        )
+
+                        bodyPopupVariable?.let { variableName ->
+                            VariableEditorPopup(
+                                variableName = variableName,
+                                state = state,
+                                onDismiss = { bodyPopupVariable = null },
+                            )
+                        }
+                    }
+
                 }
             }
         }

@@ -92,7 +92,7 @@ object PostmanImporter {
         val method = normalizeMethod(requestObj["method"]?.jsonPrimitive?.contentOrNull)
         val url = parseUrl(requestObj["url"])
         val headers = parseHeaders(requestObj["header"])
-        val (bodyType, bodyContent) = parseBody(requestObj["body"])
+        val (bodyType, bodyContent) = parseBody(requestObj["body"], headers)
         val auth = parseAuth(requestObj["auth"])
         val (preRequestScript, testScript) = parseEvents(obj["event"])
         return RequestDto(
@@ -171,7 +171,7 @@ object PostmanImporter {
 
     private data class ParsedBody(val type: String?, val content: String?)
 
-    private fun parseBody(bodyElement: JsonElement?): Pair<String?, String?> {
+    private fun parseBody(bodyElement: JsonElement?, headers: List<Pair<String, String>>): Pair<String?, String?> {
         if (bodyElement == null || bodyElement is JsonNull) return null to null
         val bodyObj = runCatching { bodyElement.jsonObject }.getOrNull() ?: return null to null
         val mode = bodyObj["mode"]?.jsonPrimitive?.contentOrNull ?: return null to null
@@ -181,7 +181,7 @@ object PostmanImporter {
                 val language = bodyObj["options"]?.jsonObject
                     ?.get("raw")?.jsonObject
                     ?.get("language")?.jsonPrimitive?.contentOrNull ?: "text"
-                val bodyType = if (language.equals("json", ignoreCase = true)) "JSON" else "RAW_TEXT"
+                val bodyType = if (isJsonRawBody(language, raw, headers)) "JSON" else "RAW_TEXT"
                 bodyType to raw
             }
             "formdata" -> {
@@ -215,6 +215,22 @@ object PostmanImporter {
             "none" -> null to null
             else -> "RAW_TEXT" to (bodyObj["raw"]?.jsonPrimitive?.contentOrNull)
         }
+    }
+
+    private fun isJsonRawBody(language: String?, raw: String, headers: List<Pair<String, String>>): Boolean {
+        if (language.equals("json", ignoreCase = true)) return true
+
+        val contentType = headers
+            .firstOrNull { it.first.equals("Content-Type", ignoreCase = true) }
+            ?.second
+            ?.lowercase()
+            ?: ""
+        if ("json" in contentType || "+json" in contentType) return true
+
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return false
+        return (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+            (trimmed.startsWith("[") && trimmed.endsWith("]"))
     }
 
     private data class ParsedAuth(
@@ -297,6 +313,8 @@ object PostmanImporter {
     fun convertScript(script: String): String {
         if (script.isBlank()) return script
         return script
+            // ── Modern pm.* API ────────────────────────────────────────────────
+
             // Test / assertion
             .replace("pm.test(", "reqlab.test(")
             .replace("pm.expect(", "reqlab.expect(")
@@ -320,6 +338,30 @@ object PostmanImporter {
             .replace("pm.collectionVariables.unset(", "reqlab.environment.unset(")
             // sendRequest is not supported — comment it out
             .replace("pm.sendRequest(", "// pm.sendRequest is not supported in ReqLab\n// pm.sendRequest(")
+
+            // ── Legacy postman.* API (pre-pm era) ─────────────────────────────
+            // Old Postman sandbox used `postman.*` before the `pm.*` namespace was
+            // introduced. Collections exported from older Postman versions still use it.
+
+            // Environment variable helpers
+            .replace("postman.getEnvironmentVariable(", "reqlab.environment.get(")
+            .replace("postman.setEnvironmentVariable(", "reqlab.environment.set(")
+            .replace("postman.clearEnvironmentVariable(", "reqlab.environment.unset(")
+            .replace("postman.clearEnvironmentVariables(", "reqlab.environment.clear(")
+            // Global variable helpers (map to environment scope in ReqLab)
+            .replace("postman.getGlobalVariable(", "reqlab.environment.get(")
+            .replace("postman.setGlobalVariable(", "reqlab.environment.set(")
+            .replace("postman.clearGlobalVariable(", "reqlab.environment.unset(")
+            .replace("postman.clearGlobalVariables(", "reqlab.environment.clear(")
+            // setNextRequest — collection runner flow control; not applicable outside a runner
+            .replace("postman.setNextRequest(", "// postman.setNextRequest is not supported in ReqLab\n// postman.setNextRequest(")
+
+            // ── Legacy global sandbox shortcuts ───────────────────────────────
+            // responseCode.code / responseCode.name before responseCode itself
+            .replace("responseCode.code", "response.code")
+            .replace("responseCode.name", "response.status")
+            // responseBody as a standalone word (avoid matching e.g. responseBodyData)
+            .replace(Regex("""\bresponseBody\b"""), "response.text()")
     }
 
     // ── Environment import ──────────────────────────────────────────────────────

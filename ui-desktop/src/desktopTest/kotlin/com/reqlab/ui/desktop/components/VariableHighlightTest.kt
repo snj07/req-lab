@@ -39,10 +39,9 @@ class VariableHighlightTest {
     }
 
     @Test
-    fun `parseVariableNames – spaces in token name are not matched`() {
-        // Strict regex only allows [a-zA-Z0-9_]; spaces cause no match
+    fun `parseVariableNames – surrounding spaces are trimmed`() {
         val names = parseVariableNames("{{ my var }}")
-        assertEquals(emptyList<String>(), names)
+        assertEquals(listOf("my var"), names)
     }
 
     @Test
@@ -58,10 +57,15 @@ class VariableHighlightTest {
     }
 
     @Test
-    fun `parseVariableNames – hyphens are not matched`() {
-        // Hyphens are not in [a-zA-Z0-9_]
+    fun `parseVariableNames – hyphens are matched`() {
         val names = parseVariableNames("{{my-var}}")
-        assertEquals(emptyList<String>(), names)
+        assertEquals(listOf("my-var"), names)
+    }
+
+    @Test
+    fun `parseVariableNames – dots are matched`() {
+        val names = parseVariableNames("{{api.version}}")
+        assertEquals(listOf("api.version"), names)
     }
 
     @Test
@@ -133,5 +137,21 @@ class VariableHighlightTest {
     fun `highlightVariables – empty string produces empty AnnotatedString`() {
         val annotated = highlightVariables("")
         assertEquals("", annotated.text)
+    }
+
+    @Test
+    fun `variableNameAtOffset – finds token inside JSON body`() {
+        val text = "{\"host\":\"{{base-url}}\",\"v\":\"{{api.version}}\"}"
+        val baseOffset = text.indexOf("base-url") + 2
+        val versionOffset = text.indexOf("api.version") + 1
+
+        assertEquals("base-url", variableNameAtOffset(text, baseOffset))
+        assertEquals("api.version", variableNameAtOffset(text, versionOffset))
+    }
+
+    @Test
+    fun `variableNameAtOffset – returns null outside token`() {
+        val text = "{\"name\":\"plain\"}"
+        assertEquals(null, variableNameAtOffset(text, 3))
     }
 }

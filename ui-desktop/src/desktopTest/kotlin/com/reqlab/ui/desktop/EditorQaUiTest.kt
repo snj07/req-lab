@@ -2,9 +2,11 @@
 
 package com.reqlab.ui.desktop
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -212,6 +214,27 @@ class BasicEditorInteractionTest {
 
         // Editor must still render after toggle
         composeRule.onNodeWithTag("body-editor", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun json_body_with_variable_renders_without_chip_bar() {
+        // Variables in the body editor are now opened inline by clicking on the
+        // {{token}} in the code editor itself — no separate chip bar is shown.
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{{base-url}}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        // Body editor must still render.
+        composeRule.onNodeWithTag("body-editor", useUnmergedTree = true).assertIsDisplayed()
+        // Chip bar must no longer be present.
+        composeRule.onAllNodesWithTag("body-variable-chip-0", useUnmergedTree = true).assertCountEquals(0)
+        // No popup on load.
+        composeRule.onAllNodesWithTag("variable-editor-popup", useUnmergedTree = true).assertCountEquals(0)
     }
 }
 

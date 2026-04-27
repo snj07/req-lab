@@ -229,4 +229,57 @@ class PostmanImportIntegrationTest {
         assertTrue(testScript.contains("reqlab.expect"), "Expected reqlab.expect but got: $testScript")
         assertTrue(testScript.contains("reqlab.response"), "Expected reqlab.response but got: $testScript")
     }
+
+    @Test
+    fun importCollectionFromString_infersRawJsonFromContentTypeHeader() {
+        val state = AppState(withDemoData = false)
+        val postmanJson = """
+        {
+          "info": {"name":"BodyType Header","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+          "item": [{
+            "name": "Create",
+            "request": {
+              "method": "POST",
+              "url": "https://api.example.com/items",
+              "header": [{"key":"Content-Type","value":"application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"name\":\"Alice\"}"
+              }
+            }
+          }]
+        }
+        """.trimIndent()
+
+        ImportExportRepository.importCollectionFromString(state, postmanJson)
+        val req = state.collections[0].children[0]
+        assertEquals("JSON", req.bodyType?.name)
+        assertEquals("{\"name\":\"Alice\"}", req.bodyContent)
+    }
+
+    @Test
+    fun importCollectionFromString_infersRawJsonFromBodyShapeWhenLanguageMissing() {
+        val state = AppState(withDemoData = false)
+        val postmanJson = """
+        {
+          "info": {"name":"BodyType Shape","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+          "item": [{
+            "name": "Update",
+            "request": {
+              "method": "PUT",
+              "url": "https://api.example.com/items/1",
+              "body": {
+                "mode": "raw",
+                "raw": "  [1,2,3]  "
+              }
+            }
+          }]
+        }
+        """.trimIndent()
+
+        ImportExportRepository.importCollectionFromString(state, postmanJson)
+        val req = state.collections[0].children[0]
+        assertEquals("JSON", req.bodyType?.name)
+        assertEquals("  [1,2,3]  ", req.bodyContent)
+    }
 }

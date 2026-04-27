@@ -134,6 +134,8 @@ fun CodeEditor(
     placeholder: String = "",
     inlineErrors: List<InlineEditorError> = emptyList(),
     testTagPrefix: String = "code-editor",
+    onCursorTap: ((Int) -> Unit)? = null,
+    lineVariableSpans: ((lineText: String, lineStartOffset: Int) -> List<Pair<IntRange, androidx.compose.ui.graphics.Color>>)? = null,
 ) {
     val isReadOnly = onTextChange == null
 
@@ -304,6 +306,8 @@ fun CodeEditor(
             onCopyRequest  = { text -> platformCopyToClipboard(text) },
             searchMatchRangesByLine = searchMatchRangesByLine,
             activeSearchMatch = activeSearchMatch,
+            onPrimaryTapOffset = onCursorTap,
+            lineVariableSpans = lineVariableSpans,
         )
     }
 }

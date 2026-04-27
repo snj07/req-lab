@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -153,6 +154,15 @@ fun EditorRenderer(
     onHorizontalScroll: ((Int) -> Unit)? = null,
     /** Called once after composition with the internal horizontal ScrollState. For testing. */
     onScrollStateReady: ((androidx.compose.foundation.ScrollState) -> Unit)? = null,
+    /** Called when the user primary-clicks/taps in the editor content area. */
+    onPrimaryTapOffset: ((Int) -> Unit)? = null,
+    /**
+     * Optional per-line variable colour resolver. Called with the line text and its absolute
+     * start offset in the document; returns a list of (range-relative-to-line, Color) pairs
+     * that are overlaid on top of the syntax highlighting so `{{token}}` spans are coloured.
+     * Pass `null` (the default) to leave the editor with plain syntax colours.
+     */
+    lineVariableSpans: ((lineText: String, lineStartOffset: Int) -> List<Pair<IntRange, Color>>)? = null,
 ) {
     val state        by viewModel.state.collectAsState()
     val listState    = rememberLazyListState()
@@ -541,6 +551,10 @@ fun EditorRenderer(
                             viewModel.document.lineText(docLine).length else 0
                     )
                     val cursorHere    = if (state.cursorOffset in lineStart..lineEnd) state.cursorOffset else -1
+                    val varSpans: List<Pair<IntRange, Color>> = if (lineVariableSpans != null) {
+                        val lineTextStr = if (docLine < viewModel.document.lineCount) viewModel.document.lineText(docLine) else ""
+                        lineVariableSpans.invoke(lineTextStr, lineStart)
+                    } else emptyList()
                     val foldRegion    = foldStartSet[docLine]
                     val isFolded      = foldRegion != null && !viewModel.displayLineMap.isVisible(docLine + 1)
                     val isFoldable    = foldRegion != null
@@ -660,6 +674,7 @@ fun EditorRenderer(
                                 onTap            = { abs ->
                                     focus.requestFocus()
                                     viewModel.moveCursorTo(abs, extendSelection = shiftPressed)
+                                    onPrimaryTapOffset?.invoke(abs)
                                 },
                                 onDragTo         = { abs ->
                                     viewModel.moveCursorTo(abs, extendSelection = true)
@@ -680,6 +695,7 @@ fun EditorRenderer(
                                 // Only the line that holds the cursor gets the live value;
                                 // all others get -1f so the Canvas skips the cursor draw.
                                 cursorVisible    = if (cursorHere >= 0) cursorBlinkAlpha else -1f,
+                                variableSpans    = varSpans,
                                 onLayoutMeasured = { lr -> layoutResultCache[displayLine] = lr },
                                 modifier         = Modifier
                                     .then(

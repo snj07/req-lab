@@ -119,6 +119,25 @@ tasks.register<org.gradle.jvm.tasks.Jar>("packageReqLabJar") {
     group = "distribution"
 }
 
+tasks.register<Exec>("runReqLabJar") {
+    dependsOn("packageReqLabJar")
+    val jarFile = layout.buildDirectory.file("distribute/ReqLab-${project.version}.jar")
+    val iconFile = project.file("src/desktopMain/resources/icons/reqlab-icon-256.png")
+    val isMac = System.getProperty("os.name").lowercase().contains("mac")
+
+    workingDir = project.rootDir
+    val cmd = mutableListOf("java")
+    if (isMac) {
+        cmd += "-Xdock:name=ReqLab"
+        cmd += "-Xdock:icon=${iconFile.absolutePath}"
+    }
+    cmd += "-jar"
+    cmd += jarFile.get().asFile.absolutePath
+    commandLine(cmd)
+    description = "Runs the packaged ReqLab fat JAR (macOS uses app dock icon/name)."
+    group = "application"
+}
+
 tasks.withType<Test>().configureEach {
     useJUnit()
 }

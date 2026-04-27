@@ -128,11 +128,15 @@ Assertions: `equal`, `eql`, `include`, `match`, `above`, `below`, `at.least`, `a
 
 ### 📥 Postman Import
 
+> **⚠️ Experimental feature** — Postman collection and environment import, including automatic `pm.*` / `postman.*` script conversion, is experimental. While most common patterns are supported, complex or unsupported Postman APIs may not convert correctly and may require manual adjustments after import.
+
 Import **Postman Collection v2 / v2.1** and **Postman Environment** files directly.
 
 - All folders, requests, URLs, methods, headers, bodies, and auth types
 - `pm.*` script calls are automatically rewritten to `reqlab.*` equivalents
-- Disabled headers and variables are skipped; `pm.sendRequest` is commented out
+- Legacy `postman.*` API calls (pre-v6) are also converted on import
+- Disabled headers and variables are skipped; `pm.sendRequest` and `postman.setNextRequest` are commented out
+- See [docs/scripts.md](docs/scripts.md#8-postman-migration-guide) for the full conversion reference
 
 ### ⌨️ Keyboard Shortcuts
 

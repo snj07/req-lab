@@ -350,3 +350,90 @@ reqlab.test("json parse safe", function () {
 
 - Supplemental overview: [docs/scripts/README.md](docs/scripts/README.md)
 - API-focused reference: [docs/scripts/api-reference.md](docs/scripts/api-reference.md)
+
+---
+
+## 8) Postman migration guide
+
+When a Postman collection is imported, ReqLab automatically rewrites all `pm.*` calls and the even older `postman.*` sandbox calls to their `reqlab.*` equivalents. The table below shows every mapping applied.
+
+### 8.1 Modern `pm.*` API (Postman v6+)
+
+| Postman | ReqLab | Notes |
+|---|---|---|
+| `pm.test(name, fn)` | `reqlab.test(name, fn)` | |
+| `pm.expect(v)` | `reqlab.expect(v)` | |
+| `pm.response` | `reqlab.response` | Full object reference |
+| `pm.request` | `reqlab.request` | Full object reference |
+| `pm.environment.get(k)` | `reqlab.environment.get(k)` | |
+| `pm.environment.set(k, v)` | `reqlab.environment.set(k, v)` | |
+| `pm.environment.unset(k)` | `reqlab.environment.unset(k)` | |
+| `pm.globals.get(k)` | `reqlab.environment.get(k)` | Globals map to env scope |
+| `pm.globals.set(k, v)` | `reqlab.environment.set(k, v)` | |
+| `pm.globals.unset(k)` | `reqlab.environment.unset(k)` | |
+| `pm.variables.get(k)` | `reqlab.environment.get(k)` | |
+| `pm.collectionVariables.get(k)` | `reqlab.environment.get(k)` | |
+| `pm.collectionVariables.set(k, v)` | `reqlab.environment.set(k, v)` | |
+| `pm.collectionVariables.unset(k)` | `reqlab.environment.unset(k)` | |
+| `pm.sendRequest(...)` | *commented out* | Not supported in ReqLab |
+
+### 8.2 Legacy `postman.*` API (Postman pre-v6)
+
+Collections exported from older versions of Postman use a `postman.*` namespace and global sandbox variables. All of these are converted on import.
+
+| Postman (old) | ReqLab | Notes |
+|---|---|---|
+| `postman.setEnvironmentVariable(k, v)` | `reqlab.environment.set(k, v)` | |
+| `postman.getEnvironmentVariable(k)` | `reqlab.environment.get(k)` | |
+| `postman.clearEnvironmentVariable(k)` | `reqlab.environment.unset(k)` | |
+| `postman.clearEnvironmentVariables()` | `reqlab.environment.clear()` | |
+| `postman.setGlobalVariable(k, v)` | `reqlab.environment.set(k, v)` | Globals map to env scope |
+| `postman.getGlobalVariable(k)` | `reqlab.environment.get(k)` | |
+| `postman.clearGlobalVariable(k)` | `reqlab.environment.unset(k)` | |
+| `postman.clearGlobalVariables()` | `reqlab.environment.clear()` | |
+| `postman.setNextRequest(req)` | *commented out* | Collection runner flow control; not applicable |
+| `responseBody` (global string) | `response.text()` | Old sandbox global |
+| `responseCode.code` (global object) | `response.code` | Old sandbox global |
+| `responseCode.name` | `response.status` | Old sandbox global |
+
+### 8.3 Example — full legacy login script
+
+Original Postman script (old API):
+
+```javascript
+var jsonData = JSON.parse(responseBody);
+if (responseCode.code === 200) {
+    console.log("Login succeeded for user " + postman.getEnvironmentVariable('USERNAME'));
+    postman.setEnvironmentVariable('SESSION_ID', jsonData.sessionId);
+    postman.setEnvironmentVariable('ORG_ID', jsonData.orgId);
+} else {
+    postman.setNextRequest(null);
+    console.log("Login failed for user " + postman.getEnvironmentVariable('USERNAME'));
+}
+```
+
+After ReqLab import (converted automatically):
+
+```javascript
+var jsonData = JSON.parse(response.text());
+if (response.code === 200) {
+    console.log("Login succeeded for user " + reqlab.environment.get('USERNAME'));
+    reqlab.environment.set('SESSION_ID', jsonData.sessionId);
+    reqlab.environment.set('ORG_ID', jsonData.orgId);
+} else {
+    // postman.setNextRequest is not supported in ReqLab
+    // postman.setNextRequest(null);
+    console.log("Login failed for user " + reqlab.environment.get('USERNAME'));
+}
+```
+
+### 8.4 What is NOT automatically migrated
+
+| Feature | Why |
+|---|---|
+| `pm.sendRequest(url, cb)` | Asynchronous; commented out on import — manual refactor needed |
+| `postman.setNextRequest(req)` | Collection-runner flow control; no equivalent in ReqLab |
+| `pm.iterationData.*` | Collection-runner data files; no equivalent |
+| `pm.info.*` | Runner metadata; no equivalent |
+| Complex Postman test helpers (`pm.response.to.have.status`)| Use `reqlab.expect(response.code).to.equal(N)` instead |
+

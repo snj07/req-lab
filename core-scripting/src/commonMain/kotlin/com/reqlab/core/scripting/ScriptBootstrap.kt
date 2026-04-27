@@ -217,5 +217,9 @@ globalThis.test=test;globalThis.expect=expect;globalThis.response=response;globa
 globalThis.console=__console;
 globalThis.env=environment;globalThis.global=globals;globalThis.collection=collectionVariables;globalThis.vars=variables;
 globalThis.environment=environment;globalThis.globals=globals;globalThis.collectionVariables=collectionVariables;globalThis.variables=variables;
+// Legacy Postman sandbox globals — kept for scripts imported from older Postman collections.
+var responseBody=__rb||'';
+var responseCode={code:__sc,name:__st};
+globalThis.responseBody=responseBody;globalThis.responseCode=responseCode;
 """.trimIndent()
 }

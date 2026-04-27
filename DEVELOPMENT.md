@@ -97,6 +97,26 @@ To run in the background (returns the prompt immediately):
 ./gradlew :ui-desktop:run &
 ```
 
+### Desktop jar artifact (fat jar)
+
+Build runnable jar:
+
+```bash
+./gradlew :ui-desktop:packageReqLabJar
+```
+
+Run jar directly:
+
+```bash
+java -jar ui-desktop/build/distribute/ReqLab-$(grep '^appVersion=' gradle.properties | cut -d= -f2).jar
+```
+
+Run jar via Gradle launcher task (sets Dock app name/icon on macOS):
+
+```bash
+./gradlew :ui-desktop:runReqLabJar
+```
+
 ### Sample server (for manual testing)
 
 The `sample-server` module runs a local Ktor server that mirrors the endpoints used by integration tests:

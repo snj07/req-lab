@@ -75,6 +75,11 @@ internal fun LineView(
      *  the drag-selection handler to map pointer coordinates to character offsets
      *  without relying on a hardcoded character-width estimate. */
     onLayoutMeasured: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
+    /**
+     * Pre-computed per-line variable color spans (range relative to line start → Color).
+     * Applied on top of the syntax highlighting so `{{token}}` text is always visually distinct.
+     */
+    variableSpans: List<Pair<IntRange, Color>> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -93,7 +98,7 @@ internal fun LineView(
         if (docLine < document.lineCount) document.lineStart(docLine) else 0
     }
 
-    val annotated: AnnotatedString = remember(lineText, styleClock, searchRanges, activeSearchRange, diagnostics) {
+    val annotated: AnnotatedString = remember(lineText, styleClock, searchRanges, activeSearchRange, diagnostics, variableSpans) {
         buildLineAnnotatedString(
             lineText        = lineText,
             lineStartOffset = lineStartOffset,
@@ -103,6 +108,7 @@ internal fun LineView(
             onSurface       = onSurface,
             searchRanges    = searchRanges,
             activeSearchRange = activeSearchRange,
+            variableSpans   = variableSpans,
         )
     }
 
@@ -283,6 +289,7 @@ private fun buildLineAnnotatedString(
     onSurface: Color,
     searchRanges: List<IntRange>,
     activeSearchRange: IntRange?,
+    variableSpans: List<Pair<IntRange, Color>> = emptyList(),
 ): AnnotatedString {
     if (lineText.isEmpty()) return AnnotatedString("")
 
@@ -310,6 +317,15 @@ private fun buildLineAnnotatedString(
                 pos = nextPos
             }
         }
+        // ── Variable token colour overlay (overrides syntax colours) ──────────
+        for ((range, color) in variableSpans) {
+            val spanStart = range.first.coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            if (spanStart < spanEnd) {
+                addStyle(SpanStyle(color = color, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, background = color.copy(alpha = 0.13f)), spanStart, spanEnd)
+            }
+        }
+
         for (err in diagnostics) {
             val colStart = (err.col - 1).coerceAtLeast(0)
             val spanStart = colStart.coerceAtMost(renderLen)
