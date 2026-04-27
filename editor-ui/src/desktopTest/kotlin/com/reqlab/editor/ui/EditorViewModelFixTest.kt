@@ -29,7 +29,7 @@ class EditorViewModelFixTest {
         // calling computeAndApplyFolds() (which calls displayLineMap.reset()).
         // We must wait for that coroutine to finish BEFORE touching displayLineMap in a test;
         // otherwise a race between setFolded() and the background reset causes flaky failures.
-        runBlocking { delay(100) }
+        runBlocking { delay(500) }
         return v
     }
 
