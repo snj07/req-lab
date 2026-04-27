@@ -42,7 +42,9 @@ class DiagnosticsAndFoldUpdateTest {
         // foldVersion is incremented by emitFoldUpdate() which runs AFTER computeAndApplyFolds(),
         // so foldVersion > 0 guarantees foldRegions is populated AND the StateFlow write
         // establishes a happens-before that makes foldRegions visible to this thread.
-        awaitUntil { v.state.value.foldVersion > 0 || v.document.length == 0 }
+        awaitUntil(description = "initial fold pass") {
+            v.state.value.foldVersion > 0 || v.document.length == 0
+        }
         return v
     }
 
@@ -50,12 +52,17 @@ class DiagnosticsAndFoldUpdateTest {
      * Polls [condition] every 50 ms until it returns true or [timeoutMs] elapses.
      * More reliable than a fixed delay on slow CI machines.
      */
-    private fun awaitUntil(timeoutMs: Long = 5_000, condition: () -> Boolean) {
+    private fun awaitUntil(
+        timeoutMs: Long = 10_000,
+        description: String = "condition",
+        condition: () -> Boolean,
+    ) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (condition()) return
             Thread.sleep(50)
         }
+        assertTrue(condition(), "Timed out waiting for $description after ${timeoutMs}ms")
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -156,6 +163,7 @@ class DiagnosticsAndFoldUpdateTest {
     @Test
     fun fold1_arrow_shifts_immediately_after_inserting_line_before_region() {
         val v = vm("{\n  \"a\": 1\n}")
+        awaitUntil(description = "initial fold regions for fold1") { v.foldRegions.isNotEmpty() }
         assertTrue(v.foldRegions.isNotEmpty(), "precondition: initial fold region detected")
         val originalStart = v.foldRegions.first().startLine   // 1-based, expect 1
         val originalEnd   = v.foldRegions.first().endLine     // 1-based, expect 3
@@ -182,6 +190,7 @@ class DiagnosticsAndFoldUpdateTest {
     @Test
     fun fold2_arrow_shifts_by_correct_delta_for_multi_line_insert() {
         val v = vm("{\n  \"a\": 1\n}")
+        awaitUntil(description = "initial fold regions for fold2") { v.foldRegions.isNotEmpty() }
         assertTrue(v.foldRegions.isNotEmpty(), "precondition")
         val originalStart = v.foldRegions.first().startLine
 
@@ -202,6 +211,7 @@ class DiagnosticsAndFoldUpdateTest {
     fun fold3_arrow_shifts_after_deleting_line_before_region() {
         // "// comment\n" = 11 chars (indices 0..10)
         val v = vm("// comment\n{\n  \"a\": 1\n}")
+        awaitUntil(description = "initial fold regions for fold3") { v.foldRegions.isNotEmpty() }
         assertTrue(v.foldRegions.isNotEmpty(), "precondition")
         val originalStart = v.foldRegions.first().startLine   // 2-based (1-indexed { is on line 2)
 
@@ -227,6 +237,7 @@ class DiagnosticsAndFoldUpdateTest {
         // Line 1:   "a": 1
         // Line 2: }   (fold footer, endLine=3)
         val v = vm("{\n  \"a\": 1\n}")
+        awaitUntil(description = "initial fold regions for fold4") { v.foldRegions.isNotEmpty() }
         assertTrue(v.foldRegions.isNotEmpty(), "precondition")
         val originalStart = v.foldRegions.first().startLine   // expect 1
         val originalEnd   = v.foldRegions.first().endLine     // expect 3
@@ -252,6 +263,7 @@ class DiagnosticsAndFoldUpdateTest {
     @Test
     fun fold5_foldVersion_increments_when_line_inserted_before_region() {
         val v = vm("{\n  \"a\": 1\n}")
+        awaitUntil(description = "initial fold regions for fold5") { v.foldRegions.isNotEmpty() }
         assertTrue(v.foldRegions.isNotEmpty(), "precondition")
         val versionBefore = v.state.value.foldVersion
 
@@ -273,6 +285,7 @@ class DiagnosticsAndFoldUpdateTest {
     @Test
     fun fold6_background_recompute_detects_newly_added_structural_block() {
         val v = vm("{\n  \"a\": 1\n}")
+        awaitUntil(description = "initial fold regions for fold6") { v.foldRegions.isNotEmpty() }
         val initialCount = v.foldRegions.size   // expect 1
 
         // Append a second top-level foldable block ("[\n  ...\n]")
