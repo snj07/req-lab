@@ -5,8 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 
 /**
  * Tests for new [EditorViewModel] methods added to fix issues in qa-pre-release-report.md.
@@ -22,14 +20,21 @@ import kotlinx.coroutines.runBlocking
  */
 class EditorViewModelFixTest {
 
+    /**
+     * Polls [condition] every 50 ms until it returns true or [timeoutMs] elapses.
+     */
+    private fun awaitUntil(timeoutMs: Long = 5_000, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return
+            Thread.sleep(50)
+        }
+    }
+
     private fun vm(text: String, mode: LanguageMode = LanguageMode.JSON): EditorViewModel {
         val v = EditorViewModel(text, mode)
-        // The EditorViewModel constructor launches scheduleInitialFolds() on Dispatchers.Default.
-        // In desktop tests Dispatchers.Main is unavailable, so that coroutine crashes after
-        // calling computeAndApplyFolds() (which calls displayLineMap.reset()).
-        // We must wait for that coroutine to finish BEFORE touching displayLineMap in a test;
-        // otherwise a race between setFolded() and the background reset causes flaky failures.
-        runBlocking { delay(500) }
+        // Wait for scheduleInitialFolds (Dispatchers.Default) to populate foldRegions.
+        awaitUntil { v.state.value.foldVersion > 0 }
         return v
     }
 

@@ -5,8 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 
 /**
  * Tests that REPRODUCE issues identified in performance-test-report.md.
@@ -26,13 +24,25 @@ class PerformanceIssueReproTest {
     // ── Test helper ──────────────────────────────────────────────────────────
 
     /**
+     * Polls [condition] every 50 ms until it returns true or [timeoutMs] elapses.
+     */
+    private fun awaitUntil(timeoutMs: Long = 5_000, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return
+            Thread.sleep(50)
+        }
+    }
+
+    /**
      * Construct an EditorViewModel and wait for the background initialisation coroutine
      * (scheduleInitialFolds → computeAndApplyFolds → emitFoldUpdate with hasLineTruncation)
-     * to complete.  150 ms matches the existing EditorViewModelFixTest pattern.
+     * to complete.
      */
     private fun vm(text: String, mode: LanguageMode = LanguageMode.JSON): EditorViewModel {
         val v = EditorViewModel(text, mode)
-        runBlocking { delay(500) }
+        // foldVersion increments when scheduleInitialFolds completes
+        awaitUntil { v.state.value.foldVersion > 0 }
         return v
     }
 
@@ -109,7 +119,7 @@ class PerformanceIssueReproTest {
         // Deliver a minified replacement that produces one very long line
         val minified = "{\"data\":\"" + "y".repeat(50_200) + "\"}"
         v.onExternalTextChanged(minified)
-        runBlocking { delay(800) } // wait for background work
+        awaitUntil { v.state.value.hasLineTruncation }
 
         assertTrue(v.state.value.hasLineTruncation,
             "After onExternalTextChanged with a long line, hasLineTruncation must be true")
@@ -131,7 +141,7 @@ class PerformanceIssueReproTest {
         // Replace with a normal multi-line document
         val normal = (1..20).joinToString("\n") { "line $it" }
         v.onExternalTextChanged(normal)
-        runBlocking { delay(800) }
+        awaitUntil { !v.state.value.hasLineTruncation }
 
         assertFalse(v.state.value.hasLineTruncation,
             "After replacing long content with normal multi-line, hasLineTruncation must be false")
