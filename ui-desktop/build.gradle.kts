@@ -80,20 +80,43 @@ compose.desktop {
     }
 }
 
-// ─── JAR rename task ──────────────────────────────────────────────────────────
-// Produces  ui-desktop/build/distribute/ReqLab-{version}.jar
-// Output goes to a separate directory to avoid interfering with createDistributable.
-tasks.register<Copy>("packageReqLabJar") {
-    dependsOn("desktopJar")
-    val ver = project.version.toString()
-    from(layout.buildDirectory.dir("libs")) {
-        // The Kotlin/Gradle jar is named  ui-desktop-desktop-{version}.jar
-        include("ui-desktop-desktop-${ver}.jar")
-        rename { "ReqLab-${ver}.jar" }
+// ─── Runnable fat JAR task ───────────────────────────────────────────────────
+// Produces ui-desktop/build/distribute/ReqLab-{version}.jar
+// Includes app classes + runtime classpath and sets Main-Class so `java -jar` works.
+tasks.register<org.gradle.jvm.tasks.Jar>("packageReqLabJar") {
+    val mainClassName = "com.reqlab.ui.desktop.MainKt"
+    val desktopJarTask = tasks.named<org.gradle.jvm.tasks.Jar>("desktopJar")
+    val desktopRuntimeClasspath = configurations.named("desktopRuntimeClasspath")
+
+    dependsOn(desktopJarTask)
+
+    archiveBaseName.set("ReqLab")
+    archiveVersion.set(project.version.toString())
+    archiveClassifier.set("")
+    destinationDirectory.set(layout.buildDirectory.dir("distribute"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes["Main-Class"] = mainClassName
     }
-    into(layout.buildDirectory.dir("distribute"))
-    description = "Copies and renames the desktop JAR to ReqLab-{version}.jar in build/distribute"
-    group       = "distribution"
+
+    // Include compiled classes/resources from the desktop jar.
+    from(desktopJarTask.map { zipTree(it.archiveFile.get().asFile) })
+
+    // Include all runtime dependency jars so the artifact is self-contained.
+    from(
+        desktopRuntimeClasspath.map { files ->
+            files
+                .filter { it.name.endsWith(".jar") }
+                .map { zipTree(it) }
+        }
+    )
+
+    // Drop signature metadata that becomes invalid when jars are merged.
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+
+    description = "Builds a runnable fat JAR at build/distribute/ReqLab-{version}.jar"
+    group = "distribution"
 }
 
 tasks.withType<Test>().configureEach {

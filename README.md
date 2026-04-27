@@ -42,6 +42,13 @@ cd req-lab
 ./gradlew :ui-desktop:run
 ```
 
+### macOS First Launch Note
+
+Note for macOS users: If you see a warning that the app "cannot be opened because Apple cannot check it for malicious software":
+
+- Right-click the app -> Open -> Open (bypasses the warning once), or
+- Go to System Settings -> Privacy & Security -> "Open Anyway" (after attempting to open the app).
+
 ## Features
 
 ### 🚀 HTTP Requests
