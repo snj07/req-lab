@@ -38,8 +38,11 @@ class DiagnosticsAndFoldUpdateTest {
 
     private fun vm(text: String, mode: LanguageMode = LanguageMode.JSON): EditorViewModel {
         val v = EditorViewModel(text, mode)
-        // Wait for scheduleInitialFolds (runs on Dispatchers.Default) to complete.
-        awaitUntil { v.foldRegions.isNotEmpty() || v.document.length == 0 }
+        // Wait for scheduleInitialFolds (Dispatchers.Default) to fully complete.
+        // foldVersion is incremented by emitFoldUpdate() which runs AFTER computeAndApplyFolds(),
+        // so foldVersion > 0 guarantees foldRegions is populated AND the StateFlow write
+        // establishes a happens-before that makes foldRegions visible to this thread.
+        awaitUntil { v.state.value.foldVersion > 0 || v.document.length == 0 }
         return v
     }
 
