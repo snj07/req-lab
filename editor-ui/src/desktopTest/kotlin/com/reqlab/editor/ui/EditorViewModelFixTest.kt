@@ -5,6 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 
 /**
  * Tests for new [EditorViewModel] methods added to fix issues in qa-pre-release-report.md.
@@ -27,7 +29,7 @@ class EditorViewModelFixTest {
         // calling computeAndApplyFolds() (which calls displayLineMap.reset()).
         // We must wait for that coroutine to finish BEFORE touching displayLineMap in a test;
         // otherwise a race between setFolded() and the background reset causes flaky failures.
-        Thread.sleep(100)
+        runBlocking { delay(100) }
         return v
     }
 

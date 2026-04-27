@@ -64,7 +64,7 @@ private const val BINARY_ATTACHMENT_PREFIX = "reqlab-binary:"
  * Extracted as a package-level function so it can be unit-tested independently of
  * the Compose composable that uses it (issue M-5).
  */
-internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 20_000_000
+internal fun shouldPauseValidation(contentLength: Int): Boolean = contentLength > 1_000_000
 
 // ── Body categories (top-level chips) ──────────────────────────
 

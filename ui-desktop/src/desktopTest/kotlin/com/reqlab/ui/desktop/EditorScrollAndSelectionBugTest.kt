@@ -185,12 +185,12 @@ class MouseDragSelectionBugTest {
         }
         composeRule.waitForIdle()
 
-        // Perform: press in the content area then drag 100 dp to the right.
-        // Gutter is ~64 dp wide; content starts at ~72 dp (gutter + 8 dp padding).
-        val gutterPlusPad = 72.dp
+        // Press inside the content area (beyond the 76 dp gutter) and drag right.
+        // gutterWidth = (4 digits * 9 + 40).dp = 76 dp; add 10 dp padding = 86 dp start.
+        val contentStart = 86.dp
         composeRule.onNodeWithTag("drag_sel-line-numbers")
             .performTouchInput {
-                down(Offset(gutterPlusPad.toPx(), 10f))
+                down(Offset(contentStart.toPx(), 10f))
                 moveBy(Offset(120.dp.toPx(), 0f))   // drag 120 dp right
                 up()
             }
@@ -199,11 +199,8 @@ class MouseDragSelectionBugTest {
         val st = vm.state.value
         assertTrue(
             st.selectionStart >= 0 && st.selectionEnd > st.selectionStart,
-            "Mouse drag from offset ~0 rightward 120 dp must create a non-empty selection " +
-            "(selectionStart=${st.selectionStart}, selectionEnd=${st.selectionEnd}). " +
-            "Bug: detectTapGestures does not emit drag events — onTap is never called " +
-            "during drag, so the cursor never moves and selection never starts. " +
-            "Fix: replace detectTapGestures with awaitEachGesture + drag() in LineView.",
+            "Mouse drag from content start rightward 120 dp must create a non-empty selection " +
+            "(selectionStart=${st.selectionStart}, selectionEnd=${st.selectionEnd}).",
         )
         vm.dispose()
     }
@@ -272,11 +269,12 @@ class MouseDragSelectionBugTest {
         }
         composeRule.waitForIdle()
 
-        // Drag from start of line 0 downward into line 1 (~40 dp down = ~2 lines)
-        val gutterPlusPad = 72.dp
+        // Drag from content area of line 0 downward into line 1 (~40 dp).
+        // Content starts at 86 dp (gutter 76 dp + 10 dp padding).
+        val contentStart = 86.dp
         composeRule.onNodeWithTag("cross_drag-line-numbers")
             .performTouchInput {
-                down(Offset(gutterPlusPad.toPx(), 5f))
+                down(Offset(contentStart.toPx(), 5f))
                 moveBy(Offset(0f, 40.dp.toPx()))   // drag straight down across lines
                 up()
             }
@@ -286,8 +284,7 @@ class MouseDragSelectionBugTest {
         assertTrue(
             st.selectionStart >= 0 && st.selectionEnd > st.selectionStart,
             "Downward drag across lines must produce a multi-line selection " +
-            "(selectionStart=${st.selectionStart}, selectionEnd=${st.selectionEnd}). " +
-            "Bug: detectTapGestures discards the drag — selection is never created.",
+            "(selectionStart=${st.selectionStart}, selectionEnd=${st.selectionEnd}).",
         )
         vm.dispose()
     }

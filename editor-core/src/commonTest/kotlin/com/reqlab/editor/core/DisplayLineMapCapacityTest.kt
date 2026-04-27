@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
+import kotlin.time.TimeSource
 
 /**
  * Tests for [DisplayLineMap] in-place reset optimisation (performance issue MN-1).
@@ -248,9 +249,9 @@ class DisplayLineMapCapacityTest {
     @Test
     fun mn1_perf_10K_inplace_resets_complete_within_500ms() {
         val map = DisplayLineMap(5_013)   // same as 10mb-sample.json line count
-        val t0 = System.currentTimeMillis()
+        val mark = TimeSource.Monotonic.markNow()
         repeat(10_000) { map.reset(5_013) }
-        val elapsed = System.currentTimeMillis() - t0
+        val elapsed = mark.elapsedNow().inWholeMilliseconds
         println("[PERF] 10 000 × DisplayLineMap.reset(5013): $elapsed ms")
         assertTrue(elapsed < 500,
             "10 000 in-place resets of a 5013-line map must complete in < 500 ms, " +

@@ -173,7 +173,9 @@ class EditorViewModel(
                 from = f,
                 to = t,
                 insertText = "",
-                cursorBefore = st.cursorOffset.coerceIn(0, oldLen),
+                // Use the selection end as cursorBefore so undo restores the cursor
+                // to the end of the deleted range (e.g. after select-all + delete + undo).
+                cursorBefore = t,
                 cursorAfter = f,
                 recordHistory = true,
                 clearRedo = true,

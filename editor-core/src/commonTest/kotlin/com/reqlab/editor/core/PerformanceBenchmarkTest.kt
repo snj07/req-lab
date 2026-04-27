@@ -28,7 +28,7 @@ class PerformanceBenchmarkTest {
         val t0 = TimeSource.Monotonic.markNow()
         block()
         val elapsed = t0.elapsedNow()
-        println("[PERF] %-60s  %6d ms".format(label, elapsed.inWholeMilliseconds))
+        println("[PERF] $label  ${elapsed.inWholeMilliseconds} ms")
         return elapsed
     }
 

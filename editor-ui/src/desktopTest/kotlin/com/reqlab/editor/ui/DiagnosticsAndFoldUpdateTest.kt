@@ -7,6 +7,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 
 /**
  * Tests for two editor issues:
@@ -40,7 +42,7 @@ class DiagnosticsAndFoldUpdateTest {
         val v = EditorViewModel(text, mode)
         // Wait for scheduleInitialFolds (runs on Dispatchers.Default) to complete so
         // foldRegions is populated before the test body runs.
-        Thread.sleep(200)
+        runBlocking { delay(200) }
         return v
     }
 
@@ -58,7 +60,7 @@ class DiagnosticsAndFoldUpdateTest {
         // and applyReplace, not from the constructor).
         val v = vm("", LanguageMode.JSON)
         v.onExternalTextChanged("{invalid}")
-        Thread.sleep(800)   // 500 ms debounce + 300 ms buffer
+        runBlocking { delay(800) }   // 500 ms debounce + 300 ms buffer
         assertTrue(v.state.value.diagnostics.isNotEmpty(),
             "Invalid JSON must produce diagnostics after the debounce period")
     }
@@ -70,7 +72,7 @@ class DiagnosticsAndFoldUpdateTest {
     fun diag2_valid_json_produces_no_diagnostics() {
         val v = vm("", LanguageMode.JSON)
         v.onExternalTextChanged("{\"a\":1}")
-        Thread.sleep(800)
+        runBlocking { delay(800) }
         assertTrue(v.state.value.diagnostics.isEmpty(),
             "Valid JSON must have no diagnostics")
     }
@@ -89,11 +91,11 @@ class DiagnosticsAndFoldUpdateTest {
     fun diag3_stale_results_do_not_overwrite_after_replacement_with_valid_json() {
         val v = vm("", LanguageMode.JSON)
         v.onExternalTextChanged("{invalid}")
-        Thread.sleep(100)   // < 500 ms: diagnostics NOT yet fired
+        runBlocking { delay(100) }   // < 500 ms: diagnostics NOT yet fired
 
         // Replace with valid JSON — this must bump editSequence so the old job is discarded
         v.onExternalTextChanged("{\"a\":1}")
-        Thread.sleep(1_100) // allow both old + new diagnostic jobs to potentially complete
+        runBlocking { delay(1_100) } // allow both old + new diagnostic jobs to potentially complete
 
         assertTrue(v.state.value.diagnostics.isEmpty(),
             "After replacing invalid JSON with valid JSON, diagnostics must be empty. " +
@@ -108,13 +110,13 @@ class DiagnosticsAndFoldUpdateTest {
     fun diag4_diagnostics_update_after_inserting_invalid_syntax() {
         val v = vm("", LanguageMode.JSON)
         v.onExternalTextChanged("{\"a\":1}")
-        Thread.sleep(700)   // let initial diagnostics settle (should be empty)
+        runBlocking { delay(700) }   // let initial diagnostics settle (should be empty)
         assertTrue(v.state.value.diagnostics.isEmpty(), "precondition: start valid")
 
         // Corrupt the JSON by inserting invalid characters after the opening brace
         v.moveCursorTo(1)
         v.insertAtCursor("!!!")
-        Thread.sleep(800)
+        runBlocking { delay(800) }
 
         assertTrue(v.state.value.diagnostics.isNotEmpty(),
             "diagnostics must show an error after inserting invalid syntax")
@@ -261,7 +263,7 @@ class DiagnosticsAndFoldUpdateTest {
         v.moveCursorTo(v.document.length)
         v.insertAtCursor("\n[\n  1,\n  2\n]")
 
-        Thread.sleep(600)   // background recompute: 300 ms debounce + 300 ms buffer
+        runBlocking { delay(600) }   // background recompute: 300 ms debounce + 300 ms buffer
 
         assertTrue(v.foldRegions.size > initialCount,
             "after inserting a new foldable block, foldRegions.size must grow after " +

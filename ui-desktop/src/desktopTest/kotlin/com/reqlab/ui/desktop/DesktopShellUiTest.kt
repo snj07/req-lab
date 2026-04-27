@@ -159,7 +159,10 @@ class MainScreenUiTest {
 
     @Test
     fun editors_show_line_numbers_for_body_and_scripts() {
-        composeRule.setContent { MainScreen() }
+        // body-editor only renders when a non-NONE body type is selected.
+        val state = AppState()
+        composeRule.runOnUiThread { state.activeTab?.bodyType = BodyType.JSON }
+        composeRule.setContent { MainScreen(state) }
 
         composeRule.onNodeWithText("Body").performClick()
         composeRule.waitForIdle()

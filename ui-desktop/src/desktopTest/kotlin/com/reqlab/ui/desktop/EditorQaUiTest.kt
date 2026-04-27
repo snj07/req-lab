@@ -1346,6 +1346,8 @@ class ScriptEditorTest {
         // Smoke test: MainScreen must compose without throwing
         val state = AppState()
         composeRule.runOnUiThread {
+            // body-editor only renders when a non-NONE body type is active.
+            state.activeTab?.bodyType = BodyType.JSON
             state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
         }
         composeRule.setContent { MainScreen(state) }

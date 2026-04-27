@@ -5,6 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 
 /**
  * Tests that REPRODUCE issues identified in performance-test-report.md.
@@ -30,7 +32,7 @@ class PerformanceIssueReproTest {
      */
     private fun vm(text: String, mode: LanguageMode = LanguageMode.JSON): EditorViewModel {
         val v = EditorViewModel(text, mode)
-        Thread.sleep(150)
+        runBlocking { delay(150) }
         return v
     }
 
@@ -107,7 +109,7 @@ class PerformanceIssueReproTest {
         // Deliver a minified replacement that produces one very long line
         val minified = "{\"data\":\"" + "y".repeat(50_200) + "\"}"
         v.onExternalTextChanged(minified)
-        Thread.sleep(300) // wait for background work
+        runBlocking { delay(300) } // wait for background work
 
         assertTrue(v.state.value.hasLineTruncation,
             "After onExternalTextChanged with a long line, hasLineTruncation must be true")
@@ -129,7 +131,7 @@ class PerformanceIssueReproTest {
         // Replace with a normal multi-line document
         val normal = (1..20).joinToString("\n") { "line $it" }
         v.onExternalTextChanged(normal)
-        Thread.sleep(300)
+        runBlocking { delay(300) }
 
         assertFalse(v.state.value.hasLineTruncation,
             "After replacing long content with normal multi-line, hasLineTruncation must be false")
