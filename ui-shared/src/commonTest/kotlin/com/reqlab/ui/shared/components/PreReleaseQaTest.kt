@@ -470,18 +470,18 @@ class SingleLineDocumentBoundaryTest {
  * Documents the behaviour of inline validation for large files.
  *
  * KNOWN GAP: BodyEditor.kt silently skips validation for content
- * whose character count exceeds 1 000 000 (1 MB). No user-visible
+ * whose character count exceeds 20 000 000 (20 MB). No user-visible
  * indicator is shown. This test suite documents the threshold value.
  */
 class ValidationThresholdTest {
 
-    private val VALIDATION_SKIP_THRESHOLD = 1_000_000
+    private val VALIDATION_SKIP_THRESHOLD = 20_000_000
 
     @Test
-    fun content_below_1mb_undergoes_validation() {
+    fun content_below_20mb_undergoes_validation() {
         val content = """{"key": "value"}"""
         assertTrue(content.length < VALIDATION_SKIP_THRESHOLD,
-            "Content under 1 MB must be subject to inline validation")
+            "Content under 20 MB must be subject to inline validation")
     }
 
     @Test
@@ -501,14 +501,14 @@ class ValidationThresholdTest {
 
     /**
      * Documents the boundary where BodyEditor validation is skipped.
-     * The caller (BodyEditor) checks `content.length > 1_000_000` and
+     * The caller (BodyEditor) checks `content.length > 20_000_000` and
      * skips calling validateJson/validateXml entirely.
      */
     @Test
-    fun content_at_1mb_boundary_threshold_is_documented() {
-        // 1_000_001 chars would skip validation; 1_000_000 chars would still validate
-        assertEquals(1_000_000, VALIDATION_SKIP_THRESHOLD,
-            "Validation skip threshold must be exactly 1 000 000 characters")
+    fun content_at_20mb_boundary_threshold_is_documented() {
+        // 20_000_001 chars would skip validation; 20_000_000 chars would still validate
+        assertEquals(20_000_000, VALIDATION_SKIP_THRESHOLD,
+            "Validation skip threshold must be exactly 20 000 000 characters")
     }
 }
 

@@ -32,20 +32,20 @@ class ValidationPauseIndicatorTest {
     @Test
     fun shouldPauseValidation_returns_false_for_small_content() {
         assertFalse(shouldPauseValidation(0),         "Empty content must not pause")
-        assertFalse(shouldPauseValidation(999_999),   "Content just under threshold must not pause")
-        assertFalse(shouldPauseValidation(1_000_000), "Content at exact threshold must not pause (exclusive)")
+        assertFalse(shouldPauseValidation(19_999_999), "Content just under threshold must not pause")
+        assertFalse(shouldPauseValidation(20_000_000), "Content at exact threshold must not pause (exclusive)")
     }
 
     @Test
     fun shouldPauseValidation_returns_true_above_threshold() {
-        assertTrue(shouldPauseValidation(1_000_001), "Content one byte over 1 MB must pause validation")
-        assertTrue(shouldPauseValidation(5_000_000), "5 MB content must pause validation")
+        assertTrue(shouldPauseValidation(20_000_001), "Content one byte over 20 MB must pause validation")
+        assertTrue(shouldPauseValidation(25_000_000), "25 MB content must pause validation")
     }
 
     @Test
-    fun shouldPauseValidation_boundary_is_strictly_greater_than_1_000_000() {
-        assertFalse(shouldPauseValidation(1_000_000), "Exactly 1 000 000 chars: must NOT pause")
-        assertTrue(shouldPauseValidation(1_000_001),  "Exactly 1 000 001 chars: MUST pause")
+    fun shouldPauseValidation_boundary_is_strictly_greater_than_20_000_000() {
+        assertFalse(shouldPauseValidation(20_000_000), "Exactly 20 000 000 chars: must NOT pause")
+        assertTrue(shouldPauseValidation(20_000_001),  "Exactly 20 000 001 chars: MUST pause")
     }
 }
 
