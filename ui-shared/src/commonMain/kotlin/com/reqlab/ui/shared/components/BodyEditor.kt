@@ -368,7 +368,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                             onCursorTap = { offset ->
                                 bodyPopupVariable = variableNameAtOffset(tab.bodyContent, offset)
                             },
-                            lineVariableSpans = if (state != null && tab.bodyContent.contains("{{")) {
+                            lineVariableSpans = if (tab.bodyContent.contains("{{")) {
                                 { line, _ -> variableRangesForLine(line, definedVarNames) }
                             } else null,
                         )

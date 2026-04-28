@@ -651,6 +651,7 @@ class EditorViewModel(
         idleLexer.scheduleFrom(firstCharInViewport, scope)
     }
 
+    @kotlin.concurrent.Volatile
     var foldRegions: List<FoldRegion> = emptyList()
         private set
 

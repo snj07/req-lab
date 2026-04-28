@@ -25,7 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -426,7 +426,7 @@ private fun GraphQLQueryEditor(
                 modifier = Modifier.size(28.dp),
             ) {
                 Icon(
-                    Icons.Default.FormatAlignLeft,
+                    Icons.AutoMirrored.Filled.FormatAlignLeft,
                     contentDescription = Strings.format,
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier.size(16.dp),

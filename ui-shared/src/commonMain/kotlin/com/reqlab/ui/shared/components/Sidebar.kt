@@ -42,7 +42,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Input
+import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
@@ -267,7 +267,7 @@ fun Sidebar(state: AppState) {
                                 modifier = Modifier.size(24.dp).testTag("collection-import-button"),
                             ) {
                                 Icon(
-                                    Icons.Default.Input,
+                                    Icons.AutoMirrored.Filled.Input,
                                     contentDescription = Strings.importCollection,
                                     tint = ReqLabColors.OnSurfaceDim,
                                     modifier = Modifier.size(14.dp).testTag("collection-import-icon"),
@@ -496,7 +496,7 @@ fun Sidebar(state: AppState) {
                                 modifier = Modifier.size(24.dp).testTag("environment-import-button"),
                             ) {
                                 Icon(
-                                    Icons.Default.Input,
+                                    Icons.AutoMirrored.Filled.Input,
                                     contentDescription = Strings.t("import_environment"),
                                     tint = ReqLabColors.OnSurfaceDim,
                                     modifier = Modifier.size(14.dp).testTag("environment-import-icon"),
@@ -1210,7 +1210,7 @@ private fun CollectionTreeNode(
                         if (isCollectionRoot) {
                             DropdownMenuItem(
                                 text = { Text(Strings.exportCollection) },
-                                leadingIcon = { Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                 onClick = { showMenu = false; onExportCollection(node) },
                             )
                             DropdownMenuItem(
@@ -1420,7 +1420,7 @@ private fun EnvironmentRow(
                 })
                 DropdownMenuItem(
                     text = { Text(Strings.t("export_environment")) },
-                    leadingIcon = { Icon(Icons.Default.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Input, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     onClick = {
                     showMenu = false
                     onExport()
