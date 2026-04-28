@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,6 +107,7 @@ import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.theme.httpMethodColor
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -139,6 +142,7 @@ private fun normalizeSidebarSearchQuery(raw: String): String {
 fun Sidebar(state: AppState) {
     SharedTooltipCoordinator()
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val collectionsRevision = state.collectionsRevision
     // Plain HashMap — never read inside composition, no state notifications needed.
     val hitAreas = remember { HashMap<String, TreeNodeHitArea>() }
@@ -150,6 +154,85 @@ fun Sidebar(state: AppState) {
     var dropInsertAfter by remember { mutableStateOf(false) }
     // Cumulative Y-offset from drag start to compute current cursor Y
     var dragOffsetY by remember { mutableStateOf(0f) }
+    // Absolute cursor Y in window coords — set on drag start, accumulated on every delta.
+    // Used by the auto-scroll loop so it never drifts when the list scrolls under the cursor.
+    var dragCursorAbsY by remember { mutableStateOf(0f) }
+
+    // ── Collection-level drag-to-reorder state ─────────────────────────────
+    var draggedCollectionId by remember { mutableStateOf<String?>(null) }
+    var dragCollectionOffsetY by remember { mutableStateOf(0f) }
+    var dropCollectionTargetId by remember { mutableStateOf<String?>(null) }
+    var dropCollectionInsertAfter by remember { mutableStateOf(false) }
+    // Hit areas for top-level collection root rows
+    val collectionHitAreas = remember { HashMap<String, TreeNodeHitArea>() }
+
+    // ── Sidebar LazyColumn state + bounds for edge-scroll ─────────────────
+    val lazyListState = rememberLazyListState()
+    var sidebarTopPx by remember { mutableStateOf(0f) }
+    var sidebarHeightPx by remember { mutableStateOf(0) }
+    val edgeZonePx = with(density) { 72.dp.toPx() }
+
+    // Auto-scroll the sidebar list when the drag cursor is near the top/bottom edge.
+    // Uses dragCursorAbsY which is always the true pointer position (set on drag-start,
+    // accumulated on every pointer delta). After each scroll tick we shift stored hit-area
+    // positions by the same amount so the insertion indicator re-evaluates immediately
+    // rather than waiting for the next Compose layout pass.
+    LaunchedEffect(draggedRequestId, draggedCollectionId) {
+        if (draggedRequestId == null && draggedCollectionId == null) return@LaunchedEffect
+        while (true) {
+            val relY = dragCursorAbsY - sidebarTopPx
+            val scrollPx = when {
+                relY >= 0f && relY < edgeZonePx ->
+                    -((edgeZonePx - relY) / edgeZonePx * 18f)
+                relY > sidebarHeightPx - edgeZonePx && relY <= sidebarHeightPx ->
+                    (relY - (sidebarHeightPx - edgeZonePx)) / edgeZonePx * 18f
+                else -> 0f
+            }
+            if (scrollPx != 0f) {
+                lazyListState.scrollBy(scrollPx)
+                // Items shifted on screen by -scrollPx. Adjust stored hit areas so
+                // the drop-target lookup below uses up-to-date positions (the real
+                // onGloballyPositioned update will arrive on the next layout pass).
+                val shift = -scrollPx
+                val activeRequestId   = draggedRequestId
+                val activeCollectionId = draggedCollectionId
+                val cursorY = dragCursorAbsY
+                if (activeRequestId != null) {
+                    hitAreas.keys.toList().forEach { id ->
+                        hitAreas[id]?.let { hitAreas[id] = it.copy(top = it.top + shift, bottom = it.bottom + shift) }
+                    }
+                    val target = hitAreas.values
+                        .filter { it.id != activeRequestId }
+                        .minByOrNull { kotlin.math.abs(((it.top + it.bottom) / 2f) - cursorY) }
+                    if (target != null) {
+                        if (target.isFolder) {
+                            dropTargetCollectionId = target.id
+                            dropTargetRequestId    = null
+                            dropInsertAfter        = false
+                        } else {
+                            val midY = (target.top + target.bottom) / 2f
+                            dropInsertAfter        = cursorY >= midY
+                            dropTargetRequestId    = target.id
+                            dropTargetCollectionId = target.parentCollectionId
+                        }
+                    }
+                } else if (activeCollectionId != null) {
+                    collectionHitAreas.keys.toList().forEach { id ->
+                        collectionHitAreas[id]?.let { collectionHitAreas[id] = it.copy(top = it.top + shift, bottom = it.bottom + shift) }
+                    }
+                    val target = collectionHitAreas.values
+                        .filter { it.id != activeCollectionId }
+                        .minByOrNull { kotlin.math.abs(((it.top + it.bottom) / 2f) - cursorY) }
+                    if (target != null) {
+                        val midY = (target.top + target.bottom) / 2f
+                        dropCollectionInsertAfter = cursorY >= midY
+                        dropCollectionTargetId    = target.id
+                    }
+                }
+            }
+            delay(16L)
+        }
+    }
 
     var renameRequestTarget by remember { mutableStateOf<CollectionNode?>(null) }
     var renameRequestValue by remember { mutableStateOf("") }
@@ -197,7 +280,10 @@ fun Sidebar(state: AppState) {
             .background(ReqLabColors.SurfaceVariant)
             .testTag("sidebar")
             .onGloballyPositioned { coords ->
-                sharedSidebarTooltipState.containerRootY = coords.positionInRoot().y.toInt()
+                val rootPos = coords.positionInRoot()
+                sharedSidebarTooltipState.containerRootY = rootPos.y.toInt()
+                sidebarTopPx = rootPos.y
+                sidebarHeightPx = coords.size.height
             },
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -207,7 +293,10 @@ fun Sidebar(state: AppState) {
                 modifier = Modifier.padding(8.dp),
             )
 
-            LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 4.dp)) {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+            ) {
             item {
                 SectionHeader(
                     icon = Icons.Default.History,
@@ -407,28 +496,30 @@ fun Sidebar(state: AppState) {
                             onDragStart = { requestId ->
                                 draggedRequestId = requestId
                                 dragOffsetY = 0f
+                                dragCursorAbsY = hitAreas[requestId]?.let { (it.top + it.bottom) / 2f } ?: 0f
                                 dropTargetCollectionId = null
                                 dropTargetRequestId = null
                                 dropInsertAfter = false
                             },
                             onDragDelta = { requestId, deltaY ->
                                 if (draggedRequestId == requestId) {
-                                    dragOffsetY += deltaY
-                                    val baseCenter = hitAreas[requestId]?.let { (it.top + it.bottom) / 2f } ?: 0f
-                                    val currentY = baseCenter + dragOffsetY
-                                    // Always pick the closest hit area — handles top/bottom edges too
+                                    dragOffsetY    += deltaY
+                                    dragCursorAbsY += deltaY
+                                    // Use absolute cursor position — avoids drift when the list
+                                    // has scrolled (baseCenter + offsetY is wrong after a scroll).
+                                    val currentY = dragCursorAbsY
                                     val target = hitAreas.values
                                         .filter { it.id != requestId }
                                         .minByOrNull { kotlin.math.abs(((it.top + it.bottom) / 2f) - currentY) }
                                     if (target != null) {
                                         if (target.isFolder) {
                                             dropTargetCollectionId = target.id
-                                            dropTargetRequestId = null
-                                            dropInsertAfter = false
+                                            dropTargetRequestId    = null
+                                            dropInsertAfter        = false
                                         } else {
                                             val midY = (target.top + target.bottom) / 2f
-                                            dropInsertAfter = currentY >= midY
-                                            dropTargetRequestId = target.id
+                                            dropInsertAfter        = currentY >= midY
+                                            dropTargetRequestId    = target.id
                                             dropTargetCollectionId = target.parentCollectionId
                                         }
                                     }
@@ -436,6 +527,7 @@ fun Sidebar(state: AppState) {
                             },
                             onNodePositioned = { area -> hitAreas[area.id] = area },
                             onDragEnd = {
+                                dragCursorAbsY = 0f
                                 val sourceId = draggedRequestId
                                 val targetRequestId = dropTargetRequestId
                                 val targetCollectionId = dropTargetCollectionId
@@ -461,6 +553,53 @@ fun Sidebar(state: AppState) {
                                 dropTargetCollectionId = null
                                 dropTargetRequestId = null
                                 dropInsertAfter = false
+                            },
+                            // ── Collection-level drag callbacks ────────────────
+                            draggedCollectionId = draggedCollectionId,
+                            dropCollectionTargetId = dropCollectionTargetId,
+                            dropCollectionInsertAfter = dropCollectionInsertAfter,
+                            onCollectionDragStart = { collectionId ->
+                                draggedCollectionId = collectionId
+                                dragCollectionOffsetY = 0f
+                                dragCursorAbsY = collectionHitAreas[collectionId]?.let { (it.top + it.bottom) / 2f } ?: 0f
+                                dropCollectionTargetId = null
+                                dropCollectionInsertAfter = false
+                            },
+                            onCollectionDragDelta = { collectionId, deltaY ->
+                                if (draggedCollectionId == collectionId) {
+                                    dragCollectionOffsetY += deltaY
+                                    dragCursorAbsY        += deltaY
+                                    val currentY = dragCursorAbsY
+                                    val target = collectionHitAreas.values
+                                        .filter { it.id != collectionId }
+                                        .minByOrNull { kotlin.math.abs(((it.top + it.bottom) / 2f) - currentY) }
+                                    if (target != null) {
+                                        val midY = (target.top + target.bottom) / 2f
+                                        dropCollectionInsertAfter = currentY >= midY
+                                        dropCollectionTargetId    = target.id
+                                    }
+                                }
+                            },
+                            onCollectionHitAreaPositioned = { area -> collectionHitAreas[area.id] = area },
+                            onCollectionDragEnd = {
+                                dragCursorAbsY = 0f
+                                val sourceId = draggedCollectionId
+                                val targetId = dropCollectionTargetId
+                                if (sourceId != null && targetId != null) {
+                                    val moved = if (dropCollectionInsertAfter) {
+                                        moveCollectionAfterCollection(state.collections, sourceId, targetId)
+                                    } else {
+                                        moveCollectionBeforeCollection(state.collections, sourceId, targetId)
+                                    }
+                                    if (moved) {
+                                        state.notifyCollectionsChanged()
+                                        persistWorkspaceAsync()
+                                    }
+                                }
+                                draggedCollectionId = null
+                                dragCollectionOffsetY = 0f
+                                dropCollectionTargetId = null
+                                dropCollectionInsertAfter = false
                             },
                         )
                     }
@@ -678,8 +817,8 @@ fun Sidebar(state: AppState) {
                 val target = renameRequestTarget ?: return@RenameItemDialog
                 val trimmed = renameRequestValue.trim()
                 if (trimmed.isNotEmpty()) {
-                    renameRequestInCollections(state.collections, target.id, trimmed)
-                    state.notifyCollectionsChanged()
+                    // Use renameRequestEverywhere so open tabs are also updated (Bug 2 fix)
+                    state.renameRequestEverywhere(target.id, trimmed)
                     persistWorkspaceAsync()
                 }
                 renameRequestTarget = null
@@ -976,6 +1115,14 @@ private fun CollectionTreeNode(
     onDragDelta: (String, Float) -> Unit,
     onNodePositioned: (TreeNodeHitArea) -> Unit,
     onDragEnd: () -> Unit,
+    // ── Collection-level drag params (Bug 3) ──────────────────────────────
+    draggedCollectionId: String? = null,
+    dropCollectionTargetId: String? = null,
+    dropCollectionInsertAfter: Boolean = false,
+    onCollectionDragStart: (String) -> Unit = {},
+    onCollectionDragDelta: (String, Float) -> Unit = { _, _ -> },
+    onCollectionHitAreaPositioned: (TreeNodeHitArea) -> Unit = {},
+    onCollectionDragEnd: () -> Unit = {},
 ) {
     // Read from the session-persistent map rather than a local remember so that
     // Collapse All / Expand All and cross-recomposition state changes take effect.
@@ -988,10 +1135,13 @@ private fun CollectionTreeNode(
     val isRequest = !node.isFolder && node.method != null && node.url != null
     val isSelectedRequest = isRequest && state.selectedRequestId == node.id
     val isDragSource = draggedRequestId == node.id
+    val isCollectionDragSource = isCollectionRoot && draggedCollectionId == node.id
     val isDropCollectionTarget = node.isFolder && node.id == dropTargetCollectionId
     val isDropTarget = isRequest && node.id == dropTargetRequestId && node.id != draggedRequestId
     val showInsertionAbove = isDropTarget && !dropInsertAfter
     val showInsertionBelow = isDropTarget && dropInsertAfter
+    val showCollectionInsertionAbove = isCollectionRoot && node.id == dropCollectionTargetId && !dropCollectionInsertAfter
+    val showCollectionInsertionBelow = isCollectionRoot && node.id == dropCollectionTargetId && dropCollectionInsertAfter
 
     var showMenu by remember { mutableStateOf(false) }
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -1015,7 +1165,7 @@ private fun CollectionTreeNode(
     }
 
     Column {
-        // Insertion line ABOVE the row (Postman-style drop indicator)
+        // Insertion line ABOVE the row (Postman-style drop indicator for requests)
         if (showInsertionAbove) {
             Box(
                 modifier = Modifier
@@ -1026,18 +1176,28 @@ private fun CollectionTreeNode(
                     .testTag("drop-indicator-above-${node.id}"),
             )
         }
+        // Insertion line ABOVE the row for collection drag
+        if (showCollectionInsertionAbove) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(ReqLabColors.Primary, RoundedCornerShape(1.dp))
+                    .testTag("collection-drop-indicator-above-${node.id}"),
+            )
+        }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(6.dp))
-                .alpha(if (isDragSource) 0.4f else 1f)
+                .alpha(if (isDragSource || isCollectionDragSource) 0.4f else 1f)
                 .bringIntoViewRequester(bringIntoViewRequester)
                 .background(
                     when {
                         isSelectedRequest -> ReqLabColors.SelectedItem
                         isDropCollectionTarget -> ReqLabColors.Primary.copy(alpha = 0.14f)
-                        isDragSource -> ReqLabColors.SurfaceHigh
+                        isDragSource || isCollectionDragSource -> ReqLabColors.SurfaceHigh
                         isHovered -> ReqLabColors.HoverOverlay
                         else -> Color.Transparent
                     }
@@ -1054,6 +1214,19 @@ private fun CollectionTreeNode(
                             label = node.name,
                         )
                     )
+                    // Also register as a collection-level hit area when this is a root
+                    if (isCollectionRoot) {
+                        onCollectionHitAreaPositioned(
+                            TreeNodeHitArea(
+                                id = node.id,
+                                isFolder = true,
+                                parentCollectionId = null,
+                                top = position.y,
+                                bottom = position.y + coordinates.size.height,
+                                label = node.name,
+                            )
+                        )
+                    }
                     // Keep tooltip position current (e.g. after scroll).
                     if (sharedSidebarTooltipState.hoveredItemId == node.id) {
                         sharedSidebarTooltipState.updateHoverPosition(
@@ -1069,14 +1242,23 @@ private fun CollectionTreeNode(
                         showMenu = true
                     }
                 }
-                .pointerInput(node.id, isRequest) {
-                    if (isRequest) {
-                        detectDragGestures(
+                .pointerInput(node.id, isRequest, isCollectionRoot) {
+                    when {
+                        isRequest -> detectDragGestures(
                             onDragStart = { onDragStart(node.id) },
                             onDragEnd = { onDragEnd() },
                             onDragCancel = { onDragEnd() },
                             onDrag = { change, _ ->
                                 onDragDelta(node.id, change.positionChange().y)
+                                change.consume()
+                            },
+                        )
+                        isCollectionRoot -> detectDragGestures(
+                            onDragStart = { onCollectionDragStart(node.id) },
+                            onDragEnd = { onCollectionDragEnd() },
+                            onDragCancel = { onCollectionDragEnd() },
+                            onDrag = { change, _ ->
+                                onCollectionDragDelta(node.id, change.positionChange().y)
                                 change.consume()
                             },
                         )
@@ -1096,6 +1278,15 @@ private fun CollectionTreeNode(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (node.isFolder) {
+                // Drag indicator for top-level collections (Bug 3)
+                if (isCollectionRoot) {
+                    Icon(
+                        Icons.Default.DragIndicator,
+                        contentDescription = Strings.t("drag_to_reorder"),
+                        tint = ReqLabColors.OnSurfaceDim.copy(alpha = 0.4f),
+                        modifier = Modifier.size(12.dp).testTag("collection-drag-handle-${node.id}"),
+                    )
+                }
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
@@ -1261,7 +1452,7 @@ private fun CollectionTreeNode(
         }
         } // end Row
 
-        // Insertion line BELOW the row (Postman-style drop indicator)
+        // Insertion line BELOW the row (Postman-style drop indicator for requests)
         if (showInsertionBelow) {
             Box(
                 modifier = Modifier
@@ -1270,6 +1461,16 @@ private fun CollectionTreeNode(
                     .height(2.dp)
                     .background(ReqLabColors.Primary, RoundedCornerShape(1.dp))
                     .testTag("drop-indicator-below-${node.id}"),
+            )
+        }
+        // Insertion line BELOW the row for collection drag
+        if (showCollectionInsertionBelow) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(ReqLabColors.Primary, RoundedCornerShape(1.dp))
+                    .testTag("collection-drop-indicator-below-${node.id}"),
             )
         }
 
@@ -1303,6 +1504,8 @@ private fun CollectionTreeNode(
                         onDragDelta = onDragDelta,
                         onNodePositioned = onNodePositioned,
                         onDragEnd = onDragEnd,
+                        // Collection drag params are not forwarded to children
+                        // since only depth==0 nodes participate in collection reorder
                     )
                 }
             }
@@ -1515,16 +1718,13 @@ private fun RenameItemDialog(
 }
 
 private fun duplicateNode(node: CollectionNode, rootNameOverride: String? = null): CollectionNode {
+    // Use copy() so every field (including future additions) is guaranteed to be duplicated.
+    // Only the id and name are different; children are recursively duplicated with new ids.
     val duplicatedChildren = node.children.map { duplicateNode(it) }
-    return CollectionNode(
+    return node.copy(
         id = generateUuid(),
         name = rootNameOverride ?: node.name,
-        isFolder = node.isFolder,
-        method = node.method,
-        url = node.url,
         children = androidx.compose.runtime.mutableStateListOf<CollectionNode>().also { it.addAll(duplicatedChildren) },
-        preRequestScript = node.preRequestScript,
-        testScript = node.testScript,
     )
 }
 
@@ -1798,4 +1998,44 @@ private fun collapseNodeRecursively(node: CollectionNode, state: AppState) {
             collapseNodeRecursively(child, state)
         }
     }
+}
+
+// ── Collection-level drag-to-reorder helpers (Bug 3) ──────────────────────────
+
+/**
+ * Moves the collection identified by [collectionId] to be immediately BEFORE
+ * the collection identified by [targetCollectionId] in [collections].
+ * Returns true if the move was performed.
+ */
+fun moveCollectionBeforeCollection(
+    collections: MutableList<CollectionNode>,
+    collectionId: String,
+    targetCollectionId: String,
+): Boolean {
+    val fromIndex = collections.indexOfFirst { it.id == collectionId }
+    val toIndex   = collections.indexOfFirst { it.id == targetCollectionId }
+    if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return false
+    val item = collections.removeAt(fromIndex)
+    val insertIndex = if (fromIndex < toIndex) toIndex - 1 else toIndex
+    collections.add(insertIndex, item)
+    return true
+}
+
+/**
+ * Moves the collection identified by [collectionId] to be immediately AFTER
+ * the collection identified by [targetCollectionId] in [collections].
+ * Returns true if the move was performed.
+ */
+fun moveCollectionAfterCollection(
+    collections: MutableList<CollectionNode>,
+    collectionId: String,
+    targetCollectionId: String,
+): Boolean {
+    val fromIndex = collections.indexOfFirst { it.id == collectionId }
+    val toIndex   = collections.indexOfFirst { it.id == targetCollectionId }
+    if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return false
+    val item = collections.removeAt(fromIndex)
+    val insertIndex = if (fromIndex < toIndex) toIndex else toIndex + 1
+    collections.add(insertIndex, item)
+    return true
 }

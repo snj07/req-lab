@@ -163,6 +163,31 @@ class PostmanImporterTest {
     // ── Header parsing ─────────────────────────────────────────────────────────
 
     @Test
+    fun `importCollection skips headers with empty or blank keys`() {
+        // Bug 2: Headers with empty keys were imported, polluting the request config.
+        // BEFORE FIX: all 3 headers (including the 2 blank-key ones) were returned.
+        // AFTER FIX:  only the header with a non-blank key is returned.
+        val root = parse("""
+        {
+          "info":{"name":"EmptyKey","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+          "item":[
+            {"name":"R","request":{
+              "method":"GET","url":"https://example.com",
+              "header":[
+                {"key":"","value":"should-be-skipped"},
+                {"key":"   ","value":"also-skipped"},
+                {"key":"X-Token","value":"abc123"}
+              ]
+            }}
+          ]
+        }
+        """.trimIndent())
+        val headers = PostmanImporter.importCollection(root).requests[0].userHeaders
+        assertEquals(1, headers.size, "Blank-key headers must be skipped during import")
+        assertEquals("X-Token" to "abc123", headers[0])
+    }
+
+    @Test
     fun `importCollection parses headers and skips disabled ones`() {
         val root = parse("""
         {

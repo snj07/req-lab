@@ -164,6 +164,7 @@ object PostmanImporter {
             val disabled = obj["disabled"]?.jsonPrimitive?.booleanOrNull ?: false
             if (disabled) return@mapNotNull null
             val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            if (key.isBlank()) return@mapNotNull null
             val value = obj["value"]?.jsonPrimitive?.contentOrNull ?: ""
             key to value
         }

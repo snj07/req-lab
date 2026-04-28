@@ -1,11 +1,14 @@
 package com.reqlab.ui.shared.persistence
 
 import com.reqlab.ui.shared.state.AppState
+import com.reqlab.ui.shared.state.CollectionNode
 import com.reqlab.ui.shared.state.HistoryItem
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.platform.currentTimeMillis
+import androidx.compose.runtime.mutableStateListOf
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ImportExportRepositoryTest {
@@ -276,5 +279,129 @@ class ImportExportRepositoryTest {
             imported.bodyContent,
             "Large body content must survive workspace export/import exactly",
         )
+    }
+
+    // ── Bug 1: per-collection expanded state must survive workspace save/load ──
+
+    @Test
+    fun replaceWorkspaceState_restores_collection_expanded_state() {
+        // Bug 1 BEFORE FIX: collectionExpandedState was never written to/read from JSON.
+        // Any folder the user collapsed would appear expanded again after restart.
+        // AFTER FIX: the map is serialised in exportWorkspaceToString and
+        // re-applied by replaceWorkspaceState so the UI shows the correct state.
+        val source = AppState(openDefaultTab = false)
+        val collection = CollectionNode(
+            id = "coll-test-1",
+            name = "My Collection",
+            isFolder = true,
+            children = mutableStateListOf(
+                CollectionNode("folder-a", "Folder A", isFolder = true, children = mutableStateListOf()),
+                CollectionNode("folder-b", "Folder B", isFolder = true, children = mutableStateListOf()),
+            ),
+        )
+        source.collections.add(collection)
+        // Explicitly collapse one folder, leave the other at default (expanded)
+        source.collectionExpandedState["folder-a"] = false
+        source.collectionExpandedState["coll-test-1"] = false
+
+        val json = ImportExportRepository.exportWorkspaceToString(source)
+
+        val target = AppState(openDefaultTab = false)
+        val workspace = ImportExportRepository.decodeWorkspace(json)
+        ImportExportRepository.replaceWorkspaceState(target, workspace)
+
+        assertEquals(false, target.collectionExpandedState["folder-a"],
+            "folder-a was collapsed — must be restored as collapsed")
+        assertEquals(false, target.collectionExpandedState["coll-test-1"],
+            "coll-test-1 was collapsed — must be restored as collapsed")
+        // folder-b was never written → absent means expanded (default)
+        assertNull(target.collectionExpandedState["folder-b"],
+            "folder-b was never explicitly set — must remain absent (= expanded by default)")
+    }
+
+    @Test
+    fun exportWorkspaceToString_includes_collectionExpandedState_field() {
+        val source = AppState(openDefaultTab = false)
+        source.collections.add(
+            CollectionNode("coll-x", "X", isFolder = true, children = mutableStateListOf())
+        )
+        source.collectionExpandedState["coll-x"] = false
+
+        val json = ImportExportRepository.exportWorkspaceToString(source)
+
+        assertTrue(json.contains("collectionExpandedState"),
+            "Exported workspace JSON must contain the collectionExpandedState field")
+    }
+
+    @Test
+    fun importWorkspaceFromString_preserves_collection_and_folder_node_ids() {
+        // Root cause of Bug 1: collectionDtoToNode / folderDtoToNode called generateUuid()
+        // on every load so node IDs changed after restart, making collectionExpandedState
+        // keys stale.  AFTER FIX: IDs are written to JSON and restored on import.
+        val source = AppState(openDefaultTab = false)
+        val folderId = "folder-persist-1"
+        val collId   = "coll-persist-1"
+        source.collections.add(
+            CollectionNode(
+                id = collId, name = "Persist Test", isFolder = true,
+                children = mutableStateListOf(
+                    CollectionNode(id = folderId, name = "Sub Folder", isFolder = true,
+                        children = mutableStateListOf()),
+                ),
+            )
+        )
+
+        val json   = ImportExportRepository.exportWorkspaceToString(source)
+        val target = AppState(openDefaultTab = false)
+        ImportExportRepository.importWorkspaceFromString(target, json)
+
+        val importedColl = target.collections.first { it.name == "Persist Test" }
+        assertEquals(collId,   importedColl.id,
+            "Collection ID must be preserved through workspace export/import")
+
+        val importedFolder = importedColl.children.first { it.name == "Sub Folder" }
+        assertEquals(folderId, importedFolder.id,
+            "Folder ID must be preserved through workspace export/import")
+    }
+
+    @Test
+    fun expandedState_survives_full_importWorkspaceFromString_roundtrip() {
+        // End-to-end regression test for Bug 1 (Collection expand state).
+        // Before the fix, nodes got new UUIDs on every load so the expand-state
+        // map keys never matched the reloaded nodes.
+        //
+        // The actual startup path is: exportWorkspaceToString → decodeWorkspace →
+        // replaceWorkspaceState (done by WorkspaceRepository.load).
+        val source   = AppState(openDefaultTab = false)
+        val collId   = "coll-expand-rt-1"
+        val folderId = "folder-expand-rt-1"
+        source.collections.add(
+            CollectionNode(
+                id = collId, name = "Round-trip Coll", isFolder = true,
+                children = mutableStateListOf(
+                    CollectionNode(id = folderId, name = "Round-trip Folder", isFolder = true,
+                        children = mutableStateListOf()),
+                ),
+            )
+        )
+        source.collectionExpandedState[collId]   = false
+        source.collectionExpandedState[folderId] = false
+
+        val json      = ImportExportRepository.exportWorkspaceToString(source)
+        val target    = AppState(openDefaultTab = false)
+        val workspace = ImportExportRepository.decodeWorkspace(json)
+        ImportExportRepository.replaceWorkspaceState(target, workspace)
+
+        // Nodes must be found by their RESTORED IDs
+        val restoredColl   = target.collections.first { it.name == "Round-trip Coll" }
+        val restoredFolder = restoredColl.children.first { it.name == "Round-trip Folder" }
+
+        assertEquals(collId,   restoredColl.id,   "Collection ID must survive workspace restart")
+        assertEquals(folderId, restoredFolder.id, "Folder ID must survive workspace restart")
+
+        assertEquals(false, target.collectionExpandedState[restoredColl.id],
+            "Collection collapsed state must survive workspace restart")
+        assertEquals(false, target.collectionExpandedState[restoredFolder.id],
+            "Folder collapsed state must survive workspace restart")
     }
 }

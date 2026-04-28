@@ -48,12 +48,14 @@ data class ReqLabCollectionDto(
     val name: String,
     val folders: List<FolderDto>,
     val requests: List<RequestDto>,
+    val id: String? = null,
 )
 
 data class FolderDto(
     val name: String,
     val folders: List<FolderDto>,
     val requests: List<RequestDto>,
+    val id: String? = null,
 )
 
 data class RequestDto(
@@ -87,6 +89,8 @@ data class ReqLabWorkspaceDto(
     val environments: List<ReqLabEnvironmentDto>,
     val globalVariables: List<ReqLabEnvironmentDto> = emptyList(),
     val history: List<HistoryItemDto> = emptyList(),
+    /** Persisted per-folder expanded/collapsed state. Absent key → expanded (default). */
+    val collectionExpandedState: Map<String, Boolean> = emptyMap(),
 )
 
 data class HistoryItemDto(
@@ -187,6 +191,11 @@ object ImportExportRepository {
                     })
                 }
             })
+            if (state.collectionExpandedState.isNotEmpty()) {
+                put("collectionExpandedState", buildJsonObject {
+                    state.collectionExpandedState.forEach { (id, expanded) -> put(id, expanded) }
+                })
+            }
         }
         return json.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), root)
     }
@@ -265,6 +274,10 @@ object ImportExportRepository {
                 )
             },
         )
+
+        // Restore per-folder expanded state (Bug 1 fix)
+        state.collectionExpandedState.clear()
+        state.collectionExpandedState.putAll(workspace.collectionExpandedState)
     }
 
     private fun parseJsonString(rawJson: String): JsonObject =
@@ -290,6 +303,7 @@ object ImportExportRepository {
         return buildJsonObject {
             put("type", "reqLabCollection")
             put("version", "1.0")
+            put("id", root.id)
             put("name", root.name)
             put("folders", folders)
             put("requests", requests)
@@ -315,6 +329,7 @@ object ImportExportRepository {
     private fun folderNodeToJson(folder: CollectionNode): JsonObject {
         val (folders, requests) = splitChildren(folder)
         return buildJsonObject {
+            put("id", folder.id)
             put("name", folder.name)
             put("folders", folders)
             put("requests", requests)
@@ -515,11 +530,15 @@ object ImportExportRepository {
         val environments = root["environments"]?.jsonArray?.map { environmentDtoFromJson(it.jsonObject) } ?: emptyList()
         val globalVariables = root["globalVariables"]?.jsonArray?.map { environmentDtoFromJson(it.jsonObject) } ?: emptyList()
         val history = root["history"]?.jsonArray?.map { historyItemDtoFromJson(it.jsonObject) } ?: emptyList()
+        val collectionExpandedState = root["collectionExpandedState"]?.jsonObject?.entries
+            ?.associate { (k, v) -> k to (v.jsonPrimitive.booleanOrNull ?: true) }
+            ?: emptyMap()
         return ReqLabWorkspaceDto(
             collections = collections,
             environments = environments,
             globalVariables = globalVariables,
             history = history,
+            collectionExpandedState = collectionExpandedState,
         )
     }
 
@@ -538,17 +557,19 @@ object ImportExportRepository {
     private fun collectionDtoFromJson(root: JsonObject): ReqLabCollectionDto {
         val name = root["name"]?.jsonPrimitive?.contentOrNull
             ?: throw ImportExportException("Collection name is missing")
+        val id = root["id"]?.jsonPrimitive?.contentOrNull
         val folders = root["folders"]?.jsonArray?.map { folderDtoFromJson(it.jsonObject) } ?: emptyList()
         val requests = root["requests"]?.jsonArray?.map { requestDtoFromJson(it.jsonObject) } ?: emptyList()
-        return ReqLabCollectionDto(name = name, folders = folders, requests = requests)
+        return ReqLabCollectionDto(name = name, folders = folders, requests = requests, id = id)
     }
 
     private fun folderDtoFromJson(root: JsonObject): FolderDto {
         val name = root["name"]?.jsonPrimitive?.contentOrNull
             ?: throw ImportExportException("Folder name is missing")
+        val id = root["id"]?.jsonPrimitive?.contentOrNull
         val folders = root["folders"]?.jsonArray?.map { folderDtoFromJson(it.jsonObject) } ?: emptyList()
         val requests = root["requests"]?.jsonArray?.map { requestDtoFromJson(it.jsonObject) } ?: emptyList()
-        return FolderDto(name = name, folders = folders, requests = requests)
+        return FolderDto(name = name, folders = folders, requests = requests, id = id)
     }
 
     private fun requestDtoFromJson(root: JsonObject): RequestDto {
@@ -680,7 +701,7 @@ object ImportExportRepository {
         dto.folders.forEach { children.add(folderDtoToNode(it)) }
         dto.requests.forEach { children.add(requestDtoToNode(it)) }
         return CollectionNode(
-            id = generateUuid(),
+            id = dto.id ?: generateUuid(),
             name = nameOverride,
             isFolder = true,
             children = children,
@@ -692,7 +713,7 @@ object ImportExportRepository {
         dto.folders.forEach { children.add(folderDtoToNode(it)) }
         dto.requests.forEach { children.add(requestDtoToNode(it)) }
         return CollectionNode(
-            id = generateUuid(),
+            id = dto.id ?: generateUuid(),
             name = dto.name,
             isFolder = true,
             children = children,

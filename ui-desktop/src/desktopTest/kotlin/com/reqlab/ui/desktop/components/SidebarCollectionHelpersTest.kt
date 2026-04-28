@@ -1,5 +1,7 @@
 package com.reqlab.ui.shared.components
 
+import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.state.CollectionNode
 import androidx.compose.runtime.mutableStateListOf
@@ -216,6 +218,119 @@ class SidebarCollectionHelpersTest {
         assertNull(duplicateRequestInCollections(collections, "nonexistent"))
     }
 
+    @Test
+    fun duplicateRequest_copies_auth_fields() {
+        val collections = mutableStateListOf(
+            CollectionNode(
+                "c1", "API", isFolder = true, children = mutableStateListOf(
+                    CollectionNode(
+                        "r1", "Login", method = HttpMethodType.POST, url = "/auth",
+                        authType = AuthType.BEARER,
+                        authToken = "tok123",
+                        authUsername = "user",
+                        authPassword = "pass",
+                        authApiKey = "X-Key",
+                        authApiValue = "myval",
+                    )
+                )
+            )
+        )
+        duplicateRequestInCollections(collections, "r1")
+        val dup = collections[0].children[1]
+        assertEquals(AuthType.BEARER, dup.authType)
+        assertEquals("tok123", dup.authToken)
+        assertEquals("user", dup.authUsername)
+        assertEquals("pass", dup.authPassword)
+        assertEquals("X-Key", dup.authApiKey)
+        assertEquals("myval", dup.authApiValue)
+    }
+
+    @Test
+    fun duplicateRequest_copies_body_fields() {
+        val collections = mutableStateListOf(
+            CollectionNode(
+                "c1", "API", isFolder = true, children = mutableStateListOf(
+                    CollectionNode(
+                        "r1", "Create", method = HttpMethodType.POST, url = "/items",
+                        bodyType = BodyType.JSON,
+                        bodyContent = """{"key":"value"}""",
+                        bodyContents = mapOf("JSON" to """{"key":"value"}""", "RAW" to "raw body"),
+                    )
+                )
+            )
+        )
+        duplicateRequestInCollections(collections, "r1")
+        val dup = collections[0].children[1]
+        assertEquals(BodyType.JSON, dup.bodyType)
+        assertEquals("""{"key":"value"}""", dup.bodyContent)
+        assertEquals("""{"key":"value"}""", dup.bodyContents["JSON"])
+        assertEquals("raw body", dup.bodyContents["RAW"])
+    }
+
+    @Test
+    fun duplicateRequest_copies_user_headers() {
+        val collections = mutableStateListOf(
+            CollectionNode(
+                "c1", "API", isFolder = true, children = mutableStateListOf(
+                    CollectionNode(
+                        "r1", "Get", method = HttpMethodType.GET, url = "/items",
+                        userHeaders = listOf("Content-Type" to "application/json", "Accept" to "*/*"),
+                    )
+                )
+            )
+        )
+        duplicateRequestInCollections(collections, "r1")
+        val dup = collections[0].children[1]
+        assertEquals(2, dup.userHeaders.size)
+        assertEquals("Content-Type" to "application/json", dup.userHeaders[0])
+        assertEquals("Accept" to "*/*", dup.userHeaders[1])
+    }
+
+    @Test
+    fun duplicateRequest_copies_scripts() {
+        // Bug 1 (duplicate request): preRequestScript and testScript must be copied.
+        val collections = mutableStateListOf(
+            CollectionNode(
+                "c1", "API", isFolder = true, children = mutableStateListOf(
+                    CollectionNode(
+                        "r1", "Scripted", method = HttpMethodType.GET, url = "/items",
+                        preRequestScript = "pm.variables.set(\"ts\", Date.now());",
+                        testScript = "pm.test(\"status\", () => pm.response.to.have.status(200));",
+                    )
+                )
+            )
+        )
+        duplicateRequestInCollections(collections, "r1")
+        val dup = collections[0].children[1]
+        assertEquals(
+            "pm.variables.set(\"ts\", Date.now());",
+            dup.preRequestScript,
+            "preRequestScript must be copied to the duplicate",
+        )
+        assertEquals(
+            "pm.test(\"status\", () => pm.response.to.have.status(200));",
+            dup.testScript,
+            "testScript must be copied to the duplicate",
+        )
+    }
+
+    @Test
+    fun duplicateRequest_gets_unique_id() {
+        // Each duplicate must have its own UUID — sharing an id would corrupt state.
+        val collections = mutableStateListOf(
+            CollectionNode(
+                "c1", "API", isFolder = true, children = mutableStateListOf(
+                    CollectionNode("r1", "Get", method = HttpMethodType.GET, url = "/items"),
+                )
+            )
+        )
+        duplicateRequestInCollections(collections, "r1")
+        val original = collections[0].children[0]
+        val dup      = collections[0].children[1]
+        assertTrue(dup.id.isNotBlank(), "duplicate id must not be blank")
+        assertTrue(dup.id != original.id, "duplicate must have a different id from the original")
+    }
+
     // ── filterCollectionNode ──
 
     @Test
@@ -240,5 +355,66 @@ class SidebarCollectionHelpersTest {
         val filtered = filterCollectionNode(collection, "")
         assertNotNull(filtered)
         assertEquals(3, filtered.children.size)
+    }
+
+    // ── moveCollectionBeforeCollection (Bug 3 — collection drag-to-reorder) ──
+
+    private fun threeCollections(): MutableList<CollectionNode> = mutableStateListOf(
+        CollectionNode("c1", "Alpha",  isFolder = true, children = mutableStateListOf()),
+        CollectionNode("c2", "Beta",   isFolder = true, children = mutableStateListOf()),
+        CollectionNode("c3", "Gamma",  isFolder = true, children = mutableStateListOf()),
+    )
+
+    @Test
+    fun moveCollectionBefore_moves_last_before_first() {
+        // Bug 3 BEFORE FIX: function did not exist → compile error.
+        // AFTER FIX: the function exists and produces the correct order.
+        val collections = threeCollections()
+        val moved = moveCollectionBeforeCollection(collections, "c3", "c1")
+        assertTrue(moved)
+        assertEquals(listOf("c3", "c1", "c2"), collections.map { it.id })
+    }
+
+    @Test
+    fun moveCollectionBefore_moves_first_before_last() {
+        val collections = threeCollections()
+        val moved = moveCollectionBeforeCollection(collections, "c1", "c3")
+        assertTrue(moved)
+        assertEquals(listOf("c2", "c1", "c3"), collections.map { it.id })
+    }
+
+    @Test
+    fun moveCollectionBefore_returns_false_for_same_source_and_target() {
+        val collections = threeCollections()
+        assertFalse(moveCollectionBeforeCollection(collections, "c1", "c1"))
+        assertEquals(listOf("c1", "c2", "c3"), collections.map { it.id })
+    }
+
+    @Test
+    fun moveCollectionBefore_returns_false_for_nonexistent_id() {
+        val collections = threeCollections()
+        assertFalse(moveCollectionBeforeCollection(collections, "nonexistent", "c1"))
+    }
+
+    @Test
+    fun moveCollectionAfter_moves_first_after_last() {
+        val collections = threeCollections()
+        val moved = moveCollectionAfterCollection(collections, "c1", "c3")
+        assertTrue(moved)
+        assertEquals(listOf("c2", "c3", "c1"), collections.map { it.id })
+    }
+
+    @Test
+    fun moveCollectionAfter_moves_last_after_first() {
+        val collections = threeCollections()
+        val moved = moveCollectionAfterCollection(collections, "c3", "c1")
+        assertTrue(moved)
+        assertEquals(listOf("c1", "c3", "c2"), collections.map { it.id })
+    }
+
+    @Test
+    fun moveCollectionAfter_returns_false_for_same_source_and_target() {
+        val collections = threeCollections()
+        assertFalse(moveCollectionAfterCollection(collections, "c2", "c2"))
     }
 }

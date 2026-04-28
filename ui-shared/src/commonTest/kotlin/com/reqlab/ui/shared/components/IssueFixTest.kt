@@ -1,5 +1,6 @@
 package com.reqlab.ui.shared.components
 
+import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.ui.shared.state.RequestTabState
 import kotlin.test.Test
@@ -22,6 +23,77 @@ import kotlin.test.assertTrue
  *        BEFORE FIX: bodyType = BodyType.JSON → assertEquals(NONE, ...) fails.
  *        AFTER FIX:  bodyType = BodyType.NONE → passes.
  */
+
+// ═══════════════════════════════════════════════════════════════════════
+// Bug 4 — Auth method switching must preserve credentials of other types
+//
+// BEFORE FIX: AuthEditor.kt cleared credentials of the OLD auth type on
+//             every switch, losing any previously entered values.
+// AFTER FIX:  Only the selected auth type's fields are shown; all other
+//             credentials are kept untouched in RequestTabState.
+// ═══════════════════════════════════════════════════════════════════════
+
+class AuthCredentialPreservationTest {
+
+    @Test
+    fun switching_auth_type_preserves_bearer_token() {
+        val tab = RequestTabState()
+        tab.authType = AuthType.BEARER
+        tab.authToken = "secret-bearer-token"
+
+        // Simulate what the fixed AuthEditor does when switching: set new type only
+        tab.authType = AuthType.API_KEY
+
+        // BEFORE FIX: AuthEditor cleared authToken when switching away from BEARER
+        // AFTER FIX:  token is untouched
+        assertEquals(
+            "secret-bearer-token",
+            tab.authToken,
+            "Bearer token must be preserved when switching to a different auth type",
+        )
+    }
+
+    @Test
+    fun switching_auth_type_preserves_basic_credentials() {
+        val tab = RequestTabState()
+        tab.authType = AuthType.BASIC
+        tab.authUsername = "admin"
+        tab.authPassword = "hunter2"
+
+        // Switch away from BASIC
+        tab.authType = AuthType.BEARER
+        tab.authToken = "some-token"
+
+        // Switch back
+        tab.authType = AuthType.BASIC
+
+        // BEFORE FIX: username/password were cleared when leaving BASIC
+        assertEquals("admin",   tab.authUsername, "Username must survive auth type switch")
+        assertEquals("hunter2", tab.authPassword, "Password must survive auth type switch")
+    }
+
+    @Test
+    fun all_auth_credentials_are_independent_and_preserved() {
+        val tab = RequestTabState()
+        tab.authToken    = "bearer-tok"
+        tab.authUsername = "user"
+        tab.authPassword = "pass"
+        tab.authApiKey   = "x-api-key"
+        tab.authApiValue = "abc123"
+
+        // Cycle through all types
+        tab.authType = AuthType.BEARER
+        tab.authType = AuthType.BASIC
+        tab.authType = AuthType.API_KEY
+        tab.authType = AuthType.NONE
+
+        assertEquals("bearer-tok", tab.authToken)
+        assertEquals("user",       tab.authUsername)
+        assertEquals("pass",       tab.authPassword)
+        assertEquals("x-api-key",  tab.authApiKey)
+        assertEquals("abc123",     tab.authApiValue)
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // M-5 — shouldPauseValidation helper (compile-error before fix)

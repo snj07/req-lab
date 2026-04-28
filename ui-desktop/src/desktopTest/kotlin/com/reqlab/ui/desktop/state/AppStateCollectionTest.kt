@@ -232,6 +232,26 @@ class AppStateCollectionTest {
         assertTrue(state.collections.flatMap { it.children }.any { it.id == requestId && it.name == "Get all users v2" })
     }
 
+    @Test
+    fun renameRequestEverywhere_name_persists_after_syncTabToCollectionNode() {
+        // Regression test for Bug 2: rename from sidebar used to be overwritten
+        // when the user pressed Cmd+S because the open tab still held the old name.
+        val state = AppState(withDemoData = true)
+        val requestId = "r1"
+
+        state.openRequest(requestId = requestId, name = "Get all users", method = HttpMethodType.GET, url = "{{baseUrl}}/users")
+        state.renameRequestEverywhere(requestId, "Renamed request")
+
+        val tab = state.openTabs.first { it.id == requestId }
+        // Simulate Cmd+S: syncTabToCollectionNode writes tab.name back to node
+        state.syncTabToCollectionNode(tab)
+
+        // Both must still carry the new name
+        assertEquals("Renamed request", tab.name)
+        val node = state.collections.flatMap { it.children }.first { it.id == requestId }
+        assertEquals("Renamed request", node.name)
+    }
+
     // ── Issue 1: Closing last tab ────────────────────────────────────
 
     @Test

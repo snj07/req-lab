@@ -154,7 +154,10 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                 "${gv.key}=${gv.value}:${gv.enabled}:${gv.secret}"
             }
             val historyFingerprint = "rev-${state.historyRevision}"
-            "$collectionFingerprint#$envFingerprint#$globalFingerprint#$historyFingerprint"
+            // Include expand state so collapsing/expanding a collection triggers a save
+            val expandedFingerprint = state.collectionExpandedState.entries
+                .joinToString(",") { (k, v) -> "$k=$v" }
+            "$collectionFingerprint#$envFingerprint#$globalFingerprint#$historyFingerprint#$expandedFingerprint"
         }.drop(1)
             .collect { withContext(ioDispatcher) { WorkspaceRepository.save(state) } }
     }

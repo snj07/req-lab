@@ -70,21 +70,6 @@ fun AuthEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                         .background(if (selected) ReqLabColors.SelectedItem else Color.Transparent)
                         .clickable {
                             if (at != tab.authType) {
-                                // M-11: Clear credentials of the OLD auth type before switching
-                                // so they don't bleed into a different type's fields.
-                                when (tab.authType) {
-                                    com.reqlab.core.model.AuthType.BASIC -> {
-                                        tab.authUsername = ""
-                                        tab.authPassword = ""
-                                    }
-                                    com.reqlab.core.model.AuthType.BEARER,
-                                    com.reqlab.core.model.AuthType.JWT -> tab.authToken = ""
-                                    com.reqlab.core.model.AuthType.API_KEY -> {
-                                        tab.authApiKey = ""
-                                        tab.authApiValue = ""
-                                    }
-                                    else -> {}
-                                }
                                 tab.authType = at
                                 onDirty()
                             }
