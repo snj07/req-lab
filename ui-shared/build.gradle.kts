@@ -6,6 +6,7 @@ plugins {
 }
 
 val generatedI18nDir = layout.buildDirectory.dir("generated/source/i18n/commonMain/kotlin")
+val generatedBuildInfoDir = layout.buildDirectory.dir("generated/source/buildinfo/commonMain/kotlin")
 
 val generateI18nBundles by tasks.registering {
     val inputDir = layout.projectDirectory.dir("src/commonMain/resources/i18n")
@@ -59,6 +60,29 @@ val generateI18nBundles by tasks.registering {
     }
 }
 
+val generateBuildInfo by tasks.registering {
+    val outputDir = generatedBuildInfoDir
+    val appVersion = rootProject.findProperty("appVersion")?.toString() ?: "dev"
+
+    inputs.property("appVersion", appVersion)
+    outputs.dir(outputDir)
+
+    doLast {
+        val outFile = outputDir.get().file("com/reqlab/ui/shared/build/GeneratedBuildInfo.kt").asFile
+        outFile.parentFile.mkdirs()
+
+        outFile.writeText(
+            """
+            package com.reqlab.ui.shared.build
+
+            internal object GeneratedBuildInfo {
+                const val APP_VERSION: String = "$appVersion"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+}
+
 kotlin {
     jvm("desktop")
 
@@ -70,6 +94,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             kotlin.srcDir(generatedI18nDir)
+            kotlin.srcDir(generatedBuildInfoDir)
             dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
@@ -111,4 +136,5 @@ kotlin {
 
 tasks.matching { it.name.startsWith("compileKotlin") }.configureEach {
     dependsOn(generateI18nBundles)
+    dependsOn(generateBuildInfo)
 }

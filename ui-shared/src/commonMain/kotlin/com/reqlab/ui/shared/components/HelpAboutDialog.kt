@@ -29,11 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.reqlab.ui.shared.build.GeneratedBuildInfo
 import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.theme.ReqLabColors
-
-private const val APP_VERSION = "1.3.0"
 
 @Composable
 fun HelpAboutDialog(state: AppState) {
@@ -126,7 +125,7 @@ fun HelpAboutDialog(state: AppState) {
                     }
 
                     HelpSection("Version & Build Info") {
-                        HelpText("Version: $APP_VERSION")
+                        HelpText("Version: ${GeneratedBuildInfo.APP_VERSION}")
                         HelpText("Build: Kotlin Multiplatform + Compose Multiplatform")
                         HelpText("Supported platforms: macOS, Windows, Linux, and Web (Wasm)")
                     }
