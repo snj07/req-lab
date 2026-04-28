@@ -1,9 +1,21 @@
 package com.reqlab.editor.core
 
 object LanguageRegistry {
-    private val providers = mutableMapOf<LanguageMode, LanguageModeProvider>()
+    private val builtins: Map<LanguageMode, LanguageModeProvider> = mapOf(
+        LanguageMode.PLAIN_TEXT to PlainTextMode,
+        LanguageMode.JSON to JsonMode,
+        LanguageMode.XML to XmlMode,
+        LanguageMode.HTML to HtmlMode,
+        LanguageMode.JAVASCRIPT to JavaScriptMode,
+        LanguageMode.GRAPHQL to GraphQLMode,
+    )
 
-    fun register(provider: LanguageModeProvider) { providers[provider.mode] = provider }
+    @kotlin.concurrent.Volatile
+    private var providers: Map<LanguageMode, LanguageModeProvider> = builtins
+
+    fun register(provider: LanguageModeProvider) {
+        providers = providers + (provider.mode to provider)
+    }
 
     fun getProvider(mode: LanguageMode): LanguageModeProvider =
         providers[mode] ?: providers[LanguageMode.PLAIN_TEXT] ?: PlainTextMode
@@ -28,13 +40,10 @@ object LanguageRegistry {
     }
 
     fun registerBuiltins() {
-        register(PlainTextMode)
-        register(JsonMode)
-        register(XmlMode)
-        register(HtmlMode)
-        register(JavaScriptMode)
-        register(GraphQLMode)
+        providers = providers + builtins
     }
 
-    fun clear() { providers.clear() }
+    fun clear() {
+        providers = emptyMap()
+    }
 }
