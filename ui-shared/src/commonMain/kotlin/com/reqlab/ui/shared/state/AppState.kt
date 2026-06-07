@@ -213,6 +213,10 @@ class AppSettings {
     // Scripting
     /** Namespace prefix for scripts (default "reqlab"). Change to e.g. "api". */
     var scriptPrefix         by mutableStateOf("reqlab")
+
+    // Environment
+    /** Name of the last selected environment; restored on app launch. Empty = first env. */
+    var selectedEnvName      by mutableStateOf("")
 }
 
 // ── Per-tab state (one per open request tab) ────────────────────
@@ -451,16 +455,22 @@ class RequestTabState(
     }
 
     fun syncSystemHeaders() {
-        upsertSystemHeader(SystemHeaderRules.CONTENT_TYPE, SystemHeaderRules.defaultContentTypeFor(bodyType))
-        upsertSystemHeader(SystemHeaderRules.ACCEPT, "application/json")
-        upsertSystemHeader(SystemHeaderRules.USER_AGENT, "ReqLab/1.0")
+        // Content-Type always reflects the current body type (derived value).
+        upsertSystemHeader(SystemHeaderRules.CONTENT_TYPE, SystemHeaderRules.defaultContentTypeFor(bodyType), overwriteIfExists = true)
+        // Accept and User-Agent are only inserted when missing so that user
+        // overrides to these values are preserved across body-type changes and
+        // request sends.
+        upsertSystemHeader(SystemHeaderRules.ACCEPT, "application/json", overwriteIfExists = false)
+        upsertSystemHeader(SystemHeaderRules.USER_AGENT, "ReqLab/1.0", overwriteIfExists = false)
     }
 
-    private fun upsertSystemHeader(key: String, value: String) {
+    private fun upsertSystemHeader(key: String, value: String, overwriteIfExists: Boolean = true) {
         val existing = headers.indexOfFirst { it.key.equals(key, ignoreCase = true) }
         if (existing >= 0) {
-            headers[existing].key = key
-            headers[existing].value = value
+            if (overwriteIfExists) {
+                headers[existing].key = key
+                headers[existing].value = value
+            }
             headers[existing].kind = HeaderKind.SYSTEM
             headers[existing].keyLocked = true
             return

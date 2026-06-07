@@ -29,6 +29,7 @@ class SettingsRepositoryTest {
         "settings.httpProxy",
         "settings.httpsProxy",
         "settings.scriptPrefix",
+        "settings.selectedEnvName",
     )
 
     @Before
@@ -162,5 +163,41 @@ class SettingsRepositoryTest {
         SettingsRepository.load(loaded)
 
         assertEquals("customPrefix", loaded.scriptPrefix)
+    }
+
+    @Test
+    fun selected_env_name_defaults_to_empty_when_not_stored() {
+        val settings = AppSettings()
+        SettingsRepository.load(settings)
+
+        assertEquals("", settings.selectedEnvName)
+    }
+
+    @Test
+    fun selected_env_name_round_trips() {
+        val original = AppSettings().apply { selectedEnvName = "Staging" }
+        SettingsRepository.save(original)
+
+        val loaded = AppSettings()
+        SettingsRepository.load(loaded)
+
+        assertEquals("Staging", loaded.selectedEnvName)
+    }
+
+    @Test
+    fun selected_env_name_survives_full_settings_round_trip() {
+        val original = AppSettings().apply {
+            theme = AppTheme.LIGHT
+            scriptPrefix = "api"
+            selectedEnvName = "Production"
+        }
+        SettingsRepository.save(original)
+
+        val loaded = AppSettings()
+        SettingsRepository.load(loaded)
+
+        assertEquals(AppTheme.LIGHT, loaded.theme)
+        assertEquals("api", loaded.scriptPrefix)
+        assertEquals("Production", loaded.selectedEnvName)
     }
 }

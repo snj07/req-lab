@@ -77,4 +77,90 @@ class AppStateBehaviorTest {
         val settings = AppSettings()
         assertFalse(settings.autoSaveRequests)
     }
+
+    // ── System header value editability ────────────────────────────────────
+
+    @Test
+    fun syncSystemHeaders_preserves_user_overridden_accept_value() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        // User overrides Accept header
+        val acceptHeader = tab.headers.first { it.key == "Accept" }
+        acceptHeader.value = "application/xml"
+
+        // Body type change triggers syncSystemHeaders again
+        tab.syncSystemHeaders()
+
+        assertEquals(
+            "application/xml",
+            tab.headers.first { it.key == "Accept" }.value,
+            "User-set Accept value must not be overwritten by syncSystemHeaders",
+        )
+    }
+
+    @Test
+    fun syncSystemHeaders_preserves_user_overridden_user_agent_value() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        val uaHeader = tab.headers.first { it.key == "User-Agent" }
+        uaHeader.value = "MyClient/2.0"
+
+        tab.syncSystemHeaders()
+
+        assertEquals(
+            "MyClient/2.0",
+            tab.headers.first { it.key == "User-Agent" }.value,
+            "User-set User-Agent value must not be overwritten by syncSystemHeaders",
+        )
+    }
+
+    @Test
+    fun syncSystemHeaders_always_updates_content_type_to_match_body_type() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        tab.bodyType = com.reqlab.core.model.BodyType.XML
+        tab.syncSystemHeaders()
+
+        assertEquals(
+            "application/xml",
+            tab.headers.first { it.key == "Content-Type" }.value,
+            "Content-Type must always be updated to match the current body type",
+        )
+    }
+
+    @Test
+    fun syncSystemHeaders_inserts_accept_if_missing() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        tab.headers.removeAll { it.key == "Accept" }
+        tab.syncSystemHeaders()
+
+        val accept = tab.headers.firstOrNull { it.key == "Accept" }
+        assertEquals("application/json", accept?.value, "Accept must be inserted with default when missing")
+    }
+
+    @Test
+    fun syncSystemHeaders_called_multiple_times_does_not_reset_user_value() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        tab.headers.first { it.key == "Accept" }.value = "text/plain"
+
+        repeat(3) { tab.syncSystemHeaders() }
+
+        assertEquals(
+            "text/plain",
+            tab.headers.first { it.key == "Accept" }.value,
+            "Repeated syncSystemHeaders calls must not reset a user-overridden Accept value",
+        )
+    }
 }

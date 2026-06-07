@@ -41,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -473,6 +475,9 @@ private fun CodeEditorSearchBar(
     onClose: () -> Unit,
     testTagPrefix: String,
 ) {
+    val searchFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -498,6 +503,7 @@ private fun CodeEditorSearchBar(
                 .background(ReqLabColors.Background)
                 .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
                 .padding(horizontal = 8.dp, vertical = 6.dp)
+                .focusRequester(searchFocusRequester)
                 .testTag("$testTagPrefix-search-input"),
             decorationBox = { inner ->
                 Box {

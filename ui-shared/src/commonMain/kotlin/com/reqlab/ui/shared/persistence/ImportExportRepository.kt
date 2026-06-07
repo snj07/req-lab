@@ -250,7 +250,15 @@ object ImportExportRepository {
 
         state.environments.clear()
         state.environments.addAll(workspace.environments.map { environmentDtoToState(it, it.name) })
-        state.selectedEnvIndex = if (state.environments.isEmpty()) 0 else state.selectedEnvIndex.coerceIn(0, state.environments.lastIndex)
+        val savedName = state.settings.selectedEnvName
+        state.selectedEnvIndex = when {
+            state.environments.isEmpty() -> 0
+            savedName.isNotEmpty() -> {
+                val idx = state.environments.indexOfFirst { it.name == savedName }
+                if (idx >= 0) idx else 0
+            }
+            else -> state.selectedEnvIndex.coerceIn(0, state.environments.lastIndex)
+        }
 
         state.globalVariables.clear()
         state.globalVariables.addAll(

@@ -46,6 +46,7 @@ object SettingsRepository {
         settings.httpsProxy   = PlatformStorage.getString(PREFIX + "httpsProxy") ?: settings.httpsProxy
 
         settings.scriptPrefix = PlatformStorage.getString(PREFIX + "scriptPrefix") ?: settings.scriptPrefix
+        settings.selectedEnvName = PlatformStorage.getString(PREFIX + "selectedEnvName") ?: settings.selectedEnvName
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ object SettingsRepository {
         PlatformStorage.putString(PREFIX + "httpsProxy", settings.httpsProxy)
 
         PlatformStorage.putString(PREFIX + "scriptPrefix", settings.scriptPrefix)
+        PlatformStorage.putString(PREFIX + "selectedEnvName", settings.selectedEnvName)
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

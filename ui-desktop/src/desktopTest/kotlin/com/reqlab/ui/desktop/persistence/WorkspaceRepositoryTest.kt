@@ -6,6 +6,8 @@ import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.platform.PlatformStorage
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
+import com.reqlab.ui.shared.state.EnvState
+import com.reqlab.ui.shared.state.MutableKeyValue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -20,14 +22,19 @@ import kotlin.test.assertNotNull
 class WorkspaceRepositoryTest {
 
     private val WORKSPACE_KEY = "reqlab.workspace"
+    private val SETTINGS_ENV_KEY = "settings.selectedEnvName"
 
     @Before
     fun setUp() {
         PlatformStorage.remove(WORKSPACE_KEY)
+        PlatformStorage.remove(SETTINGS_ENV_KEY)
     }
 
     @After
     fun tearDown() {
+        PlatformStorage.remove(WORKSPACE_KEY)
+        PlatformStorage.remove(SETTINGS_ENV_KEY)
+    }
         PlatformStorage.remove(WORKSPACE_KEY)
     }
 
@@ -166,5 +173,107 @@ class WorkspaceRepositoryTest {
             ?.children?.firstOrNull()?.bodyContent
 
         assertEquals(updated, body, "Second save must overwrite the first; restored body must match updated value")
+    }
+
+    // ── Selected environment persistence ─────────────────────────────────────
+
+    @Test
+    fun selected_environment_is_restored_to_correct_index_after_save_and_load() {
+        // Build a state with three environments; select the middle one.
+        val source = AppState(openDefaultTab = false).also { state ->
+            state.environments.add(EnvState("Development"))
+            state.environments.add(EnvState("Staging"))
+            state.environments.add(EnvState("Production"))
+            state.selectedEnvIndex = 1  // Staging
+            state.settings.selectedEnvName = "Staging"
+        }
+
+        SettingsRepository.save(source.settings)
+        WorkspaceRepository.save(source)
+
+        val restored = AppState(openDefaultTab = false)
+        SettingsRepository.load(restored.settings)
+        WorkspaceRepository.load(restored)  // resolves selectedEnvName → index
+
+        assertEquals(1, restored.selectedEnvIndex,
+            "selectedEnvIndex must be 1 (Staging) after restore")
+        assertEquals("Staging", restored.selectedEnvironment?.name,
+            "selectedEnvironment must be Staging after restore")
+    }
+
+    @Test
+    fun selected_environment_falls_back_to_first_when_saved_name_not_found() {
+        val source = AppState(openDefaultTab = false).also { state ->
+            state.environments.add(EnvState("Development"))
+            state.environments.add(EnvState("Staging"))
+            state.settings.selectedEnvName = "DeletedEnv"  // saved name no longer exists
+        }
+
+        SettingsRepository.save(source.settings)
+        WorkspaceRepository.save(source)
+
+        val restored = AppState(openDefaultTab = false)
+        SettingsRepository.load(restored.settings)
+        WorkspaceRepository.load(restored)
+
+        assertEquals(0, restored.selectedEnvIndex,
+            "Must fall back to index 0 when saved environment name is not found")
+        assertEquals("Development", restored.selectedEnvironment?.name)
+    }
+
+    @Test
+    fun selected_environment_falls_back_to_first_when_no_name_saved() {
+        val source = AppState(openDefaultTab = false).also { state ->
+            state.environments.add(EnvState("Development"))
+            state.environments.add(EnvState("Staging"))
+            // selectedEnvName is empty (fresh install)
+        }
+
+        SettingsRepository.save(source.settings)  // selectedEnvName = ""
+        WorkspaceRepository.save(source)
+
+        val restored = AppState(openDefaultTab = false)
+        SettingsRepository.load(restored.settings)
+        WorkspaceRepository.load(restored)
+
+        assertEquals(0, restored.selectedEnvIndex,
+            "Must default to index 0 when no env name was saved")
+    }
+
+    @Test
+    fun selected_environment_handles_empty_env_list_gracefully() {
+        val source = AppState(openDefaultTab = false).also { state ->
+            state.settings.selectedEnvName = "Ghost"
+        }
+
+        SettingsRepository.save(source.settings)
+        WorkspaceRepository.save(source)
+
+        val restored = AppState(openDefaultTab = false)
+        SettingsRepository.load(restored.settings)
+        WorkspaceRepository.load(restored)
+
+        assertEquals(0, restored.selectedEnvIndex,
+            "selectedEnvIndex must be 0 when environment list is empty")
+    }
+
+    @Test
+    fun selected_last_environment_is_correctly_restored() {
+        val source = AppState(openDefaultTab = false).also { state ->
+            state.environments.add(EnvState("Dev"))
+            state.environments.add(EnvState("Prod"))
+            state.selectedEnvIndex = 1
+            state.settings.selectedEnvName = "Prod"
+        }
+
+        SettingsRepository.save(source.settings)
+        WorkspaceRepository.save(source)
+
+        val restored = AppState(openDefaultTab = false)
+        SettingsRepository.load(restored.settings)
+        WorkspaceRepository.load(restored)
+
+        assertEquals(1, restored.selectedEnvIndex)
+        assertEquals("Prod", restored.selectedEnvironment?.name)
     }
 }

@@ -286,16 +286,18 @@ private fun ResponseHeadersView(response: ResponseDefinition) {
             }
         }
         items(response.headers) { header ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(ReqLabColors.SurfaceContainer)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            ) {
-                Text(header.key, color = ReqLabColors.Primary, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.4f))
-                Text(header.value, color = ReqLabColors.OnSurface, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.6f))
+            SelectionContainer {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ReqLabColors.SurfaceContainer)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                ) {
+                    Text(header.key, color = ReqLabColors.Primary, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.4f))
+                    Text(header.value, color = ReqLabColors.OnSurface, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.6f))
+                }
             }
         }
     }
@@ -312,16 +314,18 @@ private fun ResponseCookiesView(response: ResponseDefinition) {
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
             items(response.cookies) { cookie ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(ReqLabColors.SurfaceContainer)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                ) {
-                    Text(cookie.key, color = ReqLabColors.Tertiary, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.4f))
-                    Text(cookie.value, color = ReqLabColors.OnSurface, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.6f))
+                SelectionContainer {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(ReqLabColors.SurfaceContainer)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        Text(cookie.key, color = ReqLabColors.Tertiary, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.4f))
+                        Text(cookie.value, color = ReqLabColors.OnSurface, fontSize = 12.sp, fontFamily = CodeFontFamily, modifier = Modifier.weight(0.6f))
+                    }
                 }
             }
         }

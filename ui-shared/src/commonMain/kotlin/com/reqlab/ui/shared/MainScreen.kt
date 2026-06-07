@@ -115,10 +115,14 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy"
+                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy" +
+                    "|${state.selectedEnvironment?.name ?: ""}"
             }
         }.drop(1)
-            .collect { withContext(ioDispatcher) { SettingsRepository.save(state.settings) } }
+            .collect {
+                state.settings.selectedEnvName = state.selectedEnvironment?.name ?: ""
+                withContext(ioDispatcher) { SettingsRepository.save(state.settings) }
+            }
     }
 
     // ── Auto-save tabs when switching or editing (if auto-save is on) ─────

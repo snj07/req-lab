@@ -4,6 +4,7 @@ package com.reqlab.ui.desktop
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -777,6 +778,73 @@ class SearchBarUiTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("body-editor-search-bar", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun search_input_is_auto_focused_after_toolbar_button_click() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = """{"key":"value"}"""
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-toggle", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
+    fun search_input_is_auto_focused_after_cmd_f() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{\n  \"name\": \"Alice\",\n  \"role\": \"admin\"\n}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performKeyInput {
+                keyDown(Key.CtrlLeft)
+                pressKey(Key.F)
+                keyUp(Key.CtrlLeft)
+            }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
+    fun search_input_accepts_text_immediately_after_cmd_f_without_click() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{\n  \"name\": \"Alice\",\n  \"role\": \"admin\"\n}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performKeyInput {
+                keyDown(Key.CtrlLeft)
+                pressKey(Key.F)
+                keyUp(Key.CtrlLeft)
+            }
+        composeRule.waitForIdle()
+
+        // Type directly into the search input without an explicit click/focus
+        composeRule.onNodeWithTag("body-editor-search-input", useUnmergedTree = true)
+            .performTextInput("Alice")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-input", useUnmergedTree = true)
+            .assertTextContains("Alice")
     }
 }
 
