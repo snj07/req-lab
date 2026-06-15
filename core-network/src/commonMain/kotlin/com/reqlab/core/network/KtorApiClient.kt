@@ -29,6 +29,7 @@ import io.ktor.http.formUrlEncode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -99,6 +100,11 @@ class KtorApiClient(
                     )
                 )
                 delay(delayMs)
+            } catch (throwable: CancellationException) {
+                lastThrowable = throwable
+                logger.error("Request failed at attempt $attempt", throwable)
+                interceptors.forEach { interceptor -> interceptor.onFailure(throwable, attempt) }
+                break
             } catch (throwable: Throwable) {
                 lastThrowable = throwable
                 logger.error("Request failed at attempt $attempt", throwable)
