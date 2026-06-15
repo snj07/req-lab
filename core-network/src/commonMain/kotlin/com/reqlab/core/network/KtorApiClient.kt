@@ -25,19 +25,17 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
 import io.ktor.http.contentType
-import io.ktor.http.encodeURLPath
 import io.ktor.http.formUrlEncode
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import io.ktor.websocket.Frame
-import io.ktor.websocket.readText
 
 class KtorApiClient(
     private val httpClient: HttpClient = defaultHttpClient(),
@@ -93,7 +91,13 @@ class KtorApiClient(
                 }
 
                 val delayMs = retryPolicy.delayForAttempt(attempt)
-                emit(NetworkEvent.RetryScheduled(attempt, delayMs, "status=${mappedResponse.statusCode}"))
+                emit(
+                    NetworkEvent.RetryScheduled(
+                        attempt,
+                        delayMs,
+                        "status=${mappedResponse.statusCode}"
+                    )
+                )
                 delay(delayMs)
             } catch (throwable: Throwable) {
                 lastThrowable = throwable
@@ -105,7 +109,13 @@ class KtorApiClient(
                 }
 
                 val delayMs = retryPolicy.delayForAttempt(attempt)
-                emit(NetworkEvent.RetryScheduled(attempt, delayMs, throwable.message ?: "unknown error"))
+                emit(
+                    NetworkEvent.RetryScheduled(
+                        attempt,
+                        delayMs,
+                        throwable.message ?: "unknown error"
+                    )
+                )
                 delay(delayMs)
             }
         }
@@ -143,11 +153,13 @@ class KtorApiClient(
             builder.header(header.key, VariableResolver.resolve(header.value, variableLayers))
         }
 
-        if (request.cookies.isNotEmpty()) {
-            builder.header(HttpHeaders.Cookie, request.cookies.filter { it.enabled }
-                .joinToString(separator = "; ") { cookie ->
-                    "${cookie.key}=${VariableResolver.resolve(cookie.value, variableLayers)}"
-                })
+        val enabledCookies = request.cookies.filter { it.enabled }
+        if (enabledCookies.isNotEmpty()) {
+            builder.header(
+                HttpHeaders.Cookie, enabledCookies
+                    .joinToString(separator = "; ") { cookie ->
+                        "${cookie.key}=${VariableResolver.resolve(cookie.value, variableLayers)}"
+                    })
         }
 
         applyAuth(builder, request, variableLayers)
@@ -165,8 +177,10 @@ class KtorApiClient(
         when (auth.type) {
             AuthType.NONE -> Unit
             AuthType.BASIC -> {
-                val username = VariableResolver.resolve(auth.params["username"].orEmpty(), variableLayers)
-                val password = VariableResolver.resolve(auth.params["password"].orEmpty(), variableLayers)
+                val username =
+                    VariableResolver.resolve(auth.params["username"].orEmpty(), variableLayers)
+                val password =
+                    VariableResolver.resolve(auth.params["password"].orEmpty(), variableLayers)
                 val value = "$username:$password".encodeToByteArray().encodeBase64()
                 builder.header(HttpHeaders.Authorization, "Basic $value")
             }
@@ -191,7 +205,8 @@ class KtorApiClient(
             }
 
             AuthType.OAUTH2 -> {
-                val accessToken = VariableResolver.resolve(auth.params["accessToken"].orEmpty(), variableLayers)
+                val accessToken =
+                    VariableResolver.resolve(auth.params["accessToken"].orEmpty(), variableLayers)
                 if (accessToken.isNotBlank()) {
                     builder.header(HttpHeaders.Authorization, "Bearer $accessToken")
                 }
@@ -259,11 +274,40 @@ class KtorApiClient(
         val body = request.body
         when (body.type) {
             BodyType.NONE -> Unit
-            BodyType.JSON -> applyRawBody(builder, ContentType.Application.Json, body.content, variableLayers)
-            BodyType.RAW_TEXT -> applyRawBody(builder, ContentType.Text.Plain, body.content, variableLayers)
-            BodyType.XML -> applyRawBody(builder, ContentType.Application.Xml, body.content, variableLayers)
-            BodyType.HTML -> applyRawBody(builder, ContentType.Text.Html, body.content, variableLayers)
-            BodyType.JAVASCRIPT -> applyRawBody(builder, ContentType.parse("application/javascript"), body.content, variableLayers)
+            BodyType.JSON -> applyRawBody(
+                builder,
+                ContentType.Application.Json,
+                body.content,
+                variableLayers
+            )
+
+            BodyType.RAW_TEXT -> applyRawBody(
+                builder,
+                ContentType.Text.Plain,
+                body.content,
+                variableLayers
+            )
+
+            BodyType.XML -> applyRawBody(
+                builder,
+                ContentType.Application.Xml,
+                body.content,
+                variableLayers
+            )
+
+            BodyType.HTML -> applyRawBody(
+                builder,
+                ContentType.Text.Html,
+                body.content,
+                variableLayers
+            )
+
+            BodyType.JAVASCRIPT -> applyRawBody(
+                builder,
+                ContentType.parse("application/javascript"),
+                body.content,
+                variableLayers
+            )
 
             BodyType.GRAPHQL -> {
                 builder.contentType(ContentType.Application.Json)
