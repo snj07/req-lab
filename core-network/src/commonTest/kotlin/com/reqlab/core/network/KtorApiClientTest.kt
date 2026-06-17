@@ -1,10 +1,10 @@
 package com.reqlab.core.network
 
+import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestBody
 import com.reqlab.core.model.RequestDefinition
-import com.reqlab.core.model.BodyType
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -16,6 +16,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,7 +30,10 @@ class KtorApiClientTest {
             respond(
                 content = "{\"ok\":true}",
                 status = HttpStatusCode.OK,
-                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                headers = io.ktor.http.headersOf(
+                    HttpHeaders.ContentType,
+                    ContentType.Application.Json.toString()
+                )
             )
         }
 
@@ -78,7 +82,10 @@ class KtorApiClientTest {
             respond(
                 content = "ok",
                 status = HttpStatusCode.OK,
-                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, ContentType.Text.Plain.toString())
+                headers = io.ktor.http.headersOf(
+                    HttpHeaders.ContentType,
+                    ContentType.Text.Plain.toString()
+                )
             )
         }
 
@@ -89,7 +96,8 @@ class KtorApiClientTest {
             expectSuccess = false
         }
 
-        val apiClient = KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1))
+        val apiClient =
+            KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1))
 
         val request = RequestDefinition(
             id = "req-dyn",
@@ -117,7 +125,10 @@ class KtorApiClientTest {
             respond(
                 content = "{\"result\":42}",
                 status = HttpStatusCode.OK,
-                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                headers = io.ktor.http.headersOf(
+                    HttpHeaders.ContentType,
+                    ContentType.Application.Json.toString()
+                )
             )
         }
 
@@ -126,7 +137,8 @@ class KtorApiClientTest {
             expectSuccess = false
         }
 
-        val apiClient = KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1))
+        val apiClient =
+            KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1))
 
         val request = RequestDefinition(
             id = "req-timing",
@@ -156,7 +168,10 @@ class KtorApiClientTest {
             respond(
                 content = "ok",
                 status = HttpStatusCode.OK,
-                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, ContentType.Text.Plain.toString())
+                headers = io.ktor.http.headersOf(
+                    HttpHeaders.ContentType,
+                    ContentType.Text.Plain.toString()
+                )
             )
         }
 
@@ -195,7 +210,9 @@ class KtorApiClientTest {
             "Expected multipart payload content, got '$capturedBody'",
         )
         assertTrue(
-            capturedBody.contains("name") && capturedBody.contains("alice") && capturedBody.contains("role") && capturedBody.contains("tester"),
+            capturedBody.contains("name") && capturedBody.contains("alice") && capturedBody.contains(
+                "role"
+            ) && capturedBody.contains("tester"),
             "Multipart payload should contain form fields, got '$capturedBody'",
         )
     }
@@ -203,7 +220,7 @@ class KtorApiClientTest {
     @Test
     fun emits_retry_scheduled_and_failure_when_retries_exhausted() = runTest {
         val mockEngine = MockEngine {
-            throw IllegalStateException("timeout-like failure")
+            throw IOException("timeout-like failure")
         }
 
         val client = HttpClient(mockEngine) {
@@ -228,12 +245,17 @@ class KtorApiClientTest {
         )
 
         val events = apiClient.execute(request).toList()
-
+        println(events.joinToString("\n") { it.toString() })
         assertTrue(events.first() is NetworkEvent.Started)
         assertEquals(1, events.count { it is NetworkEvent.RetryScheduled })
         assertTrue(events.last() is NetworkEvent.Failure)
         val failure = events.last() as NetworkEvent.Failure
         assertTrue(failure.error.isRetryExhausted)
-        assertTrue(failure.error.message.contains("failed", ignoreCase = true) || failure.error.message.contains("timeout", ignoreCase = true))
+        assertTrue(
+            failure.error.message.contains(
+                "failed",
+                ignoreCase = true
+            ) || failure.error.message.contains("timeout", ignoreCase = true)
+        )
     }
 }
