@@ -10,6 +10,9 @@ import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.editor.core.LanguageMode
+import com.reqlab.editor.ui.EditorViewModel
+import com.reqlab.editor.ui.SyntaxHighlighterRegistry
 import com.reqlab.core.model.ResponseDefinition
 import kotlinx.coroutines.Job
 import com.reqlab.ui.shared.platform.generateUuid
@@ -304,6 +307,27 @@ class RequestTabState(
      * Cancelling this job aborts the request (fixes H-1 race condition).
      */
     var currentJob: Job? = null
+
+    // ── Per-tab EditorViewModel cache (survives editor-tab switches) ─────────
+    // Keyed by BodyType so JSON/XML/etc. each keep independent undo stacks.
+    // Not part of Compose state — not serialized, not tracked for dirty checking.
+    private val bodyViewModelCache = HashMap<BodyType, EditorViewModel>()
+
+    fun getOrCreateBodyViewModel(bodyType: BodyType, initialText: String, languageMode: LanguageMode): EditorViewModel {
+        if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
+            SyntaxHighlighterRegistry.registerBuiltinHighlighters()
+        }
+        return bodyViewModelCache.getOrPut(bodyType) { EditorViewModel(initialText, languageMode) }
+    }
+
+    /** Disposes all cached body EditorViewModels. Call before removing this tab. */
+    fun disposeBodyViewModels() {
+        bodyViewModelCache.values.forEach { it.dispose() }
+        bodyViewModelCache.clear()
+    }
+
+    // ── URL undo stack (per-tab, plain strings, no Compose state) ───────────
+    val urlUndoStack: ArrayDeque<String> = ArrayDeque(32)
 
     // response associated with this tab
     var response    by mutableStateOf<ResponseDefinition?>(null)
@@ -947,6 +971,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     fun closeTab(index: Int) {
         if (index !in openTabs.indices) return
+        openTabs[index].disposeBodyViewModels()
         openTabs.removeAt(index)
         if (openTabs.isEmpty()) {
             activeTabIndex = -1
@@ -967,7 +992,10 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         // Remove in reverse-index order to keep earlier indices valid.
         openTabs.indices.reversed()
             .filter { openTabs[it].id in idSet }
-            .forEach { openTabs.removeAt(it) }
+            .forEach { idx ->
+                openTabs[idx].disposeBodyViewModels()
+                openTabs.removeAt(idx)
+            }
         if (openTabs.isEmpty()) {
             activeTabIndex = -1
         } else if (activeTabIndex >= openTabs.size) {

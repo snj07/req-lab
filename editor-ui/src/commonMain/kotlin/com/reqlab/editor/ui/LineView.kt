@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -54,7 +55,7 @@ internal fun LineView(
     selStart: Int,
     selEnd: Int,
     diagnostics: List<InlineEditorError>,
-    onTap: (absoluteOffset: Int) -> Unit,
+    onTap: (absoluteOffset: Int, extendSelection: Boolean) -> Unit,
     onDragTo: ((absoluteOffset: Int) -> Unit)? = null,
     // onWordSelect = { abs ->
     //     viewModel.selectWordAt(abs)
@@ -178,7 +179,8 @@ internal fun LineView(
 
                     // Immediately place cursor on first press — no delay.
                     // If a double-click follows, onWordSelect will override this placement.
-                    onTap(absOff0)
+                    val shiftHeld = currentEvent.keyboardModifiers.isShiftPressed
+                    onTap(absOff0, shiftHeld)
                     down.consume()
 
                     val lineHeightPx = with(density) { lineHeightDp.toPx() }
@@ -364,7 +366,7 @@ private fun buildLineAnnotatedString(
             val spanEnd = (range.last + 1).coerceIn(0, renderLen)
             if (spanStart < spanEnd) {
                 addStyle(
-                    SpanStyle(background = SyntaxColors.searchActive),
+                    SpanStyle(background = SyntaxColors.searchActive, color = Color.White),
                     spanStart,
                     spanEnd,
                 )

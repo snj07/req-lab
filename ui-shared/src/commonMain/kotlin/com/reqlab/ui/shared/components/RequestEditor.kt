@@ -86,6 +86,7 @@ fun RequestEditor(
             onRetryCountChanged = { tab.retryCount = it; markDirty() },
             onRetryDelayChanged = { tab.retryDelayMs = it; markDirty() },
             state = state,
+            urlUndoStack = tab.urlUndoStack,
         )
 
         EditorTabBar(

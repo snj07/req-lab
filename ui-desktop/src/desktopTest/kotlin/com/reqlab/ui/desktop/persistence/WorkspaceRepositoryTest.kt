@@ -35,8 +35,6 @@ class WorkspaceRepositoryTest {
         PlatformStorage.remove(WORKSPACE_KEY)
         PlatformStorage.remove(SETTINGS_ENV_KEY)
     }
-        PlatformStorage.remove(WORKSPACE_KEY)
-    }
 
     // ── Basic save / load ────────────────────────────────────────────────────
 

@@ -85,6 +85,8 @@ fun RequestBar(
     onRetryCountChanged: (Int) -> Unit,
     onRetryDelayChanged: (Long) -> Unit,
     state: AppState? = null,
+    /** Per-tab undo stack for the URL field. Pass [RequestTabState.urlUndoStack]. */
+    urlUndoStack: ArrayDeque<String>? = null,
 ) {
     Row(
         modifier = Modifier
@@ -116,6 +118,7 @@ fun RequestBar(
                     fontFamily = CodeFontFamily,
                 ),
                 state = state,
+                undoStack = urlUndoStack,
                 modifier = Modifier.fillMaxWidth().testTag("url-input"),
             )
         }

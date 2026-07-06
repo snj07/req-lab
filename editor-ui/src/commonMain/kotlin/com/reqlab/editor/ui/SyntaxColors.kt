@@ -42,8 +42,8 @@ object SyntaxColors {
     val error       = Color(0xFFF44747)
 
     // Search highlights
-    val searchMatch  = Color(0x44FFEB3B)
-    val searchActive = Color(0x88FFEB3B)
+    val searchMatch  = Color(0x33FFEB3B)   // 20% opacity yellow — inactive matches
+    val searchActive = Color(0xFFFF8C00)   // solid orange — active navigated match
 }
 
 // ── Token → Color mapping ────────────────────────────────────────

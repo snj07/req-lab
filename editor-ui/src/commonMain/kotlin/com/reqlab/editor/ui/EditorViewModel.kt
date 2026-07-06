@@ -393,7 +393,13 @@ class EditorViewModel(
         }
 
         notifyTextChanged()
-        idleLexer.scheduleFrom(f, scope)
+        // Snap to the start of the edited line so the tokenizer always sees complete
+        // tokens. Without this, tokenization starting mid-word (e.g. at the 'e' of
+        // "false") would only re-style the tail of the token, leaving stale colours
+        // on the preceding characters.
+        val editLine      = document.lineAt(f.coerceAtLeast(0))
+        val editLineStart = document.lineStart(editLine)
+        idleLexer.scheduleFrom(editLineStart, scope)
         scheduleDiagnostics()
         scheduleFoldRegionsUpdate()
     }

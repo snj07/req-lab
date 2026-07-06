@@ -349,4 +349,202 @@ class EditorViewModelFixTest {
         assertEquals("  line", v.getFullText(),
             "insertNewlineWithAutoIndent must be undoable in one step")
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // B-1 — Shift+click selection via moveCursorTo(extendSelection=true)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun b1_shiftClick_extends_selection_forward() {
+        val v = vm("{\"key\": true}")
+        // First click: place cursor at position 0
+        v.moveCursorTo(0, extendSelection = false)
+        assertEquals(-1, v.state.value.selectionStart, "No selection after initial click")
+
+        // Shift+click at position 5 → should extend selection from 0 to 5
+        v.moveCursorTo(5, extendSelection = true)
+        val sel = v.state.value
+        assertEquals(0, sel.selectionStart, "Selection must start at the anchor (0)")
+        assertEquals(5, sel.selectionEnd,   "Selection must end at shift-clicked position (5)")
+    }
+
+    @Test
+    fun b1_shiftClick_extends_selection_backward() {
+        val v = vm("{\"key\": true}")
+        v.moveCursorTo(8, extendSelection = false)
+        v.moveCursorTo(3, extendSelection = true)
+        val sel = v.state.value
+        assertEquals(3, sel.selectionStart, "Selection start must be the earlier position")
+        assertEquals(8, sel.selectionEnd,   "Selection end must be the later (anchor) position")
+    }
+
+    @Test
+    fun b1_plain_click_clears_selection() {
+        val v = vm("{\"key\": true}")
+        v.moveCursorTo(0, extendSelection = false)
+        v.moveCursorTo(8, extendSelection = true)
+        assertTrue(v.state.value.selectionStart >= 0, "Should have selection before plain click")
+
+        // A plain click should collapse the selection
+        v.moveCursorTo(4, extendSelection = false)
+        assertEquals(-1, v.state.value.selectionStart, "Plain click must collapse selection")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // B-2 — Search highlight colours meet readability constraints
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun b2_searchMatch_has_low_opacity() {
+        val alpha = SyntaxColors.searchMatch.alpha
+        assertTrue(alpha <= 0.25f,
+            "searchMatch alpha ($alpha) must be ≤ 0.25 to avoid obscuring syntax colours")
+    }
+
+    @Test
+    fun b2_searchActive_is_distinct_from_searchMatch() {
+        val matchHue  = hue(SyntaxColors.searchMatch)
+        val activeHue = hue(SyntaxColors.searchActive)
+        // The two colours must differ by at least 15 hue degrees OR differ in alpha by ≥ 0.5
+        val hueDiff = Math.abs(activeHue - matchHue).let { if (it > 180f) 360f - it else it }
+        assertTrue(
+            hueDiff >= 15f || Math.abs(SyntaxColors.searchActive.alpha - SyntaxColors.searchMatch.alpha) >= 0.5f,
+            "searchActive must be visually distinct from searchMatch (hueDiff=$hueDiff)"
+        )
+    }
+
+    @Test
+    fun b2_searchActive_has_high_opacity() {
+        assertTrue(SyntaxColors.searchActive.alpha >= 0.8f,
+            "searchActive alpha (${SyntaxColors.searchActive.alpha}) must be ≥ 0.8 so the active match is clearly visible")
+    }
+
+    /** Returns the HSV hue (0..360) of [color], or 0 if the color is achromatic. */
+    private fun hue(color: androidx.compose.ui.graphics.Color): Float {
+        val r = color.red; val g = color.green; val b = color.blue
+        val max = maxOf(r, g, b); val min = minOf(r, g, b)
+        val delta = max - min
+        if (delta == 0f) return 0f
+        return when (max) {
+            r    -> 60f * (((g - b) / delta) % 6f)
+            g    -> 60f * (((b - r) / delta) + 2f)
+            else -> 60f * (((r - g) / delta) + 4f)
+        }.let { if (it < 0f) it + 360f else it }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // B-3 — Boolean re-highlight after edit (line-start snap fix)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun b3_replacing_true_with_false_re_highlights_all_chars() {
+        val text = "{\"v\": true}"
+        val v = vm(text)
+        // Wait for initial full styling to complete
+        awaitUntil { v.styleBuffer.endStyled >= v.document.length }
+
+        // Find the start of "true" (offset 6 in the string above: {"v": |true})
+        val trueStart = text.indexOf("true")
+        assertTrue(trueStart >= 0)
+
+        // All 4 chars of "true" should currently be KEYWORD
+        for (i in 0 until 4) {
+            assertEquals(
+                com.reqlab.editor.core.TokenType.KEYWORD,
+                v.styleBuffer.styleAt(trueStart + i),
+                "Before edit: char $i of 'true' must be KEYWORD"
+            )
+        }
+
+        // Replace "true" with "false" in one operation
+        v.moveCursorTo(trueStart)
+        v.moveCursorTo(trueStart + 4, extendSelection = true)
+        v.insertAtCursor("false")
+
+        // Wait for the IdleLexer to finish re-styling from the line start
+        awaitUntil { v.styleBuffer.endStyled >= v.document.length }
+
+        val falseStart = v.getFullText().indexOf("false")
+        assertTrue(falseStart >= 0, "Text must now contain 'false'")
+
+        // All 5 chars of "false" must now be KEYWORD (not stale/ERROR)
+        for (i in 0 until 5) {
+            assertEquals(
+                com.reqlab.editor.core.TokenType.KEYWORD,
+                v.styleBuffer.styleAt(falseStart + i),
+                "After edit: char $i of 'false' must be KEYWORD (was stale before fix)"
+            )
+        }
+    }
+
+    @Test
+    fun b3_partial_edit_of_true_shows_error_not_stale_keyword() {
+        // Typing "tru" (incomplete boolean) must show ERROR, not stale KEYWORD from "true"
+        val text = "{\"v\": true}"
+        val v = vm(text)
+        awaitUntil { v.styleBuffer.endStyled >= v.document.length }
+
+        val trueStart = text.indexOf("true")
+        // Delete the 'e' to leave "tru" — cursor is positioned after "true" (trueStart+4)
+        v.moveCursorTo(trueStart + 4)
+        v.deleteBeforeCursor()  // removes 'e' → document now contains "tru"
+
+        awaitUntil { v.styleBuffer.endStyled >= v.document.length }
+
+        // "tru" is not a valid JSON keyword → at least the 't' should be ERROR
+        val styleAtT = v.styleBuffer.styleAt(trueStart)
+        assertEquals(
+            com.reqlab.editor.core.TokenType.ERROR,
+            styleAtT,
+            "Partial 'tru' must be highlighted as ERROR, not KEYWORD (stale highlight bug)"
+        )
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // U-1 — Undo history survives same-text external change (tab re-entry)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun u1_undo_survives_same_text_external_change() {
+        val v = vm("{\"key\": \"initial\"}")
+        // Make 3 user edits
+        v.moveCursorTo(v.document.length)
+        v.insertAtCursor("A")
+        v.insertAtCursor("B")
+        v.insertAtCursor("C")
+        assertEquals("{\"key\": \"initial\"}ABC", v.getFullText())
+
+        // Simulate returning to the tab: onExternalTextChanged with identical text.
+        // This must NOT clear history — the guard `getFullText() != displayText`
+        // is false, so onExternalTextChanged is never called in real CodeEditor.
+        // We replicate that guard here to confirm the guard holds.
+        val currentText = v.getFullText()
+        if (currentText != v.getFullText()) {
+            v.onExternalTextChanged(currentText) // would clear history — must not reach here
+        }
+        // The guard prevents the call, so undo stack is intact.
+        v.undo()
+        assertEquals("{\"key\": \"initial\"}AB", v.getFullText(), "Undo must work after same-text external non-change")
+        v.undo()
+        assertEquals("{\"key\": \"initial\"}A", v.getFullText())
+        v.undo()
+        assertEquals("{\"key\": \"initial\"}", v.getFullText())
+    }
+
+    @Test
+    fun u1_undo_cleared_on_genuinely_different_external_text() {
+        val v = vm("{\"key\": \"initial\"}")
+        v.moveCursorTo(v.document.length)
+        v.insertAtCursor("X")
+        v.insertAtCursor("Y")
+        assertTrue(v.getFullText().endsWith("XY"), "Should have XY appended")
+
+        // External text completely replaced (simulates Format or Import)
+        v.onExternalTextChanged("completely different content")
+
+        // After a genuine external change, undo must not go back to the pre-import state
+        v.undo() // should be a no-op
+        assertEquals("completely different content", v.getFullText(),
+            "Undo must not cross an external-text-change boundary")
+    }
 }

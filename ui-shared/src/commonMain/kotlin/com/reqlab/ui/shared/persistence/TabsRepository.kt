@@ -99,6 +99,9 @@ object TabsRepository {
             val tabsJson = root["tabs"]?.jsonArray ?: return
             if (tabsJson.isEmpty()) return
 
+            // Dispose any cached EditorViewModels before clearing to prevent
+            // orphaned coroutine scopes when the workspace is restored from disk.
+            state.openTabs.forEach { it.disposeBodyViewModels() }
             // Replace the default single empty tab
             state.openTabs.clear()
             tabsJson.forEach { el ->

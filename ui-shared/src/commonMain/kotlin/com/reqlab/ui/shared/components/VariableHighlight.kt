@@ -38,10 +38,19 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -218,6 +227,12 @@ fun VariableAwareTextField(
     modifier: Modifier = Modifier,
     placeholder: String = "",
     singleLine: Boolean = true,
+    /**
+     * Optional per-instance undo stack. When non-null, Cmd/Ctrl+Z will pop the
+     * last value and restore it. Supply [RequestTabState.urlUndoStack] from the
+     * call site that has access to the tab.
+     */
+    undoStack: ArrayDeque<String>? = null,
     textStyle: TextStyle = TextStyle(
         color = ReqLabColors.OnSurface,
         fontSize = 14.sp,
@@ -253,11 +268,13 @@ fun VariableAwareTextField(
     val pendingClickRef = remember { object { var value = false } }
 
     // Sync when the external text value changes (e.g. params table updates the URL).
+    // Use cursor-at-end rather than copy(annotatedString) to avoid a stale selection
+    // that is out-of-range for the new value (e.g. switching request tabs).
     LaunchedEffect(value) {
         if (fieldValue.text != value) {
             val annotated = if (state != null) highlightVariablesWithStatus(value, definedNames)
                             else AnnotatedString(value)
-            fieldValue = fieldValue.copy(annotatedString = annotated)
+            fieldValue = TextFieldValue(annotatedString = annotated, selection = TextRange(annotated.length))
         }
     }
 
@@ -286,6 +303,11 @@ fun VariableAwareTextField(
                     selection = new.selection,
                     composition = new.composition,
                 )
+                // Push previous text to undo stack when text actually changes (not just cursor)
+                if (undoStack != null && new.text != fieldValue.text) {
+                    undoStack.addLast(fieldValue.text)
+                    if (undoStack.size > 100) undoStack.removeFirst()
+                }
                 fieldValue = newFieldValue
                 onValueChange(new.text)
 
@@ -312,7 +334,27 @@ fun VariableAwareTextField(
             // Apply the caller's modifier (layout + testTag) here so the
             // BasicTextField node owns the tag and its RequestFocus action.
             // The pointerInput observer is appended to detect real clicks only.
-            modifier = modifier.pointerInput(state != null) {
+            modifier = modifier
+                .onPreviewKeyEvent { event ->
+                    if (undoStack != null &&
+                        event.type == KeyEventType.KeyDown &&
+                        (event.isMetaPressed || event.isCtrlPressed) &&
+                        !event.isShiftPressed &&
+                        event.key == Key.Z
+                    ) {
+                        val prev = undoStack.removeLastOrNull()
+                        if (prev != null) {
+                            val annotated = if (state != null) highlightVariablesWithStatus(prev, definedNames)
+                                            else AnnotatedString(prev)
+                            fieldValue = TextFieldValue(annotatedString = annotated, selection = TextRange(annotated.length))
+                            onValueChange(prev)
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .pointerInput(state != null) {
                 if (state == null) return@pointerInput
                 awaitPointerEventScope {
                     while (true) {

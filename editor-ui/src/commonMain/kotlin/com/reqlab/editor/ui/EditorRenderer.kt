@@ -671,9 +671,9 @@ fun EditorRenderer(
                                 selStart         = state.selectionStart,
                                 selEnd           = state.selectionEnd,
                                 diagnostics      = state.diagnostics.filter { it.line - 1 == docLine },
-                                onTap            = { abs ->
+                                onTap            = { abs, extend ->
                                     focus.requestFocus()
-                                    viewModel.moveCursorTo(abs, extendSelection = shiftPressed)
+                                    viewModel.moveCursorTo(abs, extendSelection = extend)
                                     onPrimaryTapOffset?.invoke(abs)
                                 },
                                 onDragTo         = { abs ->

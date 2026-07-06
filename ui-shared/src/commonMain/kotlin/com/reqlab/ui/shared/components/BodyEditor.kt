@@ -343,6 +343,11 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                         )
                     }
                     Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        val bodyViewModel = tab.getOrCreateBodyViewModel(
+                            bodyType = tab.bodyType,
+                            initialText = tab.bodyContent,
+                            languageMode = language.toLanguageMode(),
+                        )
                         CodeEditor(
                             text = tab.bodyContent,
                             onTextChange = { tab.bodyContent = it; onDirty() },
@@ -371,6 +376,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                             lineVariableSpans = if (tab.bodyContent.contains("{{")) {
                                 { line, _ -> variableRangesForLine(line, definedVarNames) }
                             } else null,
+                            externalViewModel = bodyViewModel,
                         )
 
                         bodyPopupVariable?.let { variableName ->

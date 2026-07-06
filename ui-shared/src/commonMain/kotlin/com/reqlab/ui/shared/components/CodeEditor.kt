@@ -138,18 +138,37 @@ fun CodeEditor(
     testTagPrefix: String = "code-editor",
     onCursorTap: ((Int) -> Unit)? = null,
     lineVariableSpans: ((lineText: String, lineStartOffset: Int) -> List<Pair<IntRange, androidx.compose.ui.graphics.Color>>)? = null,
+    /**
+     * An already-created [EditorViewModel] to use instead of creating a new one.
+     * When provided, [CodeEditor] does NOT dispose it on removal — the caller
+     * (e.g. [BodyEditor] via [RequestTabState.getOrCreateBodyViewModel]) owns
+     * the lifetime and disposes it when the tab is closed.
+     *
+     * Leave `null` (default) for all read-only viewers and script editors that
+     * do not need persistent undo history across re-compositions.
+     */
+    externalViewModel: EditorViewModel? = null,
 ) {
     val isReadOnly = onTextChange == null
 
-    // ── ViewModel (manages all document state) ─────────────
+    // ── ViewModel (manages all document state) ─────────────────────
     val languageMode = language.toLanguageMode()
-    val viewModel = remember(languageMode) {
-        if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
-            SyntaxHighlighterRegistry.registerBuiltinHighlighters()
+    // When an external VM is provided we skip creating an internal one entirely.
+    // remember() key includes `hasExternal` so that switching from internal to
+    // external (or vice-versa) correctly disposes the old internal VM.
+    val hasExternal = externalViewModel != null
+    val internalViewModel: EditorViewModel? = remember(languageMode, hasExternal) {
+        if (hasExternal) null
+        else {
+            if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
+                SyntaxHighlighterRegistry.registerBuiltinHighlighters()
+            }
+            EditorViewModel(initialText = text, languageMode = languageMode)
         }
-        EditorViewModel(initialText = text, languageMode = languageMode)
     }
-    DisposableEffect(viewModel) { onDispose { viewModel.dispose() } }
+    // Only dispose the VM we created; external VMs are owned by RequestTabState.
+    DisposableEffect(internalViewModel) { onDispose { internalViewModel?.dispose() } }
+    val viewModel: EditorViewModel = externalViewModel ?: internalViewModel!!
 
     // ── Format / display state ───────────────────────────────
     var isFormatted by remember { mutableStateOf(isReadOnly) }
