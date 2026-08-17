@@ -1,5 +1,6 @@
-package com.reqlab.ui.shared.persistence
+package com.reqlab.ui.desktop.persistence
 
+import com.reqlab.ui.shared.persistence.ImportExportRepository
 import com.reqlab.ui.shared.state.AppState
 import java.io.File
 import kotlin.test.Test
@@ -15,8 +16,10 @@ class ImportExportFixturesIntegrationTest {
     fun imports_collection_and_environment_from_deterministic_fixtures() {
         val state = AppState(openDefaultTab = false, withDemoData = false)
 
-        val importedCollection = ImportExportRepository.importCollectionFromString(state, collectionFixture.readText())
-        val importedEnvironment = ImportExportRepository.importEnvironmentFromString(state, environmentFixture.readText())
+        val importedCollection =
+            ImportExportRepository.importCollectionFromString(state, collectionFixture.readText())
+        val importedEnvironment =
+            ImportExportRepository.importEnvironmentFromString(state, environmentFixture.readText())
 
         assertEquals("ReqLab Test Suite", importedCollection)
         assertEquals("Local Dev – Sample Server", importedEnvironment)
@@ -44,7 +47,7 @@ class ImportExportFixturesIntegrationTest {
 
         val root = restored.collections.firstOrNull { it.name == "ReqLab Test Suite" }
         assertTrue(root != null)
-        assertTrue(root.children.any { it.isFolder && it.name == "New Script APIs Coverage" })
+        assertTrue(root.children.any { it.isFolder && it.name == "Scripting Runtime Coverage" })
 
         val env = restored.environments.firstOrNull { it.name == "Local Dev – Sample Server" }
         assertTrue(env != null)

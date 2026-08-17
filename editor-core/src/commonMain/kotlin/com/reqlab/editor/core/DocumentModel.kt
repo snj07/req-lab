@@ -58,7 +58,7 @@ class DocumentModel(initialText: String = "") {
         return if (nextStart == Int.MAX_VALUE) {
             buffer.length
         } else {
-            // nextStart points to the char after '\n'; subtract 1 to exclude '\n'
+            // nextStart points to the char after '\n'; subtract 1 to point to '\n' (end of line)
             (nextStart - 1).coerceAtLeast(lineIndex.lineStart(line))
         }
     }
@@ -136,5 +136,6 @@ class DocumentModel(initialText: String = "") {
         return sb.toString()
     }
 
-    override fun toString(): String = "DocumentModel(${buffer.length} chars, ${lineIndex.lineCount} lines, v$version)"
+    override fun toString(): String =
+        "DocumentModel(${buffer.length} chars, ${lineIndex.lineCount} lines, v$version)"
 }

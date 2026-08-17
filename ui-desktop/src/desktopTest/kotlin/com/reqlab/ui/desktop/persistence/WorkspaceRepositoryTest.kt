@@ -1,13 +1,14 @@
-package com.reqlab.ui.shared.persistence
+package com.reqlab.ui.desktop.persistence
 
 import androidx.compose.runtime.mutableStateListOf
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.ui.shared.persistence.SettingsRepository
+import com.reqlab.ui.shared.persistence.WorkspaceRepository
 import com.reqlab.ui.shared.platform.PlatformStorage
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
 import com.reqlab.ui.shared.state.EnvState
-import com.reqlab.ui.shared.state.MutableKeyValue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -88,7 +89,7 @@ class WorkspaceRepositoryTest {
     @Test
     fun save_and_load_with_multiple_large_per_type_bodies_preserves_all_types() {
         val jsonBody = "{\"j\":\"" + "j".repeat(100_000) + "\"}"
-        val xmlBody  = "<root>" + "x".repeat(100_000) + "</root>"
+        val xmlBody = "<root>" + "x".repeat(100_000) + "</root>"
 
         val request = CollectionNode(
             id = "multi-body-req-1",
@@ -100,7 +101,7 @@ class WorkspaceRepositoryTest {
             bodyContent = jsonBody,
             bodyContents = mapOf(
                 BodyType.JSON.name to jsonBody,
-                BodyType.XML.name  to xmlBody,
+                BodyType.XML.name to xmlBody,
             ),
         )
         val collection = CollectionNode(
@@ -138,7 +139,7 @@ class WorkspaceRepositoryTest {
     @Test
     fun save_overwrites_previous_save_with_updated_content() {
         val original = "original body"
-        val updated  = "updated body " + "u".repeat(10_000)
+        val updated = "updated body " + "u".repeat(10_000)
 
         fun buildState(body: String): AppState {
             val req = CollectionNode(
@@ -170,7 +171,11 @@ class WorkspaceRepositoryTest {
             .firstOrNull { it.name == "Overwrite Collection" }
             ?.children?.firstOrNull()?.bodyContent
 
-        assertEquals(updated, body, "Second save must overwrite the first; restored body must match updated value")
+        assertEquals(
+            updated,
+            body,
+            "Second save must overwrite the first; restored body must match updated value"
+        )
     }
 
     // ── Selected environment persistence ─────────────────────────────────────
@@ -193,10 +198,14 @@ class WorkspaceRepositoryTest {
         SettingsRepository.load(restored.settings)
         WorkspaceRepository.load(restored)  // resolves selectedEnvName → index
 
-        assertEquals(1, restored.selectedEnvIndex,
-            "selectedEnvIndex must be 1 (Staging) after restore")
-        assertEquals("Staging", restored.selectedEnvironment?.name,
-            "selectedEnvironment must be Staging after restore")
+        assertEquals(
+            1, restored.selectedEnvIndex,
+            "selectedEnvIndex must be 1 (Staging) after restore"
+        )
+        assertEquals(
+            "Staging", restored.selectedEnvironment?.name,
+            "selectedEnvironment must be Staging after restore"
+        )
     }
 
     @Test
@@ -214,8 +223,10 @@ class WorkspaceRepositoryTest {
         SettingsRepository.load(restored.settings)
         WorkspaceRepository.load(restored)
 
-        assertEquals(0, restored.selectedEnvIndex,
-            "Must fall back to index 0 when saved environment name is not found")
+        assertEquals(
+            0, restored.selectedEnvIndex,
+            "Must fall back to index 0 when saved environment name is not found"
+        )
         assertEquals("Development", restored.selectedEnvironment?.name)
     }
 
@@ -234,8 +245,10 @@ class WorkspaceRepositoryTest {
         SettingsRepository.load(restored.settings)
         WorkspaceRepository.load(restored)
 
-        assertEquals(0, restored.selectedEnvIndex,
-            "Must default to index 0 when no env name was saved")
+        assertEquals(
+            0, restored.selectedEnvIndex,
+            "Must default to index 0 when no env name was saved"
+        )
     }
 
     @Test
@@ -251,8 +264,10 @@ class WorkspaceRepositoryTest {
         SettingsRepository.load(restored.settings)
         WorkspaceRepository.load(restored)
 
-        assertEquals(0, restored.selectedEnvIndex,
-            "selectedEnvIndex must be 0 when environment list is empty")
+        assertEquals(
+            0, restored.selectedEnvIndex,
+            "selectedEnvIndex must be 0 when environment list is empty"
+        )
     }
 
     @Test
