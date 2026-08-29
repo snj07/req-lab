@@ -41,6 +41,8 @@ class ReqLabScriptEngineTest {
         requestHeaders: Map<String, String> = emptyMap(),
         requestQueryParams: Map<String, String> = emptyMap(),
         requestBody: String? = null,
+        streamEvents: List<String> = emptyList(),
+        assembledText: String? = null,
     ) = ScriptContext(
         url                = "https://api.example.com/users",
         method             = "GET",
@@ -55,6 +57,8 @@ class ReqLabScriptEngineTest {
         requestHeaders     = requestHeaders,
         requestQueryParams = requestQueryParams,
         requestBody        = requestBody,
+        streamEvents       = streamEvents,
+        assembledText      = assembledText,
     )
 
     // ── Real JavaScript execution ─────────────────────────────────────────
@@ -2037,5 +2041,54 @@ class ReqLabScriptEngineTest {
         )
         assertTrue(r.success)
         assertTrue(r.executionSkipRequest)
+    }
+
+    @Test
+    fun llm_helpers_expose_assembled_text_usage_and_finish_reason() = runTest {
+        val streamEvents = listOf(
+            """{"choices":[{"delta":{"content":"Hello"}}]}""",
+            """{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}""",
+        )
+        val r = engine.executeTestScript(
+            """
+            reqlab.test("assembled", function() {
+                reqlab.expect(reqlab.response.llm.assembledText).to.equal("Hello")
+            })
+            reqlab.test("events", function() {
+                reqlab.expect(reqlab.response.streamEvents.length).to.equal(2)
+            })
+            reqlab.test("finish", function() {
+                reqlab.expect(reqlab.response.llm.finishReason).to.equal("stop")
+            })
+            reqlab.test("usage", function() {
+                reqlab.expect(reqlab.response.llm.usage.total_tokens).to.be.below(10)
+            })
+            """.trimIndent(),
+            ctx(
+                body = "",
+                streamEvents = streamEvents,
+                assembledText = "Hello",
+            ),
+        )
+        assertTrue(r.success, "Expected success but got error: ${r.error}")
+        assertEquals(4, r.assertions.size)
+        assertTrue(r.assertions.all { it.passed }, r.assertions.joinToString { "${it.name}:${it.message}" })
+    }
+
+    @Test
+    fun llm_json_mode_parses_assembled_content() = runTest {
+        val r = engine.executeTestScript(
+            """
+            reqlab.test("json mode", function() {
+                reqlab.expect(reqlab.response.llm.jsonContent().ok).to.equal(true)
+            })
+            """.trimIndent(),
+            ctx(
+                body = """{"choices":[{"message":{"content":"{\"ok\":true}"},"finish_reason":"stop"}]}""",
+                assembledText = """{"ok":true}""",
+            ),
+        )
+        assertTrue(r.success, r.error ?: "")
+        assertTrue(r.assertions.single().passed, r.assertions.single().message ?: "")
     }
 }

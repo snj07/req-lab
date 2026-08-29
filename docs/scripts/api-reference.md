@@ -53,11 +53,25 @@ reqlab.test("status + payload", function () {
 | `reqlab.response.text()` | Response body as a plain string |
 | `reqlab.response.json()` | Response body parsed as JSON; supports path access (`reqlab.response.json().user.id`) |
 | `reqlab.response.headers.get(name)` | Response header value by name (case-insensitive) |
+| `reqlab.response.streamEvents` | Raw SSE/NDJSON event payload strings |
+| `reqlab.response.llm.assembledText` | Assembled assistant text from stream deltas (or non-stream `message.content`) |
+| `reqlab.response.llm.finishReason` | Provider `finish_reason` (`stop`, `tool_calls`, …) |
+| `reqlab.response.llm.usage` | Token usage object, or `null` |
+| `reqlab.response.llm.jsonContent()` | Parse assembled text as JSON (JSON-mode bodies) |
 
 Notes:
 - `reqlab.response.json()` throws if body is not valid JSON.
 - `reqlab.response.headers.get(name)` is case-insensitive.
 - `reqlab.response.size` and `reqlab.response.responseTime` are numeric.
+- For streams, `reqlab.response.text()` is the assembled assistant text. Use `streamEvents` for the raw chunks.
+
+```javascript
+reqlab.test("llm stream", function () {
+	reqlab.expect(reqlab.response.llm.assembledText).to.include("Hello")
+	reqlab.expect(reqlab.response.llm.finishReason).to.equal("stop")
+	reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0)
+})
+```
 
 ## `reqlab.request`
 

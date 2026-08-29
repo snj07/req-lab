@@ -61,6 +61,11 @@ actual object NetworkClientFactory {
             expectSuccess = false
         }
 
-        return KtorApiClient(httpClient = httpClient, logger = logger, retryPolicy = retryPolicy)
+        return KtorApiClient(
+            httpClient = httpClient,
+            logger = logger,
+            retryPolicy = retryPolicy,
+            idleTimeoutMs = timeoutMs,
+        )
     }
 }

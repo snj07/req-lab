@@ -56,6 +56,8 @@ You can import these sample fixtures from the repo:
 - Collection sample: [qa-tests/fixtures/reqlab-test-collection.json](qa-tests/fixtures/reqlab-test-collection.json)
 - Environment sample: [qa-tests/fixtures/reqlab-test-environment.json](qa-tests/fixtures/reqlab-test-environment.json)
 
+The collection includes an **LLM (OpenAI-compatible)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** to watch a token stream on one POST.
+
 ## Features
 
 ### 🚀 HTTP Requests
@@ -66,13 +68,15 @@ You can import these sample fixtures from the repo:
 - Body types: JSON, GraphQL, form-data, x-www-form-urlencoded, raw text, binary
 - Auth: None, Basic, Bearer Token, API Key, JWT
 - Retry controls and per-request timeout
+- HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`)
 - Copy request as `curl`
 
 ### 📬 Response Inspection
 
 - Status code, status text, and response headers
 - Response body with syntax-highlighted viewer (JSON, XML, HTML, GraphQL, JS)
-- Response timing (total, TTFB, DNS, TCP, TLS, body) and payload size
+- Live assembled stream text while a request is in flight; Body shows the assembled answer, RAW shows each SSE/NDJSON event
+- Response timing (total, TTFB, time to first/last token, DNS, TCP, TLS, body) and payload size
 - Structured pass/fail test result reporting from post-request scripts
 
 ### ✏️ Code Editor
@@ -92,7 +96,7 @@ A full-featured Compose-native code editor — no WebView, no Electron.
 JavaScript pre-request and post-request scripts through the `reqlab` namespace.
 
 - **Pre-request**: mutate URL, headers, body, query params, and auth before dispatch
-- **Post-request**: assert status, headers, timing, and body; persist extracted values
+- **Post-request**: assert status, headers, timing, body, assembled stream text, and LLM fields (`finish_reason`, token usage); persist extracted values
 - Console logging via `reqlab.console.log(...)`
 - **HTTP sub-requests** via `reqlab.sendRequest()` — make real HTTP calls from within scripts (fetch tokens, look up resources, chain requests)
 
@@ -183,6 +187,7 @@ Open from the toolbar `Help` icon or via **Settings → Open Help & About**:
 
 | Document | Description |
 |---|---|
+| [CHANGELOG.md](CHANGELOG.md) | Release notes |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Build, run, and contribute locally |
 | [docs/architecture.md](docs/architecture.md) | Module structure and data flow |
 | [docs/editor-architecture.md](docs/editor-architecture.md) | Code editor internals |

@@ -116,6 +116,9 @@ data class ResponseMetrics(
     val tlsMs: Long = -1,
     val serverMs: Long = -1,
     val downloadMs: Long = -1,
+    val ttfbMs: Long = -1,
+    val timeToFirstTokenMs: Long = -1,
+    val timeToLastTokenMs: Long = -1,
 )
 
 @Serializable
@@ -128,7 +131,9 @@ data class ResponseDefinition(
     val bodyText: String,
     val contentType: String?,
     val executedAtEpochMillis: Long,
-    val metrics: ResponseMetrics
+    val metrics: ResponseMetrics,
+    val streamEvents: List<String> = emptyList(),
+    val assembledText: String? = null,
 )
 
 @Serializable

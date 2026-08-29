@@ -31,6 +31,12 @@ Run a focused validation bundle:
 ./gradlew :qa-tests:jvmTest :core-storage:allTests :ui-desktop:desktopTest
 ```
 
+LLM streaming E2E against the embedded sample-server:
+
+```bash
+./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.LlmApiE2ETest
+```
+
 Run full project checks:
 
 ```bash
@@ -48,7 +54,8 @@ Run full project checks:
 ## Coverage Highlights
 
 - HTTP methods, body types (JSON, form-data, urlencoded, raw, binary), auth (Basic, Bearer, API Key)
-- Variable interpolation (`{{var}}`), scope precedence, and scripting runtime (pre-request, post-response, assertions)
+- SSE/NDJSON streaming and OpenAI-compatible `/v1` chat mocks (including `?demo=true`)
+- Variable interpolation (`{{var}}`), scope precedence, and scripting runtime (pre-request, post-response, assertions, `response.llm.*`)
 - Retry/error handling and WebSocket lifecycle (connect, send, receive, disconnect, reconnect)
 - Settings dialog persistence and impact on request behavior
 - Environment editor, global variables, variable popup UI

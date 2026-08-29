@@ -41,6 +41,8 @@ internal object ScriptBootstrap {
         append("var __ev=").append(jsObject(context.variables)).append(";")
         append("var __gv=").append(jsObject(context.globalVariables)).append(";")
         append("var __cv=").append(jsObject(context.collectionVariables)).append(";")
+        append("var __se=").append(jsStringArray(context.streamEvents)).append(";")
+        append("var __at=").append(jsString(context.assembledText)).append(";")
 
         // ── Runtime (constant) ────────────────────────────────────────────
         append(RUNTIME_JS)
@@ -71,6 +73,11 @@ internal object ScriptBootstrap {
         return map.entries.joinToString(",", "{", "}") { (k, v) ->
             "\"${escapeJs(k)}\":\"${escapeJs(v)}\""
         }
+    }
+
+    private fun jsStringArray(list: List<String>): String {
+        if (list.isEmpty()) return "[]"
+        return list.joinToString(",", "[", "]") { jsString(it) }
     }
 
     private fun escapeJs(s: String): String = buildString(s.length + 16) {
@@ -173,7 +180,7 @@ internal object ScriptBootstrap {
 var __r={tests:[],logs:[],envVars:{},globalVars:{},collVars:{},reqVars:{},mutations:{url:null,method:null,body:null,headers:{},queryParams:{}},execution:{setNextRequestCalled:false,nextRequest:null,skipRequest:false},error:null,sendRequests:[]};
 function __hl(h,n){var l=n.toLowerCase();for(var k in h){if(k.toLowerCase()===l)return h[k];}return undefined;}
 var __rhO={};for(var __k in __rh){__rhO[__k.toLowerCase()]=__rh[__k];}__rhO.get=function(n){return __hl(__rh,n);};
-var response={get code(){return __sc;},get status(){return __st;},get statusCode(){return __sc;},get responseTime(){return __rt;},get time(){return __rt;},get size(){return __rs;},text:function(){return __rb||'';},json:function(){return __rb?JSON.parse(__rb):null;},headers:__rhO,statusIs:function(c){if(__sc!==c)throw new Error('Expected status '+c+' but got '+__sc);},statusOk:function(){if(__sc<200||__sc>=300)throw new Error('Expected 2xx status but got '+__sc);},hasHeader:function(n,v){var h=__hl(__rh,n);if(h===undefined)throw new Error('Expected response to have header '+n);if(v!==undefined&&h!==v)throw new Error('Expected header '+n+' to be '+v+' but got '+h);}};
+var response={get code(){return __sc;},get status(){return __st;},get statusCode(){return __sc;},get responseTime(){return __rt;},get time(){return __rt;},get size(){return __rs;},text:function(){return __rb||'';},json:function(){return __rb?JSON.parse(__rb):null;},headers:__rhO,streamEvents:__se,llm:{get assembledText(){return __at||'';},get finishReason(){var j=null;try{if(__rb)j=JSON.parse(__rb);}catch(e){}if(!j||!j.choices){for(var i=__se.length-1;i>=0;i--){try{var p=JSON.parse(__se[i]);if(p&&p.choices){j=p;break;}}catch(e2){}}}if(j&&j.choices&&j.choices[0])return j.choices[0].finish_reason||null;return null;},get usage(){var j=null;try{if(__rb)j=JSON.parse(__rb);}catch(e){}if(!j||!j.usage){for(var i=__se.length-1;i>=0;i--){try{var p=JSON.parse(__se[i]);if(p&&p.usage){j=p;break;}}catch(e2){}}}return (j&&j.usage)||null;},jsonContent:function(){try{return JSON.parse(__at||'');}catch(e){return null;}}},statusIs:function(c){if(__sc!==c)throw new Error('Expected status '+c+' but got '+__sc);},statusOk:function(){if(__sc<200||__sc>=300)throw new Error('Expected 2xx status but got '+__sc);},hasHeader:function(n,v){var h=__hl(__rh,n);if(h===undefined)throw new Error('Expected response to have header '+n);if(v!==undefined&&h!==v)throw new Error('Expected header '+n+' to be '+v+' but got '+h);}};
 Object.defineProperty(response,'to',{get:function(){var be=Object.create(null);Object.defineProperty(be,'ok',{get:function(){response.statusOk();}});return{have:{status:function(c){response.statusIs(c);},header:function(n,v){response.hasHeader(n,v);}},be:be};}});
 var __rqhO={};for(var __k2 in __rqh){__rqhO[__k2.toLowerCase()]=__rqh[__k2];}
 __rqhO.get=function(n){return __r.mutations.headers[n]!==undefined?__r.mutations.headers[n]:__hl(__rqh,n);};

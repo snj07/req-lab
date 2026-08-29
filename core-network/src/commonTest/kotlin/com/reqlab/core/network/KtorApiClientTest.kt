@@ -236,4 +236,99 @@ class KtorApiClientTest {
         assertTrue(failure.error.isRetryExhausted)
         assertTrue(failure.error.message.contains("failed", ignoreCase = true) || failure.error.message.contains("timeout", ignoreCase = true))
     }
+
+    @Test
+    fun streams_sse_chat_chunks_then_success_with_assembled_text() = runTest {
+        val sseBody = buildString {
+            append("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+            append("data: {\"choices\":[{\"delta\":{\"content\":\" from\"}}]}\n\n")
+            append("data: {\"choices\":[{\"delta\":{\"content\":\" ReqLab\"},\"finish_reason\":\"stop\"}],\"usage\":{\"total_tokens\":20}}\n\n")
+            append("data: [DONE]\n\n")
+        }
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = sseBody,
+                status = HttpStatusCode.OK,
+                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, "text/event-stream")
+            )
+        }
+        val client = HttpClient(mockEngine) { expectSuccess = false }
+        val apiClient = KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1), idleTimeoutMs = 5_000)
+
+        val request = RequestDefinition(
+            id = "req-sse",
+            name = "Stream chat",
+            method = HttpMethodType.POST,
+            url = "https://api.test/v1/chat/completions",
+            body = RequestBody(BodyType.JSON, content = """{"stream":true}"""),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+        val events = apiClient.execute(request).toList()
+        assertTrue(events.first() is NetworkEvent.Started)
+        val chunks = events.filterIsInstance<NetworkEvent.Chunk>()
+        assertEquals(3, chunks.size)
+        val success = events.last() as NetworkEvent.Success
+        assertEquals("Hello from ReqLab", success.response.assembledText)
+        assertEquals("Hello from ReqLab", success.response.bodyText)
+        assertEquals(3, success.response.streamEvents.size)
+        assertTrue(success.response.metrics.timeToFirstTokenMs >= 0)
+        assertTrue(success.response.metrics.ttfbMs >= 0)
+    }
+
+    @Test
+    fun streams_ndjson_and_assembles_message_content() = runTest {
+        val body = """
+            {"message":{"content":"Hel"},"done":false}
+            {"message":{"content":"lo"},"done":true}
+        """.trimIndent() + "\n"
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = body,
+                status = HttpStatusCode.OK,
+                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, "application/x-ndjson")
+            )
+        }
+        val client = HttpClient(mockEngine) { expectSuccess = false }
+        val apiClient = KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1), idleTimeoutMs = 5_000)
+        val request = RequestDefinition(
+            id = "req-ndjson",
+            name = "NDJSON chat",
+            method = HttpMethodType.POST,
+            url = "https://api.test/v1/chat/ndjson",
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+        val events = apiClient.execute(request).toList()
+        val success = events.last() as NetworkEvent.Success
+        assertEquals("Hello", success.response.assembledText)
+        assertEquals(2, success.response.streamEvents.size)
+    }
+
+    @Test
+    fun partial_sse_without_done_still_succeeds() = runTest {
+        val sseBody = "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n"
+        val mockEngine = MockEngine { _ ->
+            respond(
+                content = sseBody,
+                status = HttpStatusCode.OK,
+                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, "text/event-stream")
+            )
+        }
+        val client = HttpClient(mockEngine) { expectSuccess = false }
+        val apiClient = KtorApiClient(httpClient = client, retryPolicy = RetryPolicy(maxAttempts = 1), idleTimeoutMs = 5_000)
+        val request = RequestDefinition(
+            id = "req-partial",
+            name = "Partial stream",
+            method = HttpMethodType.POST,
+            url = "https://api.test/v1/chat/completions",
+            body = RequestBody(BodyType.JSON, content = """{"stream":true}"""),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+        val events = apiClient.execute(request).toList()
+        val success = events.last() as NetworkEvent.Success
+        assertEquals("Hello", success.response.assembledText)
+        assertEquals(1, success.response.streamEvents.size)
+    }
 }

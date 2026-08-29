@@ -9,6 +9,7 @@ import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestBody
 import com.reqlab.core.model.RequestDefinition
 import com.reqlab.core.network.ApiClient
+import com.reqlab.core.network.LlmTextAssembler
 import com.reqlab.core.network.NetworkEvent
 import com.reqlab.core.network.NetworkLogger
 import com.reqlab.core.network.NoOpNetworkLogger
@@ -98,6 +99,8 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
         tab.isLoading = true
         tab.response  = null
         tab.lastError = null
+        tab.streamChunks.clear()
+        tab.liveStreamText = ""
         state.testResults.clear()
         // Strip embedded query string from the URL: tab.params is the single source
         // of truth for query parameters (syncUrlFromParams embeds them for display,
@@ -255,6 +258,10 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                             LogLevel.WARNING,
                         )
                     }
+                    is NetworkEvent.Chunk -> {
+                        tab.streamChunks.add(event.raw)
+                        tab.liveStreamText = LlmTextAssembler.assemble(tab.streamChunks.toList())
+                    }
                     is NetworkEvent.Success -> {
                         tab.response  = event.response
                         tab.lastError = null
@@ -285,6 +292,8 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                                 requestHeaders = effectiveHeaders,
                                 requestQueryParams = effectiveQueryParams,
                                 requestBody = effectiveBodyContent,
+                                streamEvents = resp.streamEvents,
+                                assembledText = resp.assembledText ?: tab.liveStreamText.ifBlank { null },
                             )
                             val testResult = scriptEngine.executeTestScript(tab.testScript, testCtx, state.settings.scriptPrefix)
                             testResult.logs.forEach { state.log(it) }

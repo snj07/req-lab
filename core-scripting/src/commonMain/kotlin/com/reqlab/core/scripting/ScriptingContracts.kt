@@ -100,4 +100,6 @@ data class ScriptContext(
     val requestHeaders: Map<String, String> = emptyMap(),
     val requestQueryParams: Map<String, String> = emptyMap(),
     val requestBody: String? = null,
+    val streamEvents: List<String> = emptyList(),
+    val assembledText: String? = null,
 )

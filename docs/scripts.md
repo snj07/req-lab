@@ -151,11 +151,25 @@ Supported chain words:
 | `response.to.have.status(code)` | void | Postman-compatible chain — calls `statusIs(code)` |
 | `response.to.have.header(name, value?)` | void | Postman-compatible chain — calls `hasHeader(name, value?)` |
 | `response.to.be.ok` | void | Postman-compatible chain — calls `statusOk()` |
+| `response.streamEvents` | array | Raw SSE/NDJSON event payloads (empty for non-stream responses) |
+| `response.llm.assembledText` | string | Concatenated assistant text from stream deltas or `choices[0].message.content` |
+| `response.llm.finishReason` | string \| null | `stop`, `tool_calls`, etc. |
+| `response.llm.usage` | object \| null | Token usage object when the provider sent one (`prompt_tokens`, `completion_tokens`, `total_tokens`) |
+| `response.llm.jsonContent()` | object \| null | Parses `assembledText` as JSON (JSON-mode chat); `null` if it is not JSON |
 
 Notes:
 
 - `response.json()` throws if body is invalid JSON.
 - `response.status` is populated for mapped HTTP status codes.
+- For SSE, `response.text()` / Body view use assembled assistant text, not the raw `data:` frames. Use `response.streamEvents` or the RAW tab for individual chunks.
+
+```javascript
+reqlab.test("streamed chat", function () {
+  reqlab.expect(reqlab.response.llm.assembledText).to.include("Hello")
+  reqlab.expect(reqlab.response.llm.finishReason).to.equal("stop")
+  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0)
+})
+```
 
 ---
 

@@ -15,15 +15,18 @@ ReqLab uses a layered validation strategy:
 Model serialization and data structure behavior.
 - `RealtimeModelsTest` — WebSocket message and realtime model serialization
 - `ResponseMetricsTimingTest` — phase-level response timing (DNS, TCP, TLS, TTFB, body, total)
+- `ResponseDefinitionStreamFieldsTest` — `streamEvents` / `assembledText` defaults and serialization
 
 ### `core-network`
 Protocol behavior, request mapping, and variable substitution.
-- `KtorApiClientTest` — HTTP methods (GET/POST/PUT/PATCH/DELETE/OPTIONS/HEAD), body type delivery (JSON, form-data, urlencoded, raw, binary), auth headers, dynamic variables in URL/headers, timing metrics, retry logic
+- `KtorApiClientTest` — HTTP methods (GET/POST/PUT/PATCH/DELETE/OPTIONS/HEAD), body type delivery (JSON, form-data, urlencoded, raw, binary), auth headers, dynamic variables in URL/headers, timing metrics, retry logic, SSE/NDJSON streaming
+- `SseParserTest` — incremental SSE parsing (`data:`, comments, `[DONE]`)
+- `LlmTextAssemblerTest` — OpenAI delta / NDJSON content assembly
 - `VariableResolverTest` — variable interpolation, scope precedence, unresolved-variable passthrough
 
 ### `core-scripting`
 Script runtime, assertions, and variable scopes.
-- `ReqLabScriptEngineTest` — JS execution isolation, `req`/`res` bindings, pre-request scripts, post-response assertions, variable set/get across script phases, assertion error messages
+- `ReqLabScriptEngineTest` — JS execution isolation, `req`/`res` bindings, pre-request scripts, post-response assertions, `response.llm.*` / `streamEvents`, variable set/get across script phases, assertion error messages
 
 ### `core-storage`
 Repository and persistence behavior.
@@ -68,6 +71,7 @@ Cross-platform shared UI behavior (16 test classes).
 - `PostmanImporterTest` — Postman v2/v2.1 collection and environment import correctness
 - `ImportExportFormDataTest` — form-data field serialization round-trip
 - `AppStateBehaviorTest` — app state transitions, active-tab tracking, collection mutations
+- `StreamTabStateTest` — live `streamChunks` / `liveStreamText` assembly on the request tab
 - `FirstLaunchStateTest` — first-launch default state, initial tab creation
 - `I18nCompletenessTest` — all string keys present in every supported locale
 - `I18nProviderTest` — locale switching, fallback behavior, pluralization
@@ -151,6 +155,7 @@ JVM integration and E2E tests against the running `sample-server`.
 - `ApiClientE2ETest` — all HTTP methods, body types (JSON, form-data, urlencoded, raw, binary), auth (Basic, Bearer, API Key), dynamic variables, timing metrics, retry
 - `NetworkClientWsAndMultipartE2ETest` — WebSocket connect/send/receive/disconnect; multipart upload
 - `SampleCollectionE2ETest` — scripted collection run against the sample collection fixture
+- `LlmApiE2ETest` — OpenAI-compatible chat, SSE/NDJSON assembly, embeddings, tools, JSON mode, error statuses, visible `demo=true` stream
 - `ScriptingDocsIntegrationTest` — scripting doc examples execute correctly end-to-end
 - `WebSocketE2ETest` — WebSocket lifecycle: connect, send, receive, close, reconnect
 
@@ -179,6 +184,11 @@ JVM integration and E2E tests against the running `sample-server`.
 - `GET /json/user`, `GET /json/array`, `GET /json/object`
 - `GET /headers`, `GET /cookies`, `GET /response-time`, `GET /string-body`
 - `POST /echo-body`, `POST /api/token`, `POST /api/validate`, `GET /api/echo-full`
+- `GET /v1/models`
+- `POST /v1/chat/completions` (`?demo=true`, `?chunkMs=`, `?fail=429|500`, `?earlyClose=true`)
+- `POST /v1/chat/ndjson`
+- `POST /v1/embeddings`
+- `GET /v1/chat/slow?ms=<delay>`
 - `WS /ws`
 
 Simulation parameters used by current endpoints:

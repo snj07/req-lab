@@ -24,6 +24,7 @@ ReqLab supports end-to-end API testing with:
 - Request body support for JSON, GraphQL, form-style payloads, and raw text
 - Authentication modes: None, Basic, Bearer, API Key, JWT (OAuth2 planned)
 - Retry controls and timeout behavior
+- HTTP streaming for SSE (`text/event-stream`) and NDJSON (OpenAI-style `"stream": true`)
 - Copy request as `curl`
 
 ### Response Validation and Inspection
@@ -31,7 +32,8 @@ ReqLab supports end-to-end API testing with:
 - Response status code and status text
 - Response headers
 - Response body (`text` and JSON parsing in scripts)
-- Response timing (`responseTime`)
+- Live assembled stream text; RAW view of individual SSE/NDJSON events
+- Response timing (`responseTime`, TTFB, time to first token, time to last token)
 - Response size (`size`)
 - Structured pass/fail test result reporting
 
@@ -143,6 +145,8 @@ The `sample-server` module provides local endpoints for deterministic API testin
 - header and cookie test endpoints (`/headers`, `/cookies`)
 - timing/body endpoints (`/response-time`, `/string-body`, `/echo-body`)
 - additional API routes for QA and integration scenarios
+- OpenAI-compatible LLM mocks (`/v1/models`, `/v1/chat/completions`, `/v1/chat/ndjson`, `/v1/embeddings`)
+- `?demo=true` on chat completions for a visible multi-token SSE stream (`?chunkMs=` overrides delay)
 
 ## Scripting Capabilities
 
@@ -161,7 +165,8 @@ The `sample-server` module provides local endpoints for deterministic API testin
 
 ### Script API Areas
 
-- `reqlab.response` (code/status/time/size/body/headers)
+- `reqlab.response` (code/status/time/size/body/headers/streamEvents)
+- `reqlab.response.llm` (assembledText, finishReason, usage, jsonContent)
 - `reqlab.request` (read context + mutation helpers)
 - `reqlab.environment`
 - `reqlab.globals`
@@ -182,6 +187,12 @@ reqlab.test("status and schema basics", function () {
   reqlab.expect(reqlab.response.code).to.equal(200)
   reqlab.expect(body).to.have.property("id")
   reqlab.expect(body.name).to.be.ok
+})
+
+reqlab.test("streamed chat text", function () {
+  reqlab.expect(reqlab.response.llm.assembledText).to.include("Hello")
+  reqlab.expect(reqlab.response.llm.finishReason).to.equal("stop")
+  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0)
 })
 ```
 

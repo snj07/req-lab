@@ -97,6 +97,23 @@ private fun EmptyResponseState(tab: RequestTabState) {
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(Strings.sendingRequest, color = ReqLabColors.OnSurfaceDim, fontSize = 13.sp)
+                    if (tab.liveStreamText.isNotBlank()) {
+                        Spacer(Modifier.height(16.dp))
+                        SelectionContainer {
+                            Text(
+                                tab.liveStreamText,
+                                color = ReqLabColors.OnSurface,
+                                fontSize = 13.sp,
+                                fontFamily = CodeFontFamily,
+                                modifier = Modifier
+                                    .padding(horizontal = 24.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(ReqLabColors.SurfaceContainer)
+                                    .padding(12.dp)
+                                    .testTag("response-live-stream"),
+                            )
+                        }
+                    }
                 }
                 error != null -> {
                     Icon(
@@ -253,10 +270,16 @@ private fun ResponseTabBar(selectedTab: ResponseTab, onTabSelected: (ResponseTab
 @kotlinx.serialization.ExperimentalSerializationApi
 @Composable
 private fun ResponseBodyView(response: ResponseDefinition) {
-    val language = detectLanguage(response.contentType)
+    val isStream = response.streamEvents.isNotEmpty()
+    val bodyText = if (isStream) {
+        response.assembledText?.takeIf { it.isNotBlank() } ?: response.bodyText
+    } else {
+        response.bodyText
+    }
+    val language = if (isStream) detectLanguage("text/plain") else detectLanguage(response.contentType)
 
     CodeEditor(
-        text = response.bodyText,
+        text = bodyText,
         onTextChange = null,   // read-only
         language = language,
         modifier = Modifier.fillMaxSize(),
@@ -338,7 +361,11 @@ private fun ResponseCookiesView(response: ResponseDefinition) {
 private fun ResponseRawView(response: ResponseDefinition) {
     SelectionContainer {
         Text(
-            text = response.bodyText,
+            text = if (response.streamEvents.isNotEmpty()) {
+                response.streamEvents.joinToString("\n")
+            } else {
+                response.bodyText
+            },
             color = ReqLabColors.OnSurface,
             fontSize = 13.sp,
             fontFamily = CodeFontFamily,
@@ -364,6 +391,9 @@ private fun ResponseTimingView(response: ResponseDefinition) {
         if (m.tlsMs >= 0) add(Phase("TLS Handshake", m.tlsMs, Color(0xFFAB47BC)))
         if (m.serverMs >= 0) add(Phase("Server Processing", m.serverMs, Color(0xFF66BB6A)))
         if (m.downloadMs >= 0) add(Phase("Content Download", m.downloadMs, Color(0xFFEF5350)))
+        if (m.ttfbMs >= 0) add(Phase("TTFB", m.ttfbMs, Color(0xFF26A69A)))
+        if (m.timeToFirstTokenMs >= 0) add(Phase("Time to First Token", m.timeToFirstTokenMs, Color(0xFF5C6BC0)))
+        if (m.timeToLastTokenMs >= 0) add(Phase("Time to Last Token", m.timeToLastTokenMs, Color(0xFF8D6E63)))
     }
 
     val totalMs = m.responseTimeMs.coerceAtLeast(1)

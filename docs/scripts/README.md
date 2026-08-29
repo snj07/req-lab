@@ -27,6 +27,11 @@ The global (prefix-free) API is also supported for backward compatibility.
 | `reqlab.response.text()` | Response body as plain text |
 | `reqlab.response.json()` | Response body parsed as JSON |
 | `reqlab.response.headers.get(name)` | Response header value |
+| `reqlab.response.streamEvents` | Raw SSE/NDJSON event payloads |
+| `reqlab.response.llm.assembledText` | Assembled assistant / stream text |
+| `reqlab.response.llm.finishReason` | Chat `finish_reason` |
+| `reqlab.response.llm.usage` | Token usage object |
+| `reqlab.response.llm.jsonContent()` | Parse assembled text as JSON |
 | `reqlab.request.url` | Request URL |
 | `reqlab.request.method` | Request method |
 | `reqlab.request.body` | Request body |
@@ -76,6 +81,11 @@ reqlab.test("Payload shape is valid", function() {
   reqlab.expect(body).to.have.property("id")
   reqlab.expect(typeof body.id).to.equal("string")
   reqlab.expect(body.type).to.be.oneOf(["Subscriber", "Admin"])
+})
+
+reqlab.test("streamed assistant text", function() {
+  reqlab.expect(reqlab.response.llm.assembledText).to.include("Hello")
+  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0)
 })
 
 reqlab.environment.set("lastStatus", String(reqlab.response.code))

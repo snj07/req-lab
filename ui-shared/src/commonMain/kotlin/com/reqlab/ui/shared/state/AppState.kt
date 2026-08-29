@@ -337,6 +337,12 @@ class RequestTabState(
     // last error message (displayed in response panel when response is null + error)
     var lastError   by mutableStateOf<String?>(null)
 
+    /** Raw SSE/NDJSON payloads collected while a streaming response is in flight. */
+    val streamChunks = mutableStateListOf<String>()
+
+    /** Concatenated LLM token text shown live while streaming. */
+    var liveStreamText by mutableStateOf("")
+
     init {
         savedSnapshot = currentSnapshotForDirtyTracking()
     }

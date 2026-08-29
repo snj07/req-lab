@@ -11,6 +11,9 @@
         "X-Client": "ReqLab-Env-Client",
         "graphqlUserId": "1",
         "scriptToken": "",
-        "lastRunId": "run-env-default"
+        "lastRunId": "run-env-default",
+        "llmBaseUrl": "http://localhost:8080",
+        "llmApiKey": "llm-test-key",
+        "llmModel": "mock-gpt"
     }
 }

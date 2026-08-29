@@ -134,7 +134,9 @@ kotlin {
     }
 }
 
-tasks.matching { it.name.startsWith("compileKotlin") }.configureEach {
+tasks.matching {
+    it.name.startsWith("compileKotlin") || it.name == "compileCommonMainKotlinMetadata"
+}.configureEach {
     dependsOn(generateI18nBundles)
     dependsOn(generateBuildInfo)
 }

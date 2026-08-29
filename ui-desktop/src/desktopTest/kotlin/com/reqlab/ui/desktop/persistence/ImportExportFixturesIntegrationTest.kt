@@ -44,11 +44,14 @@ class ImportExportFixturesIntegrationTest {
 
         val root = restored.collections.firstOrNull { it.name == "ReqLab Test Suite" }
         assertTrue(root != null)
-        assertTrue(root.children.any { it.isFolder && it.name == "New Script APIs Coverage" })
+        assertTrue(root.children.any { it.isFolder && it.name == "HTTP Methods" })
+        assertTrue(root.children.any { it.isFolder && it.name == "LLM (OpenAI-compatible)" })
 
         val env = restored.environments.firstOrNull { it.name == "Local Dev – Sample Server" }
         assertTrue(env != null)
         assertTrue(env.variables.any { it.key == "graphqlUserId" && it.value == "1" })
+        assertTrue(env.variables.any { it.key == "llmBaseUrl" && it.value == "http://localhost:8080" })
+        assertTrue(env.variables.any { it.key == "llmApiKey" && it.value == "llm-test-key" })
     }
 
     private fun resolveFixture(name: String): File {

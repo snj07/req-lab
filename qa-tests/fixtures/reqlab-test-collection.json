@@ -821,6 +821,198 @@
           "testScript": "reqlab.test(\"request completed\", function(){\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});"
         }
       ]
+    },
+    {
+      "name": "LLM (OpenAI-compatible)",
+      "folders": [],
+      "requests": [
+        {
+          "name": "LLM List Models",
+          "method": "GET",
+          "url": "{{llmBaseUrl}}/v1/models",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"returns models list\", function() {\n  reqlab.expect(reqlab.response.json().data.length).to.be.above(0);\n});"
+        },
+        {
+          "name": "LLM Chat Completions (realistic)",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions?demo=true",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"temperature\": 0.2,\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful API testing assistant.\"},\n    {\"role\": \"user\", \"content\": \"Explain how streaming chat completions work in ReqLab.\"}\n  ],\n  \"stream\": false\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"assistant content is a full reply\", function() {\n  reqlab.expect(reqlab.response.json().choices[0].message.content).to.include(\"SSE\");\n});\nreqlab.test(\"finish_reason is stop\", function() {\n  reqlab.expect(reqlab.response.llm.finishReason).to.equal(\"stop\");\n});\nreqlab.test(\"token usage is present\", function() {\n  reqlab.expect(reqlab.response.llm.usage.total_tokens).to.be.below(200);\n});"
+        },
+        {
+          "name": "LLM Chat Completions Stream (visible)",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions?demo=true",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"temperature\": 0.2,\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful API testing assistant.\"},\n    {\"role\": \"user\", \"content\": \"Explain how streaming chat completions work in ReqLab.\"}\n  ],\n  \"stream\": true\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"assembled stream text\", function() {\n  reqlab.expect(reqlab.response.llm.assembledText).to.include(\"SSE event\");\n});\nreqlab.test(\"many stream events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(10);\n});\nreqlab.test(\"finish_reason is stop\", function() {\n  reqlab.expect(reqlab.response.llm.finishReason).to.equal(\"stop\");\n});"
+        },
+        {
+          "name": "LLM Chat Completions",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Say hello\"}],\n  \"stream\": false\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"assistant content\", function() {\n  reqlab.expect(reqlab.response.json().choices[0].message.content).to.include(\"Hello\");\n});\nreqlab.test(\"finish_reason is stop\", function() {\n  reqlab.expect(reqlab.response.llm.finishReason).to.equal(\"stop\");\n});\nreqlab.test(\"token usage is bounded\", function() {\n  reqlab.expect(reqlab.response.llm.usage.total_tokens).to.be.below(100);\n});"
+        },
+        {
+          "name": "LLM Chat Completions Stream",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Say hello\"}],\n  \"stream\": true\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"assembled stream text\", function() {\n  reqlab.expect(reqlab.response.llm.assembledText).to.include(\"Hello from ReqLab\");\n});\nreqlab.test(\"has stream events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0);\n});\nreqlab.test(\"finish_reason is stop\", function() {\n  reqlab.expect(reqlab.response.llm.finishReason).to.equal(\"stop\");\n});"
+        },
+        {
+          "name": "LLM Chat Completions NDJSON",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/ndjson",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"assembled ndjson text\", function() {\n  reqlab.expect(reqlab.response.llm.assembledText).to.include(\"Hello\");\n});"
+        },
+        {
+          "name": "LLM Chat Completions JSON mode",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Return JSON\"}],\n  \"response_format\": {\"type\": \"json_object\"}\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"json mode content parses\", function() {\n  reqlab.expect(reqlab.response.llm.jsonContent().ok).to.equal(true);\n});"
+        },
+        {
+          "name": "LLM Chat Completions tool calls",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Look up user 1\"}],\n  \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"lookup_user\"}}]\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"finish_reason is tool_calls\", function() {\n  reqlab.expect(reqlab.response.llm.finishReason).to.equal(\"tool_calls\");\n});\nreqlab.test(\"has tool_calls\", function() {\n  reqlab.expect(reqlab.response.json().choices[0].message.tool_calls[0].function.name).to.equal(\"lookup_user\");\n});"
+        },
+        {
+          "name": "LLM Embeddings",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/embeddings",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"input\": \"hello embeddings\"\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"embedding length is 8\", function() {\n  reqlab.expect(reqlab.response.json().data[0].embedding.length).to.equal(8);\n});"
+        },
+        {
+          "name": "LLM Chat Completions 401 missing auth",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions",
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]\n}"
+          },
+          "testScript": "reqlab.test(\"status is 401\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(401);\n});"
+        },
+        {
+          "name": "LLM Chat Completions 429 rate limit",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions?fail=429",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]\n}"
+          },
+          "testScript": "reqlab.test(\"status is 429\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(429);\n});"
+        },
+        {
+          "name": "LLM Chat Completions 500 upstream",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions?fail=500",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]\n}"
+          },
+          "testScript": "reqlab.test(\"status is 500\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(500);\n});"
+        },
+        {
+          "name": "LLM Chat Completions Slow",
+          "method": "GET",
+          "url": "{{llmBaseUrl}}/v1/chat/slow?ms=50",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});"
+        },
+        {
+          "name": "LLM Chat Completions Stream Early Close",
+          "method": "POST",
+          "url": "{{llmBaseUrl}}/v1/chat/completions?earlyClose=true",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{llmApiKey}}"
+          },
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Say hello\"}],\n  \"stream\": true\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"partial assembled text\", function() {\n  reqlab.expect(reqlab.response.llm.assembledText).to.include(\"Hello\");\n});"
+        }
+      ]
     }
   ],
   "requests": [

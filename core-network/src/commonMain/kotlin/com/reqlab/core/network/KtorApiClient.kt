@@ -8,7 +8,10 @@ import com.reqlab.core.model.RequestDefinition
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.HttpRequestBuilder
@@ -19,6 +22,7 @@ import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -28,8 +32,12 @@ import io.ktor.http.contentType
 import io.ktor.http.encodeURLPath
 import io.ktor.http.formUrlEncode
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
@@ -47,7 +55,8 @@ class KtorApiClient(
     private val json: Json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
-    }
+    },
+    private val idleTimeoutMs: Long = 30_000L,
 ) : ApiClient {
 
     override fun execute(
@@ -77,9 +86,28 @@ class KtorApiClient(
                 val response = httpClient.request(preparedRequest)
                 val headersReceivedTime = currentTimeMillis()
                 val serverMs = headersReceivedTime - startTime
-                val duration = currentTimeMillis() - startTime
-                interceptors.forEach { interceptor -> interceptor.onResponse(response, duration) }
+                interceptors.forEach { interceptor -> interceptor.onResponse(response, headersReceivedTime - startTime) }
 
+                val streaming = isStreamingContentType(response.contentType()?.toString())
+                if (streaming) {
+                    val shouldRetry = response.status.value in retryPolicy.retryOnStatusCodes
+                    if (shouldRetry && attempt < retryPolicy.maxAttempts) {
+                        runCatching { response.bodyAsText() }
+                        val delayMs = retryPolicy.delayForAttempt(attempt)
+                        emit(NetworkEvent.RetryScheduled(attempt, delayMs, "status=${response.status.value}"))
+                        delay(delayMs)
+                        continue
+                    }
+                    consumeStreamingResponse(
+                        request = request,
+                        response = response,
+                        startTime = startTime,
+                        headersReceivedTime = headersReceivedTime,
+                    )
+                    return@flow
+                }
+
+                val duration = currentTimeMillis() - startTime
                 val mappedResponse = response.toResponseDefinition(
                     request.id, duration,
                     serverMs = serverMs,
@@ -96,6 +124,7 @@ class KtorApiClient(
                 emit(NetworkEvent.RetryScheduled(attempt, delayMs, "status=${mappedResponse.statusCode}"))
                 delay(delayMs)
             } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
                 lastThrowable = throwable
                 logger.error("Request failed at attempt $attempt", throwable)
                 interceptors.forEach { interceptor -> interceptor.onFailure(throwable, attempt) }
@@ -152,6 +181,14 @@ class KtorApiClient(
 
         applyAuth(builder, request, variableLayers)
         applyBody(builder, request, variableLayers)
+
+        if (requestLooksLikeStreaming(request)) {
+            runCatching {
+                builder.timeout {
+                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+                }
+            }
+        }
 
         return builder
     }
@@ -329,6 +366,115 @@ class KtorApiClient(
             }
         }
     }
+
+    private suspend fun FlowCollector<NetworkEvent>.consumeStreamingResponse(
+        request: RequestDefinition,
+        response: HttpResponse,
+        startTime: Long,
+        headersReceivedTime: Long,
+    ) {
+        val contentType = response.contentType()?.toString()
+        val sse = isSseContentType(contentType)
+        val channel = response.bodyAsChannel()
+        val parser = SseParser()
+        val events = mutableListOf<String>()
+        var index = 0
+        var firstTokenAt = -1L
+        var lastTokenAt = -1L
+        val bodyReadStart = currentTimeMillis()
+
+        try {
+            while (!channel.isClosedForRead) {
+                val line = readLineWithIdleTimeout(channel) ?: break
+                if (sse) {
+                    val event = parser.feedLine(line) ?: continue
+                    if (event.isDone) break
+                    recordStreamEvent(request.id, events, event.data, index)
+                    index++
+                    val now = currentTimeMillis()
+                    if (firstTokenAt < 0) firstTokenAt = now
+                    lastTokenAt = now
+                    emit(NetworkEvent.Chunk(request.id, events.lastIndex, event.data, now))
+                } else {
+                    if (line.isBlank()) continue
+                    recordStreamEvent(request.id, events, line, index)
+                    index++
+                    val now = currentTimeMillis()
+                    if (firstTokenAt < 0) firstTokenAt = now
+                    lastTokenAt = now
+                    emit(NetworkEvent.Chunk(request.id, events.lastIndex, line, now))
+                    if (LlmTextAssembler.isNdjsonDone(line)) break
+                }
+            }
+            parser.flush()?.let { event ->
+                if (!event.isDone) {
+                    recordStreamEvent(request.id, events, event.data, index)
+                    val now = currentTimeMillis()
+                    if (firstTokenAt < 0) firstTokenAt = now
+                    lastTokenAt = now
+                    emit(NetworkEvent.Chunk(request.id, events.lastIndex, event.data, now))
+                }
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Throwable) {
+            // Keep partial events and still emit Success.
+        }
+
+        val endTime = currentTimeMillis()
+        val assembled = LlmTextAssembler.assemble(events)
+        val bodyText = assembled.ifBlank { events.joinToString("\n") }
+        val bodyBytes = bodyText.encodeToByteArray().size.toLong()
+        val responseHeaders = response.headerEntries()
+        val cookies = responseHeaders.filter { it.key.equals(HttpHeaders.SetCookie, ignoreCase = true) }
+        val ttfbMs = headersReceivedTime - startTime
+
+        emit(
+            NetworkEvent.Success(
+                ResponseDefinition(
+                    requestId = request.id,
+                    statusCode = response.status.value,
+                    statusText = response.status.description,
+                    headers = responseHeaders,
+                    cookies = cookies,
+                    bodyText = bodyText,
+                    contentType = contentType,
+                    executedAtEpochMillis = endTime,
+                    metrics = ResponseMetrics(
+                        statusCode = response.status.value,
+                        responseTimeMs = endTime - startTime,
+                        responseSizeBytes = bodyBytes,
+                        serverMs = ttfbMs,
+                        downloadMs = endTime - bodyReadStart,
+                        ttfbMs = ttfbMs,
+                        timeToFirstTokenMs = if (firstTokenAt >= 0) firstTokenAt - startTime else -1,
+                        timeToLastTokenMs = if (lastTokenAt >= 0) lastTokenAt - startTime else -1,
+                    ),
+                    streamEvents = events,
+                    assembledText = assembled.ifBlank { null },
+                )
+            )
+        )
+    }
+
+    private suspend fun readLineWithIdleTimeout(channel: io.ktor.utils.io.ByteReadChannel): String? {
+        if (idleTimeoutMs <= 0L) return channel.readUTF8Line()
+        return try {
+            withTimeout(idleTimeoutMs) { channel.readUTF8Line() }
+        } catch (_: TimeoutCancellationException) {
+            null
+        }
+    }
+
+    private fun recordStreamEvent(
+        requestId: String,
+        events: MutableList<String>,
+        raw: String,
+        index: Int,
+    ) {
+        events += raw
+        logger.debug("stream chunk #$index for $requestId (${raw.length} chars)")
+    }
 }
 
 private fun HttpMethodType.toKtorMethod(): HttpMethod = when (this) {
@@ -360,6 +506,7 @@ private suspend fun HttpResponse.toResponseDefinition(
     val sizeFromHeader = headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: -1L
     val bodyBytes = bodyText.encodeToByteArray().size.toLong()
     val responseSize = if (sizeFromHeader > 0) sizeFromHeader else bodyBytes
+    val assembled = LlmTextAssembler.assembleFromBody(bodyText)
 
     return ResponseDefinition(
         requestId = requestId,
@@ -376,9 +523,16 @@ private suspend fun HttpResponse.toResponseDefinition(
             responseSizeBytes = responseSize,
             serverMs = serverMs,
             downloadMs = downloadMs,
-        )
+            ttfbMs = serverMs,
+        ),
+        assembledText = assembled.ifBlank { null },
     )
 }
+
+private fun HttpResponse.headerEntries(): List<KeyValueEntry> =
+    headers.entries().flatMap { (name, values) ->
+        values.map { value -> KeyValueEntry(name, value) }
+    }
 
 private fun defaultHttpClient(): HttpClient = createPlatformHttpClient {
     install(ContentNegotiation) {
@@ -388,6 +542,11 @@ private fun defaultHttpClient(): HttpClient = createPlatformHttpClient {
             prettyPrint = true
             explicitNulls = false
         })
+    }
+    install(HttpTimeout) {
+        requestTimeoutMillis = 30_000
+        connectTimeoutMillis = 10_000
+        socketTimeoutMillis = 30_000
     }
     install(WebSockets)
     expectSuccess = false

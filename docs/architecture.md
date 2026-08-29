@@ -111,16 +111,18 @@ NONE, BASIC, BEARER, API_KEY, OAUTH2, JWT
 #### Response model
 
 `ResponseDefinition` is the immutable result of a completed HTTP round-trip:
-- `metrics: ResponseMetrics` — statusCode, responseTimeMs, responseSizeBytes; phase-level timing (DNS, connect, TLS, server, download)
+- `metrics: ResponseMetrics` — statusCode, responseTimeMs, responseSizeBytes; phase-level timing (DNS, connect, TLS, server, download); for streams also `ttfbMs`, `timeToFirstTokenMs`, `timeToLastTokenMs`
 - `headers: List<KeyValueEntry>`
 - `body: String?`
+- `streamEvents: List<String>` — raw SSE/NDJSON event payloads (empty for buffered responses)
+- `assembledText: String?` — concatenated assistant / stream text
 - `error: String?` — set when the request fails without a response
 
 ### Infrastructure Layer
 
 | Module | Responsibility |
 |---|---|
-| `core-network` | `KtorApiClient` executing HTTP requests; auth schemes (Basic, Bearer, API Key, OAuth2, JWT); retry; `{{variable}}` interpolation in URL/headers/body; WebSocket; `NetworkInterceptor` interface |
+| `core-network` | `KtorApiClient` executing HTTP requests; SSE/NDJSON streaming via `NetworkEvent.Chunk` (`SseParser`, `LlmTextAssembler`); auth schemes (Basic, Bearer, API Key, OAuth2, JWT); retry; `{{variable}}` interpolation in URL/headers/body; WebSocket; `NetworkInterceptor` interface |
 | `core-storage` | `PlatformStorage` abstraction; workspace, tab, settings, and environment JSON persistence |
 | `core-scripting` | JavaScript runtime contracts; pre-request / post-request execution; variable scope injection (`environment`, `globals`, `collectionVariables`); `pm.*` → `reqlab.*` API rewriter |
 | `feature-requests` | `RequestExecutionService` — orchestrates an HTTP round-trip: resolves variables → runs pre-request script → dispatches via `KtorApiClient` → feeds response into post-request scripts |
@@ -289,7 +291,7 @@ Post-request script
      ▼
 ScriptEngine.execute(script, context)
      │
-     ├── Reads:  response code, body, headers, timing, size
+     ├── Reads:  response code, body, headers, timing, size, streamEvents, llm helpers
      ├── Writes: environment / global / collection variables
      └── Produces: named test results (pass / fail + message)
 ```

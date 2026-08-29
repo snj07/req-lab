@@ -7,6 +7,7 @@ import io.ktor.client.statement.HttpResponse
 sealed interface NetworkEvent {
     data class Started(val requestId: String, val timestampEpochMillis: Long) : NetworkEvent
     data class RetryScheduled(val attempt: Int, val delayMs: Long, val reason: String) : NetworkEvent
+    data class Chunk(val requestId: String, val index: Int, val raw: String, val atEpochMillis: Long) : NetworkEvent
     data class Success(val response: ResponseDefinition) : NetworkEvent
     data class Failure(val error: NetworkError) : NetworkEvent
 }

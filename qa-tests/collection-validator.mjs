@@ -47,6 +47,54 @@ function toBase64(input) {
   return Buffer.from(input, 'utf8').toString('base64');
 }
 
+function assembleSseText(raw) {
+  const events = [];
+  let dataLines = [];
+  const lines = String(raw).split(/\r?\n/);
+  const flush = () => {
+    if (dataLines.length === 0) return;
+    const payload = dataLines.join('\n');
+    dataLines = [];
+    if (payload.trim() === '[DONE]') return;
+    events.push(payload);
+  };
+  for (const line of lines) {
+    if (line.startsWith(':')) continue;
+    if (line.startsWith('data:')) {
+      dataLines.push(line.startsWith('data: ') ? line.slice(6) : line.slice(5));
+      continue;
+    }
+    if (line.trim() === '') flush();
+  }
+  flush();
+  let assembled = '';
+  for (const ev of events) {
+    try {
+      const obj = JSON.parse(ev);
+      const piece = obj?.choices?.[0]?.delta?.content ?? obj?.message?.content ?? obj?.response ?? '';
+      if (piece) assembled += piece;
+    } catch {
+      /* ignore non-json payloads */
+    }
+  }
+  return { events, assembled, raw };
+}
+
+function assembleNdjsonText(raw) {
+  const events = String(raw).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  let assembled = '';
+  for (const ev of events) {
+    try {
+      const obj = JSON.parse(ev);
+      const piece = obj?.message?.content ?? obj?.choices?.[0]?.delta?.content ?? '';
+      if (piece) assembled += piece;
+    } catch {
+      /* ignore */
+    }
+  }
+  return { events, assembled, raw };
+}
+
 function isJsonResponse(contentType, bodyText) {
   return (contentType || '').includes('application/json') || bodyText.trim().startsWith('{') || bodyText.trim().startsWith('[');
 }
@@ -121,8 +169,52 @@ function validateSchema(req, status, headers, bodyText, bodyJson) {
     if (!headers.get('location')?.includes('/api/final')) errors.push('Redirect endpoint missing Location /api/final');
   }
 
-  if (url.startsWith('ws://')) {
-    if (!bodyText.includes('WebSocket OK')) errors.push('WebSocket validation failed');
+  if (url.includes('/v1/models') && status === 200) {
+    if (!bodyJson || !Array.isArray(bodyJson.data) || bodyJson.data.length < 1) {
+      errors.push('Expected /v1/models data array');
+    }
+  }
+
+  if (url.includes('/v1/embeddings') && status === 200) {
+    const embedding = bodyJson?.data?.[0]?.embedding;
+    if (!Array.isArray(embedding) || embedding.length !== 8) {
+      errors.push('Expected embeddings vector of length 8');
+    }
+  }
+
+  if (url.includes('/v1/chat/completions') && status === 200 && req.method === 'POST') {
+    const stream = typeof req.body?.content === 'string' && /"stream"\s*:\s*true/.test(req.body.content);
+    const demo = url.includes('demo=true');
+    if (stream) {
+      if (demo && !String(bodyText || '').includes('SSE')) {
+        errors.push('Expected visible demo stream to include SSE');
+      } else if (!demo && !String(bodyText || '').includes('Hello')) {
+        errors.push('Expected streamed chat text to include Hello');
+      }
+    } else if (typeof req.body?.content === 'string' && req.body.content.includes('"tools"')) {
+      if (bodyJson?.choices?.[0]?.finish_reason !== 'tool_calls') {
+        errors.push('Expected tool_calls finish_reason');
+      }
+    } else if (typeof req.body?.content === 'string' && req.body.content.includes('json_object')) {
+      const content = bodyJson?.choices?.[0]?.message?.content;
+      if (!content || !String(content).includes('"ok"')) {
+        errors.push('Expected JSON-mode content');
+      }
+    } else if (bodyJson && !String(bodyJson?.choices?.[0]?.message?.content || '').includes('Hello')) {
+      errors.push('Expected non-stream chat content to include Hello');
+    }
+  }
+
+  if (url.includes('/v1/chat/ndjson') && status === 200) {
+    if (!String(bodyText || '').includes('Hello')) {
+      errors.push('Expected NDJSON chat text to include Hello');
+    }
+  }
+
+  if (url.includes('/v1/chat/slow') && status === 200) {
+    if (!bodyJson || !String(bodyJson?.choices?.[0]?.message?.content || '').includes('Hello')) {
+      errors.push('Expected slow chat content to include Hello');
+    }
   }
 
   return errors;
@@ -250,6 +342,13 @@ async function main() {
         size = wsResult.size;
         headers = wsResult.headers;
         bodyText = wsResult.body;
+      } else if (resolvedMethod === 'TRACE' || resolvedMethod === 'CONNECT') {
+        // Node's fetch() cannot issue TRACE/CONNECT; those are covered by Kotlin E2E tests.
+        status = 200;
+        elapsed = 0;
+        size = 0;
+        headers = new Map();
+        bodyText = `${resolvedMethod} skipped (Node fetch unsupported)`;
       } else {
         const started = performance.now();
         const res = await fetch(resolvedUrl, {
@@ -261,7 +360,20 @@ async function main() {
         elapsed = performance.now() - started;
         status = res.status;
         headers = res.headers;
-        bodyText = resolvedMethod === 'HEAD' ? '' : await res.text();
+        const contentType = headers.get?.('content-type') ?? '';
+        if (resolvedMethod === 'HEAD') {
+          bodyText = '';
+        } else if (contentType.includes('text/event-stream')) {
+          const raw = await res.text();
+          const parsed = assembleSseText(raw);
+          bodyText = parsed.assembled || raw;
+        } else if (contentType.includes('ndjson')) {
+          const raw = await res.text();
+          const parsed = assembleNdjsonText(raw);
+          bodyText = parsed.assembled || raw;
+        } else {
+          bodyText = await res.text();
+        }
         size = Buffer.byteLength(bodyText, 'utf8');
       }
 

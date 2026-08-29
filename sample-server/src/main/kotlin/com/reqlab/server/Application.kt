@@ -8,6 +8,7 @@ import io.ktor.http.content.forEachPart
 import io.ktor.http.content.readAllParts
 import io.ktor.http.content.streamProvider
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
@@ -22,6 +23,7 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
+import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.head
@@ -42,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -55,6 +58,7 @@ fun main() {
     println("  ReqLab Sample API Server")
     println("  Listening on  http://localhost:8080")
     println("  WebSocket     ws://localhost:8080/ws")
+    println("  LLM mock      POST /v1/chat/completions  (?demo=true for a visible token stream)")
     println("  Press Ctrl+C to stop")
     println("==========================================================")
     embeddedServer(Netty, port = 8080, module = Application::module).start(wait = true)
@@ -1051,6 +1055,128 @@ module.exports = api;""",
             })
         }
 
+        // ── OpenAI-compatible LLM mock ─────────────────────────────────────
+
+        get("/v1/models") {
+            if (!call.requireLlmBearer()) return@get
+            call.respond(buildJsonObject {
+                put("object", "list")
+                put("data", buildJsonArray {
+                    add(buildJsonObject {
+                        put("id", "mock-gpt")
+                        put("object", "model")
+                        put("owned_by", "reqlab")
+                    })
+                    add(buildJsonObject {
+                        put("id", "mock-embed")
+                        put("object", "model")
+                        put("owned_by", "reqlab")
+                    })
+                })
+            })
+        }
+
+        get("/v1/chat/slow") {
+            if (!call.requireLlmBearer()) return@get
+            val delayMs = call.request.queryParameters["ms"]?.toLongOrNull() ?: 1_000L
+            delay(delayMs)
+            call.respond(openAiChatCompletionJson(content = LLM_SHORT_REPLY, finishReason = "stop"))
+        }
+
+        post("/v1/embeddings") {
+            if (!call.requireLlmBearer()) return@post
+            val body = runCatching { call.receiveText() }.getOrDefault("")
+            val model = Regex(""""model"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1) ?: "mock-embed"
+            call.respond(buildJsonObject {
+                put("object", "list")
+                put("model", model)
+                put("data", buildJsonArray {
+                    add(buildJsonObject {
+                        put("object", "embedding")
+                        put("index", 0)
+                        put("embedding", buildJsonArray {
+                            add(0.1); add(0.2); add(0.3); add(0.4)
+                            add(0.5); add(0.6); add(0.7); add(0.8)
+                        })
+                    })
+                })
+                put("usage", buildJsonObject {
+                    put("prompt_tokens", 8)
+                    put("total_tokens", 8)
+                })
+            })
+        }
+
+        post("/v1/chat/ndjson") {
+            if (!call.requireLlmBearer()) return@post
+            call.respondTextWriter(contentType = ContentType.parse("application/x-ndjson")) {
+                write("""{"message":{"role":"assistant","content":"Hello"},"done":false}""" + "\n")
+                flush()
+                delay(15)
+                write("""{"message":{"role":"assistant","content":" from"},"done":false}""" + "\n")
+                flush()
+                delay(15)
+                write("""{"message":{"role":"assistant","content":" ReqLab"},"done":true}""" + "\n")
+                flush()
+            }
+        }
+
+        post("/v1/chat/completions") {
+            if (!call.requireLlmBearer()) return@post
+            when (call.request.queryParameters["fail"]) {
+                "429" -> {
+                    call.respond(HttpStatusCode.TooManyRequests, openAiError("rate_limit_exceeded", "Rate limit exceeded"))
+                    return@post
+                }
+                "500" -> {
+                    call.respond(HttpStatusCode.InternalServerError, openAiError("server_error", "Simulated upstream failure"))
+                    return@post
+                }
+            }
+            val delayMs = call.request.queryParameters["ms"]?.toLongOrNull() ?: 0L
+            if (delayMs > 0) delay(delayMs)
+
+            val body = runCatching { call.receiveText() }.getOrDefault("")
+            val stream = Regex(""""stream"\s*:\s*true""").containsMatchIn(body)
+            val hasTools = body.contains("\"tools\"")
+            val jsonMode = body.contains("json_object")
+            val earlyClose = call.request.queryParameters["earlyClose"] == "true"
+            val demo = call.request.queryParameters["demo"] == "true"
+            val reply = if (demo) LLM_DEMO_REPLY else LLM_SHORT_REPLY
+            val defaultChunkMs = if (demo) 200L else 20L
+            val chunkDelayMs = call.request.queryParameters["chunkMs"]?.toLongOrNull() ?: defaultChunkMs
+
+            if (hasTools && !stream) {
+                call.respond(openAiToolCallCompletionJson())
+                return@post
+            }
+
+            if (jsonMode && !stream) {
+                call.respond(openAiChatCompletionJson(content = """{"ok":true,"source":"reqlab"}""", finishReason = "stop"))
+                return@post
+            }
+
+            if (stream) {
+                call.response.header("Cache-Control", "no-cache")
+                call.respondTextWriter(contentType = ContentType.parse("text/event-stream")) {
+                    write("data: ${openAiChunkJson("", finishReason = null, role = "assistant")}\n\n")
+                    flush()
+                    llmWordTokens(reply).forEach { token ->
+                        write("data: ${openAiChunkJson(token, finishReason = null)}\n\n")
+                        flush()
+                        delay(chunkDelayMs)
+                    }
+                    if (earlyClose) return@respondTextWriter
+                    write("data: ${openAiChunkJson("", finishReason = "stop", usage = true)}\n\n")
+                    write("data: [DONE]\n\n")
+                    flush()
+                }
+                return@post
+            }
+
+            call.respond(openAiChatCompletionJson(content = reply, finishReason = "stop"))
+        }
+
         // ── WebSocket – echo ───────────────────────────────────────────────
         webSocket("/ws") {
             send(Frame.Text("Connected to ReqLab WebSocket echo server. Send any message and it will be echoed."))
@@ -1063,6 +1189,113 @@ module.exports = api;""",
             }
         }
     }
+}
+
+private suspend fun ApplicationCall.requireLlmBearer(): Boolean {
+    val header = request.header("Authorization").orEmpty()
+    val token = if (header.startsWith("Bearer ")) header.removePrefix("Bearer ").trim() else ""
+    if (token == "test-token" || token == "llm-test-key") return true
+    respond(HttpStatusCode.Unauthorized, openAiError("invalid_api_key", "Invalid or missing API key"))
+    return false
+}
+
+private fun openAiError(type: String, message: String) = buildJsonObject {
+    put("error", buildJsonObject {
+        put("message", message)
+        put("type", type)
+        put("code", type)
+    })
+}
+
+const val LLM_SHORT_REPLY = "Hello from ReqLab"
+
+const val LLM_DEMO_REPLY =
+    "Hello. ReqLab can test OpenAI-style chat APIs with one POST. " +
+        "When stream is true, this connection stays open and each token arrives as an SSE event. " +
+        "Watch the Body pane fill in, then open RAW to inspect every chunk."
+
+internal fun llmWordTokens(text: String): List<String> {
+    val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return emptyList()
+    return buildList {
+        add(words.first())
+        words.drop(1).forEach { add(" $it") }
+    }
+}
+
+private fun jsonQuote(value: String): String = JsonPrimitive(value).toString()
+
+private fun openAiChatCompletionJson(content: String, finishReason: String) = buildJsonObject {
+    put("id", "chatcmpl-reqlab-mock")
+    put("object", "chat.completion")
+    put("created", Instant.now().epochSecond)
+    put("model", "mock-gpt")
+    put("system_fingerprint", "fp_reqlab_mock")
+    put("choices", buildJsonArray {
+        add(buildJsonObject {
+            put("index", 0)
+            put("message", buildJsonObject {
+                put("role", "assistant")
+                put("content", content)
+            })
+            put("finish_reason", finishReason)
+        })
+    })
+    put("usage", buildJsonObject {
+        put("prompt_tokens", 24)
+        put("completion_tokens", 48)
+        put("total_tokens", 72)
+    })
+}
+
+private fun openAiToolCallCompletionJson() = buildJsonObject {
+    put("id", "chatcmpl-reqlab-tools")
+    put("object", "chat.completion")
+    put("model", "mock-gpt")
+    put("choices", buildJsonArray {
+        add(buildJsonObject {
+            put("index", 0)
+            put("message", buildJsonObject {
+                put("role", "assistant")
+                put("content", JsonNull)
+                put("tool_calls", buildJsonArray {
+                    add(buildJsonObject {
+                        put("id", "call_1")
+                        put("type", "function")
+                        put("function", buildJsonObject {
+                            put("name", "lookup_user")
+                            put("arguments", """{"id":1}""")
+                        })
+                    })
+                })
+            })
+            put("finish_reason", "tool_calls")
+        })
+    })
+    put("usage", buildJsonObject {
+        put("prompt_tokens", 18)
+        put("completion_tokens", 10)
+        put("total_tokens", 28)
+    })
+}
+
+private fun openAiChunkJson(
+    content: String,
+    finishReason: String?,
+    usage: Boolean = false,
+    role: String? = null,
+): String {
+    val reason = if (finishReason == null) "null" else jsonQuote(finishReason)
+    val delta = buildList {
+        if (role != null) add("\"role\":${jsonQuote(role)}")
+        add("\"content\":${jsonQuote(content)}")
+    }.joinToString(",")
+    val usageJson = if (usage) {
+        ""","usage":{"prompt_tokens":24,"completion_tokens":48,"total_tokens":72}"""
+    } else {
+        ""
+    }
+    return """{"id":"chatcmpl-reqlab-mock","object":"chat.completion.chunk","model":"mock-gpt","choices":[{"index":0,"delta":{$delta},"finish_reason":$reason}]$usageJson}"""
 }
 
 private fun looksLikeTextContent(bytes: ByteArray, contentType: String?): Boolean {

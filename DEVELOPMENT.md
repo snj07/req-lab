@@ -51,13 +51,20 @@ Full version catalog: [`gradle/libs.versions.toml`](gradle/libs.versions.toml).
 
 ## Building
 
-Build all modules:
+Prefer a targeted compile or run while developing. `./gradlew build` compiles every Kotlin Multiplatform target, including unused Android variants, and can fail on this Gradle/Kotlin combo.
+
+```bash
+./gradlew :ui-desktop:compileKotlinDesktop
+./gradlew :ui-desktop:run
+```
+
+If you still want a full `build`:
 
 ```bash
 ./gradlew build
 ```
 
-If build fails with `:kotlinStoreYarnLock` and a message that the lock file changed, refresh and store the lock, then rerun:
+If Android Kotlin compile fails (`compileDebugKotlinAndroid` / `CompilationService`), skip those tasks or use the desktop/wasm commands above. If build fails with `:kotlinStoreYarnLock` and a message that the lock file changed, refresh and store the lock, then rerun:
 
 ```bash
 ./gradlew kotlinUpgradeYarnLock
@@ -127,6 +134,8 @@ The `sample-server` module runs a local Ktor server that mirrors the endpoints u
 
 Default address: `http://localhost:8080`
 
+Import `qa-tests/fixtures/reqlab-test-collection.json` and `reqlab-test-environment.json`. The **LLM (OpenAI-compatible)** folder uses `llmBaseUrl` / `llmApiKey` / `llmModel`. **LLM Chat Completions Stream (visible)** (`?demo=true`) is the request to use when you want to watch tokens arrive.
+
 Available endpoints (selected):
 
 | Method | Path | Notes |
@@ -154,7 +163,20 @@ Available endpoints (selected):
 | GET | `/json/user`, `/json/array`, `/json/object` | Script/runtime payload checks |
 | GET | `/headers`, `/cookies`, `/response-time`, `/string-body` | Script-runtime support endpoints |
 | POST | `/echo-body`, `/api/validate`, `/api/token`, `/api/echo-full` | Script and validation helpers |
+| GET | `/v1/models` | OpenAI-compatible model list (Bearer `llm-test-key` or `test-token`) |
+| POST | `/v1/chat/completions` | OpenAI-compatible chat (JSON or SSE when `"stream": true`) |
+| POST | `/v1/chat/ndjson` | Ollama-style NDJSON chat stream |
+| POST | `/v1/embeddings` | Fixed-length embedding vector |
+| GET | `/v1/chat/slow` | Delayed non-stream chat completion |
 | WS | `/ws` | WebSocket echo |
+
+LLM mock query parameters:
+
+- `?demo=true` — longer assistant reply; streaming uses ~200ms per token (visible typewriter)
+- `?chunkMs=<n>` — override SSE/NDJSON chunk delay
+- `?fail=429` / `?fail=500` — simulated error statuses
+- `?earlyClose=true` — close the stream before `[DONE]`
+- `?ms=<n>` — extra delay before the response
 
 Query string simulation modes:
 
