@@ -34,11 +34,13 @@ import io.ktor.http.formUrlEncode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.readUTF8Line
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.serialization.builtins.serializer
@@ -186,6 +188,7 @@ class KtorApiClient(
             runCatching {
                 builder.timeout {
                     requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+                    socketTimeoutMillis = if (idleTimeoutMs > 0L) idleTimeoutMs else HttpTimeoutConfig.INFINITE_TIMEOUT_MS
                 }
             }
         }
@@ -460,7 +463,11 @@ class KtorApiClient(
     private suspend fun readLineWithIdleTimeout(channel: io.ktor.utils.io.ByteReadChannel): String? {
         if (idleTimeoutMs <= 0L) return channel.readUTF8Line()
         return try {
-            withTimeout(idleTimeoutMs) { channel.readUTF8Line() }
+            // Wall-clock idle timeout: withTimeout on the caller's dispatcher is virtual
+            // under kotlinx-coroutines-test and can abort a live stream on CI.
+            withContext(Dispatchers.Default) {
+                withTimeout(idleTimeoutMs) { channel.readUTF8Line() }
+            }
         } catch (_: TimeoutCancellationException) {
             null
         }

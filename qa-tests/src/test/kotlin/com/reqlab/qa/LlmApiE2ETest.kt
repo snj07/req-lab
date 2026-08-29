@@ -21,7 +21,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import org.junit.Test
@@ -57,7 +57,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun lists_models() = runTest {
+    fun lists_models() = runBlocking {
         val events = client().execute(request(HttpMethodType.GET, "/v1/models")).toList()
         val success = events.last() as NetworkEvent.Success
         assertEquals(200, success.response.statusCode)
@@ -65,7 +65,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun chat_completions_non_stream() = runTest {
+    fun chat_completions_non_stream() = runBlocking {
         val body = """{"model":"mock-gpt","messages":[{"role":"user","content":"hi"}],"stream":false}"""
         val events = client().execute(request(HttpMethodType.POST, "/v1/chat/completions", body)).toList()
         val success = events.last() as NetworkEvent.Success
@@ -75,7 +75,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun chat_completions_stream_emits_chunks() = runTest {
+    fun chat_completions_stream_emits_chunks() = runBlocking {
         val body = """{"model":"mock-gpt","messages":[{"role":"user","content":"hi"}],"stream":true}"""
         val events = client().execute(request(HttpMethodType.POST, "/v1/chat/completions", body, stream = true)).toList()
         assertTrue(events.filterIsInstance<NetworkEvent.Chunk>().size >= 3)
@@ -86,7 +86,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun chat_completions_demo_non_stream_is_a_full_reply() = runTest {
+    fun chat_completions_demo_non_stream_is_a_full_reply() = runBlocking {
         val body = """{"model":"mock-gpt","messages":[{"role":"user","content":"Explain streaming"}],"stream":false}"""
         val events = client().execute(
             request(HttpMethodType.POST, "/v1/chat/completions?demo=true", body)
@@ -99,7 +99,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun chat_completions_demo_stream_emits_many_tokens() = runTest {
+    fun chat_completions_demo_stream_emits_many_tokens() = runBlocking {
         val body = """{"model":"mock-gpt","messages":[{"role":"user","content":"Explain streaming"}],"stream":true}"""
         val events = client().execute(
             request(HttpMethodType.POST, "/v1/chat/completions?demo=true&chunkMs=1", body, stream = true)
@@ -111,14 +111,14 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun ndjson_stream_assembles_text() = runTest {
+    fun ndjson_stream_assembles_text() = runBlocking {
         val events = client().execute(request(HttpMethodType.POST, "/v1/chat/ndjson")).toList()
         val success = events.last() as NetworkEvent.Success
         assertEquals("Hello from ReqLab", success.response.assembledText)
     }
 
     @Test
-    fun embeddings_have_fixed_length() = runTest {
+    fun embeddings_have_fixed_length() = runBlocking {
         val body = """{"model":"mock-gpt","input":"hello"}"""
         val events = client().execute(request(HttpMethodType.POST, "/v1/embeddings", body)).toList()
         val success = events.last() as NetworkEvent.Success
@@ -127,7 +127,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun tool_calls_and_json_mode() = runTest {
+    fun tool_calls_and_json_mode() = runBlocking {
         val tools = """{"model":"mock-gpt","messages":[{"role":"user","content":"x"}],"tools":[{"type":"function"}]}"""
         val toolSuccess = client().execute(request(HttpMethodType.POST, "/v1/chat/completions", tools)).toList()
             .last() as NetworkEvent.Success
@@ -140,7 +140,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun unauthorized_and_error_statuses() = runTest {
+    fun unauthorized_and_error_statuses() = runBlocking {
         val missing = client().execute(
             request(HttpMethodType.POST, "/v1/chat/completions", """{"model":"mock-gpt"}""", auth = false)
         ).toList().last() as NetworkEvent.Success
@@ -158,7 +158,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun early_close_stream_returns_partial_text() = runTest {
+    fun early_close_stream_returns_partial_text() = runBlocking {
         val body = """{"model":"mock-gpt","messages":[{"role":"user","content":"hi"}],"stream":true}"""
         val events = client().execute(
             request(HttpMethodType.POST, "/v1/chat/completions?earlyClose=true", body, stream = true)
@@ -169,7 +169,7 @@ class LlmApiE2ETest {
     }
 
     @Test
-    fun stream_outlives_short_request_timeout() = runTest {
+    fun stream_outlives_short_request_timeout() = runBlocking {
         val http = HttpClient(CIO) {
             install(HttpTimeout) { requestTimeoutMillis = 200 }
             expectSuccess = false
@@ -179,13 +179,14 @@ class LlmApiE2ETest {
         val events = api.execute(
             request(HttpMethodType.POST, "/v1/chat/completions?chunkMs=120", body, stream = true)
         ).toList()
-        val success = events.last() as NetworkEvent.Success
-        assertEquals("Hello from ReqLab", success.response.assembledText)
+        val success = events.lastOrNull() as? NetworkEvent.Success
+        assertTrue(success != null, "expected Success after a stream longer than 200ms, got ${events.lastOrNull()}")
+        assertEquals("Hello from ReqLab", success!!.response.assembledText)
         http.close()
     }
 
     @Test
-    fun post_request_script_sees_llm_helpers() = runTest {
+    fun post_request_script_sees_llm_helpers() = runBlocking {
         val body = """{"model":"mock-gpt","messages":[{"role":"user","content":"hi"}],"stream":true}"""
         val success = client().execute(
             request(HttpMethodType.POST, "/v1/chat/completions", body, stream = true)
