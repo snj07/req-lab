@@ -42,6 +42,19 @@ class SseParserTest {
         assertEquals(1, events.size)
         assertEquals("hello", events[0].data)
         assertFalse(events[0].isDone)
+        assertNull(events[0].id)
+    }
+
+    @Test
+    fun parses_event_id_for_resumability() {
+        val parser = SseParser()
+        var event: SseEvent? = null
+        listOf("id: 42", "event: message", "data: {\"ok\":true}", "").forEach { line ->
+            parser.feedLine(line)?.let { event = it }
+        }
+        assertEquals("42", event?.id)
+        assertEquals("message", event?.eventType)
+        assertEquals("""{"ok":true}""", event?.data)
     }
 
     @Test

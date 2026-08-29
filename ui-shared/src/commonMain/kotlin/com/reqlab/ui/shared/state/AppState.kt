@@ -10,11 +10,18 @@ import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.McpConnectionConfig
+import com.reqlab.core.model.RequestKind
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.ui.EditorViewModel
 import com.reqlab.editor.ui.SyntaxHighlighterRegistry
 import com.reqlab.core.model.ResponseDefinition
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import com.reqlab.ui.shared.mcp.McpSessionState
 import com.reqlab.ui.shared.platform.generateUuid
 import com.reqlab.ui.shared.platform.currentTimeMillis
 import com.reqlab.ui.shared.components.syncParamsFromUrl
@@ -96,6 +103,8 @@ data class CollectionNode(
     val authApiKey: String? = null,
     val authApiValue: String? = null,
     val requestRef: String? = null,
+    val kind: RequestKind = RequestKind.HTTP,
+    val mcpConfig: McpConnectionConfig? = null,
 )
 
 /**
@@ -290,6 +299,8 @@ class RequestTabState(
 
     var preRequestScript by mutableStateOf("")
     var testScript       by mutableStateOf("")
+    var kind by mutableStateOf(RequestKind.HTTP)
+    var mcpConfig by mutableStateOf(McpConnectionConfig())
 
     var retryEnabled by mutableStateOf(false)
     var retryCount by mutableStateOf(1)
@@ -379,6 +390,10 @@ class RequestTabState(
             headersSnapshot,
             formRowsSnapshot,
             urlencodedRowsSnapshot,
+            kind.name,
+            mcpConfig.url,
+            mcpConfig.transport.name,
+            mcpConfig.httpMode.name,
         ).joinToString("#")
     }
 
@@ -549,6 +564,24 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     }
     var activeTabIndex by mutableStateOf(if (openDefaultTab) 0 else -1)
     val activeTab: RequestTabState? get() = openTabs.getOrNull(activeTabIndex)
+
+    // ── MCP sessions ──
+    // Long-lived, keyed by tab id so an MCP connection (and its loaded tools/
+    // resources) survives tab switches. Disposed only when the tab is closed.
+    /** Application-lifetime scope for background work that must outlive individual composables. */
+    val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val mcpSessions = mutableMapOf<String, McpSessionState>()
+
+    /** Returns the persistent MCP session for [tabId], creating it on first use. */
+    fun getOrCreateMcpSession(tabId: String): McpSessionState =
+        mcpSessions.getOrPut(tabId) {
+            McpSessionState(appScope, onConsole = { message, level -> logNetworkEvent(message, level) })
+        }
+
+    /** Disconnects and forgets the MCP session for [tabId] (called on tab close). */
+    fun disposeMcpSession(tabId: String) {
+        mcpSessions.remove(tabId)?.let { session -> appScope.launch { session.disconnect() } }
+    }
 
     // ── bottom panel ──
     var selectedBottomTab    by mutableStateOf(BottomTab.CONSOLE)
@@ -792,6 +825,11 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             if (existing != null) existing.value = v
             else tab.headers.add(MutableKeyValue(k, v, kind = HeaderKind.USER))
         }
+        tab.kind = node?.kind ?: RequestKind.HTTP
+        node?.mcpConfig?.let { tab.mcpConfig = it }
+        if (tab.kind == RequestKind.MCP && tab.url.isBlank()) {
+            tab.url = tab.mcpConfig.url
+        }
         // Re-anchor the saved snapshot after all fields (including system headers
         // injected by syncSystemHeaders above) have been populated. Without this,
         // the snapshot captured in RequestTabState.init{} pre-dates the system
@@ -978,6 +1016,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     fun closeTab(index: Int) {
         if (index !in openTabs.indices) return
         openTabs[index].disposeBodyViewModels()
+        disposeMcpSession(openTabs[index].id)
         openTabs.removeAt(index)
         if (openTabs.isEmpty()) {
             activeTabIndex = -1
@@ -1000,6 +1039,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             .filter { openTabs[it].id in idSet }
             .forEach { idx ->
                 openTabs[idx].disposeBodyViewModels()
+                disposeMcpSession(openTabs[idx].id)
                 openTabs.removeAt(idx)
             }
         if (openTabs.isEmpty()) {
@@ -1086,6 +1126,29 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         selectedRequestId = requestId
         // Also open a tab for the new request
         addTab(requestId = requestId, name = name, method = HttpMethodType.GET, url = "")
+    }
+
+    fun addMcpConnectionToCollection(collectionId: String) {
+        val folder = collections.firstOrNull { it.id == collectionId && it.isFolder } ?: return
+        val siblingNames = folder.children.map { it.name }.toSet()
+        val name = generateUniqueName("New MCP Connection", siblingNames)
+        val requestId = generateUuid()
+        val mcp = McpConnectionConfig(url = "{{mcpBaseUrl}}")
+        val node = CollectionNode(
+            id = requestId,
+            requestRef = generateUuid(),
+            name = name,
+            isFolder = false,
+            method = HttpMethodType.POST,
+            url = mcp.url,
+            kind = RequestKind.MCP,
+            mcpConfig = mcp,
+        )
+        folder.children.add(node)
+        notifyCollectionsChanged()
+        selectedCollectionId = collectionId
+        selectedRequestId = requestId
+        addTab(requestId = requestId, name = name, method = HttpMethodType.POST, url = mcp.url)
     }
 
     /** Create a request in the selected collection, ensuring a default collection exists when needed. */

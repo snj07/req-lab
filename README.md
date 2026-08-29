@@ -69,6 +69,7 @@ The collection includes an **LLM (OpenAI-compatible)** folder. Start the sample 
 - Auth: None, Basic, Bearer Token, API Key, JWT
 - Retry controls and per-request timeout
 - HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`)
+- MCP client: Streamable HTTP, legacy HTTP+SSE, and desktop stdio; tools/resources/prompts; OAuth 2.1
 - Copy request as `curl`
 
 ### 📬 Response Inspection

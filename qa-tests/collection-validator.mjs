@@ -298,7 +298,7 @@ async function main() {
       const user = resolveTemplate(req.auth.username ?? '', runtimeVars);
       const pass = resolveTemplate(req.auth.password ?? '', runtimeVars);
       requestHeaders.set('Authorization', `Basic ${toBase64(`${user}:${pass}`)}`);
-    } else if (req.auth?.type === 'BEARER') {
+    } else if (req.auth?.type === 'BEARER' || req.auth?.type === 'JWT') {
       const token = resolveTemplate(req.auth.token ?? '', runtimeVars);
       requestHeaders.set('Authorization', `Bearer ${token}`);
     } else if (req.auth?.type === 'API_KEY') {
@@ -334,6 +334,61 @@ async function main() {
       let size;
       let headers;
       let bodyText;
+
+      if ((req.kind || '').toUpperCase() === 'MCP') {
+        const started = performance.now();
+        const mcpHeaders = {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        };
+        for (const [k, v] of requestHeaders.entries()) {
+          mcpHeaders[k] = v;
+        }
+        const initBody = JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'reqlab-validator', version: '1.18.0' },
+          },
+        });
+        const initRes = await fetch(resolvedUrl, {
+          method: 'POST',
+          headers: mcpHeaders,
+          body: initBody,
+        });
+        const initText = await initRes.text();
+        const listHeaders = { ...mcpHeaders };
+        const sessionId = initRes.headers.get('mcp-session-id');
+        if (sessionId) listHeaders['Mcp-Session-Id'] = sessionId;
+        const listRes = await fetch(resolvedUrl, {
+          method: 'POST',
+          headers: listHeaders,
+          body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
+        });
+        const listText = await listRes.text();
+        elapsed = performance.now() - started;
+        status = listRes.status;
+        headers = listRes.headers;
+        bodyText = `${initText}\n${listText}`;
+        size = Buffer.byteLength(bodyText, 'utf8');
+        const toolsOk = listText.includes('"echo"') && initText.includes('ReqLab MCP Mock');
+        const passed = initRes.ok && listRes.ok && toolsOk;
+        results.push({
+          name: req.name,
+          path: req.__path,
+          method: 'MCP',
+          url: resolvedUrl,
+          status,
+          responseTimeMs: Number(elapsed.toFixed(2)),
+          responseSizeBytes: size,
+          passed,
+          errors: passed ? [] : [`MCP handshake failed init=${initRes.status} list=${status}`],
+        });
+        continue;
+      }
 
       if (resolvedUrl.startsWith('ws://') || resolvedUrl.startsWith('wss://')) {
         const wsResult = await runWebSocket(resolvedUrl);

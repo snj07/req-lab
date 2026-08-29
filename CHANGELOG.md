@@ -4,6 +4,21 @@ All notable changes to ReqLab are documented here.
 
 ---
 
+## [1.18.0] — 2026-08-29
+
+### Added
+
+- **MCP client**: saved MCP connections as first-class collection/tab items. Connect over Streamable HTTP (2025-06-18, stateful or stateless), legacy HTTP+SSE (2024-11-05, auto-detected), or stdio (desktop only). Browse and call tools, resources, and prompts; subscribe to resource updates; inspect notifications, progress, and a JSON-RPC timeline. Auth, headers, and params reuse the REST editors; tool/prompt arguments and results use the shared code editor and response viewer (body, headers, timing). Activity is mirrored to the Console.
+- **Bidirectional MCP**: the client answers `sampling/createMessage`, `roots/list`, and `elicitation/create` so you can test servers that call back.
+- **OAuth 2.1 for MCP**: metadata discovery, Dynamic Client Registration, PKCE S256, client-credentials, refresh, and an OAuth debugger log. Interactive authorization-code is desktop-first (loopback); the browser uses paste/non-interactive grants.
+- **Sample-server MCP mock**: `POST /mcp`, `POST /mcp/authed` (Bearer + API key), legacy `GET /mcp/sse`, OAuth-protected `POST /mcp/secure`, and `sample-server --stdio` with deterministic tools (`echo`, `add`, `fail`, `slow`, triggers).
+
+### Changed
+
+- MCP workspace uses the same request/response split as HTTP. Connections survive tab switches and disconnect only when the tab is closed.
+
+---
+
 ## [1.17.0] — 2026-08-29
 
 ### Added

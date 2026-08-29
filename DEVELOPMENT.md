@@ -168,7 +168,23 @@ Available endpoints (selected):
 | POST | `/v1/chat/ndjson` | Ollama-style NDJSON chat stream |
 | POST | `/v1/embeddings` | Fixed-length embedding vector |
 | GET | `/v1/chat/slow` | Delayed non-stream chat completion |
+| POST | `/mcp` | MCP Streamable HTTP (JSON-RPC) |
+| POST | `/mcp/authed` | MCP requiring Bearer `reqlab-mcp-token` and `X-Api-Key: reqlab-key` |
+| GET | `/mcp` | MCP GET SSE (server-initiated) |
+| DELETE | `/mcp` | MCP session terminate |
+| GET | `/mcp/sse` | Legacy MCP HTTP+SSE |
+| POST | `/mcp/messages` | Legacy MCP POST |
+| POST | `/mcp/secure` | MCP with Bearer `mcp-oauth-token` |
+| GET | `/.well-known/oauth-*` | MCP OAuth 2.1 metadata |
+| POST | `/oauth/register` `/oauth/token` | Dynamic registration + token |
+| GET | `/oauth/authorize` | Authorization (auto-approve for tests) |
 | WS | `/ws` | WebSocket echo |
+
+MCP stdio mock:
+
+```bash
+./gradlew :sample-server:run --args='--stdio'
+```
 
 LLM mock query parameters:
 
@@ -244,7 +260,10 @@ GitHub Actions release packaging is defined in [`.github/workflows/release.yml`]
 - **Push to `main`** — runs a quality gate first, then builds desktop artifacts for macOS/Linux/Windows.
 - **Push tag `v*`** — runs the same quality gate, then builds artifacts and publishes a GitHub release.
 - **Manual dispatch** — allows on-demand artifact builds.
-
+```
+git tag -a v1.18.0 -m "<MSG>"
+git push origin v1.18.0
+```
 ---
 
 ## Project Architecture

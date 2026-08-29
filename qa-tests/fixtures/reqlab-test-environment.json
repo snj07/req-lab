@@ -14,6 +14,16 @@
         "lastRunId": "run-env-default",
         "llmBaseUrl": "http://localhost:8080",
         "llmApiKey": "llm-test-key",
-        "llmModel": "mock-gpt"
+        "llmModel": "mock-gpt",
+        "mcpBaseUrl": "http://localhost:8080/mcp",
+        "mcpAuthedUrl": "http://localhost:8080/mcp/authed",
+        "mcpBearerUrl": "http://localhost:8080/mcp/auth/bearer",
+        "mcpBasicUrl": "http://localhost:8080/mcp/auth/basic",
+        "mcpApiKeyUrl": "http://localhost:8080/mcp/auth/apikey",
+        "mcpJwtUrl": "http://localhost:8080/mcp/auth/jwt",
+        "mcpTenantUrl": "http://localhost:8080/mcp?requireTenant=true&tenant=acme",
+        "mcpBearerToken": "reqlab-mcp-token",
+        "mcpApiKey": "reqlab-key",
+        "mcpJwtToken": "reqlab-mcp-jwt"
     }
 }

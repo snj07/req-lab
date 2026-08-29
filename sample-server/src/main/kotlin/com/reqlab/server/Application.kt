@@ -53,12 +53,19 @@ import java.io.File
 import java.time.Instant
 import java.util.Base64
 
-fun main() {
+fun main(args: Array<String> = emptyArray()) {
+    if (args.contains("--stdio")) {
+        System.err.println("ReqLab MCP stdio mock ready")
+        runMcpStdio()
+        return
+    }
     println("==========================================================")
     println("  ReqLab Sample API Server")
     println("  Listening on  http://localhost:8080")
     println("  WebSocket     ws://localhost:8080/ws")
     println("  LLM mock      POST /v1/chat/completions  (?demo=true for a visible token stream)")
+    println("  MCP           POST /mcp  (OAuth-protected: POST /mcp/secure)")
+    println("  MCP legacy    GET  /mcp/sse")
     println("  Press Ctrl+C to stop")
     println("==========================================================")
     embeddedServer(Netty, port = 8080, module = Application::module).start(wait = true)
@@ -1188,6 +1195,8 @@ module.exports = api;""",
                 }
             }
         }
+
+        mcpAndOAuthRoutes()
     }
 }
 

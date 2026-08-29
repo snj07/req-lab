@@ -109,7 +109,7 @@ fun HelpAboutDialog(state: AppState) {
                     }
 
                     HelpSection("Shortcuts") {
-                        ShortcutRow("⌘ + Enter / Ctrl + Enter", "Send request (or cancel if in progress)")
+                        ShortcutRow("⌘ + Enter / Ctrl + Enter", "Send request or run MCP tool (or cancel if in progress)")
                         ShortcutRow("⌘ + Shift + [ / Ctrl + Shift + [", "Move active tab left")
                         ShortcutRow("⌘ + Shift + ] / Ctrl + Shift + ]", "Move active tab right")
                         ShortcutRow("⌘ + S / Ctrl + S", "Save active request")

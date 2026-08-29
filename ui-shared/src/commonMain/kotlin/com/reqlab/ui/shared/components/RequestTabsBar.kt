@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -210,7 +211,16 @@ private fun RequestTabChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            MethodBadge(tab.method, compact = true)
+            if (tab.kind == com.reqlab.core.model.RequestKind.MCP) {
+                Icon(
+                    Icons.Default.Hub,
+                    contentDescription = "MCP",
+                    tint = ReqLabColors.Primary,
+                    modifier = Modifier.size(12.dp).testTag("tab-mcp-badge-${tab.id}"),
+                )
+            } else {
+                MethodBadge(tab.method, compact = true)
+            }
             if (renameMode) {
                 BasicTextField(
                     value = renameText,

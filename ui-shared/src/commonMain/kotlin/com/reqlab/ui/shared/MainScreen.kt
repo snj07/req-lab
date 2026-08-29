@@ -53,6 +53,7 @@ import com.reqlab.ui.shared.components.HorizontalSplitPane
 import com.reqlab.ui.shared.components.OperationProgressDialog
 import com.reqlab.ui.shared.components.RealtimePanel
 import com.reqlab.ui.shared.components.RequestEditor
+import com.reqlab.ui.shared.components.McpPanel
 import com.reqlab.ui.shared.components.RequestTabsBar
 import com.reqlab.ui.shared.components.ResponseViewer
 import com.reqlab.ui.shared.components.SettingsDialog
@@ -201,7 +202,10 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                     isMeta && event.key == Key.Enter -> {
                         val activeTab = state.activeTab
                         if (activeTab != null) {
-                            if (activeTab.isLoading) {
+                            if (activeTab.kind == com.reqlab.core.model.RequestKind.MCP) {
+                                val session = state.getOrCreateMcpSession(activeTab.id)
+                                if (activeTab.isLoading) session.cancelCall() else session.pendingShortcut?.invoke()
+                            } else if (activeTab.isLoading) {
                                 activeTab.currentJob?.cancel()
                                 activeTab.isLoading = false
                             } else {
@@ -372,7 +376,25 @@ private fun ColumnScope.HttpWorkspaceContent(
 
                 val tab = state.activeTab
                 if (tab != null) {
-                    if (state.settings.responseLayout == ResponseLayout.RIGHT) {
+                    if (tab.kind == com.reqlab.core.model.RequestKind.MCP) {
+                        if (state.settings.responseLayout == ResponseLayout.RIGHT) {
+                            HorizontalSplitPane(
+                                modifier = Modifier.weight(1f).testTag("mcp-workspace"),
+                                splitFraction = state.requestResponseSplit,
+                                onSplitChanged = { state.requestResponseSplit = it },
+                                first = { McpPanel(state, tab) },
+                                second = { ResponseViewer(tab) },
+                            )
+                        } else {
+                            VerticalSplitPane(
+                                modifier = Modifier.weight(1f).testTag("mcp-workspace"),
+                                splitFraction = state.mainVerticalSplit,
+                                onSplitChanged = { state.mainVerticalSplit = it },
+                                first = { McpPanel(state, tab) },
+                                second = { ResponseViewer(tab) },
+                            )
+                        }
+                    } else if (state.settings.responseLayout == ResponseLayout.RIGHT) {
                         HorizontalSplitPane(
                             modifier = Modifier.weight(1f).testTag("response-layout-right"),
                             splitFraction = state.requestResponseSplit,

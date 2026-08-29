@@ -13,7 +13,7 @@
 
 ```
 core-model/          Shared domain models — no runtime deps
-core-network/        Ktor HTTP engine, auth, retry, WebSocket, interceptors
+core-network/        Ktor HTTP engine, auth, retry, WebSocket, interceptors, MCP client
 core-storage/        Persistence contracts + JSON file adapter
 core-scripting/      Script runtime contracts (pre-request / post-request JS)
 editor-core/         Pure-Kotlin editor engine: document model, lexer tokens,
@@ -122,7 +122,7 @@ NONE, BASIC, BEARER, API_KEY, OAUTH2, JWT
 
 | Module | Responsibility |
 |---|---|
-| `core-network` | `KtorApiClient` executing HTTP requests; SSE/NDJSON streaming via `NetworkEvent.Chunk` (`SseParser`, `LlmTextAssembler`); auth schemes (Basic, Bearer, API Key, OAuth2, JWT); retry; `{{variable}}` interpolation in URL/headers/body; WebSocket; `NetworkInterceptor` interface |
+| `core-network` | `KtorApiClient` executing HTTP requests; SSE/NDJSON streaming via `NetworkEvent.Chunk` (`SseParser`, `LlmTextAssembler`); MCP client (`McpClient`, Streamable HTTP, legacy HTTP+SSE, stdio); OAuth 2.1 for MCP; auth schemes (Basic, Bearer, API Key, OAuth2, JWT); retry; `{{variable}}` interpolation in URL/headers/body; WebSocket; `NetworkInterceptor` interface |
 | `core-storage` | `PlatformStorage` abstraction; workspace, tab, settings, and environment JSON persistence |
 | `core-scripting` | JavaScript runtime contracts; pre-request / post-request execution; variable scope injection (`environment`, `globals`, `collectionVariables`); `pm.*` → `reqlab.*` API rewriter |
 | `feature-requests` | `RequestExecutionService` — orchestrates an HTTP round-trip: resolves variables → runs pre-request script → dispatches via `KtorApiClient` → feeds response into post-request scripts |

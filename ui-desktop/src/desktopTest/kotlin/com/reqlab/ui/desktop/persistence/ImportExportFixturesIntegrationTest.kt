@@ -46,12 +46,17 @@ class ImportExportFixturesIntegrationTest {
         assertTrue(root != null)
         assertTrue(root.children.any { it.isFolder && it.name == "HTTP Methods" })
         assertTrue(root.children.any { it.isFolder && it.name == "LLM (OpenAI-compatible)" })
+        assertTrue(root.children.any { it.isFolder && it.name == "MCP (Model Context Protocol)" })
 
         val env = restored.environments.firstOrNull { it.name == "Local Dev – Sample Server" }
         assertTrue(env != null)
         assertTrue(env.variables.any { it.key == "graphqlUserId" && it.value == "1" })
         assertTrue(env.variables.any { it.key == "llmBaseUrl" && it.value == "http://localhost:8080" })
         assertTrue(env.variables.any { it.key == "llmApiKey" && it.value == "llm-test-key" })
+        assertTrue(env.variables.any { it.key == "mcpBaseUrl" && it.value == "http://localhost:8080/mcp" })
+        assertTrue(env.variables.any { it.key == "mcpAuthedUrl" && it.value == "http://localhost:8080/mcp/authed" })
+        assertTrue(env.variables.any { it.key == "mcpBearerUrl" && it.value == "http://localhost:8080/mcp/auth/bearer" })
+        assertTrue(env.variables.any { it.key == "mcpTenantUrl" && it.value.contains("requireTenant=true") })
     }
 
     private fun resolveFixture(name: String): File {

@@ -14,8 +14,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
@@ -77,6 +77,10 @@ object TabsRepository {
                         put("headers", kvListJson(tab.headers))
                         put("formRows", formRowListJson(tab.formRows))
                         put("urlencodedRows", formRowListJson(tab.urlencodedRows))
+                        put("kind", tab.kind.name)
+                        put("mcp", json.parseToJsonElement(
+                            json.encodeToString(com.reqlab.core.model.McpConnectionConfig.serializer(), tab.mcpConfig),
+                        ))
                     })
                 }
             }
@@ -212,6 +216,15 @@ object TabsRepository {
                 tab.retryCount = obj["retryCount"]?.jsonPrimitive?.intOrNull ?: 1
                 tab.retryDelayMs = obj["retryDelayMs"]?.jsonPrimitive?.content?.toLongOrNull() ?: 250L
                 tab.lastSavedTimestamp = obj["lastSavedTimestamp"]?.jsonPrimitive?.content?.toLongOrNull()
+                tab.kind = runCatching {
+                    com.reqlab.core.model.RequestKind.valueOf(obj["kind"]?.jsonPrimitive?.content ?: "HTTP")
+                }.getOrDefault(com.reqlab.core.model.RequestKind.HTTP)
+                obj["mcp"]?.jsonObject?.let { mcpObj ->
+                    tab.mcpConfig = json.decodeFromJsonElement(
+                        com.reqlab.core.model.McpConnectionConfig.serializer(),
+                        mcpObj,
+                    )
+                }
 
                 obj["params"]?.jsonArray?.forEach { kv ->
                     tab.params.add(kvFromJson(kv.jsonObject))

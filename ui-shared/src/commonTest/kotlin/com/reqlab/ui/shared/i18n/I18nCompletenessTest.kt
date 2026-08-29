@@ -61,6 +61,16 @@ class I18nCompletenessTest {
         // Import/Export
         "import_collection", "export_collection", "import_success",
         "export_success", "operation_failed",
+        // MCP
+        "mcp_connection", "new_mcp_connection", "mcp_tools", "mcp_resources", "mcp_prompts",
+        "mcp_url", "mcp_command", "mcp_notifications", "mcp_timeline", "mcp_client",
+        "mcp_call_tool", "mcp_stdio_confirm", "mcp_roots", "mcp_sampling_mode", "mcp_auto_elicit",
+        "mcp_run", "mcp_arguments", "mcp_response", "mcp_activity", "mcp_connect_hint",
+        "mcp_tools_hint", "mcp_resources_hint", "mcp_prompts_hint", "mcp_activity_hint",
+        "mcp_client_hint", "mcp_tool_ok", "mcp_tool_error", "mcp_connected", "mcp_disconnected",
+        "mcp_session_id", "mcp_subscribe", "mcp_unsubscribe", "mcp_subscribed",
+        "mcp_subscribe_explain", "mcp_response_in_viewer", "mcp_activity_expand",
+        "mcp_form", "mcp_json", "mcp_search_tools", "mcp_reconnect",
     )
 
     // ── Completeness ──

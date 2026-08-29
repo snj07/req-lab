@@ -1013,6 +1013,96 @@
           "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"partial assembled text\", function() {\n  reqlab.expect(reqlab.response.llm.assembledText).to.include(\"Hello\");\n});"
         }
       ]
+    },
+    {
+      "name": "MCP (Model Context Protocol)",
+      "folders": [],
+      "requests": [
+        {
+          "name": "MCP Initialize + tools/list",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO"
+        },
+        {
+          "name": "MCP Authed Initialize + tools/list",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpAuthedUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{mcpBearerToken}}"
+          },
+          "headers": [
+            {
+              "key": "X-Api-Key",
+              "value": "{{mcpApiKey}}"
+            }
+          ]
+        },
+        {
+          "name": "MCP Bearer",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBearerUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{mcpBearerToken}}"
+          }
+        },
+        {
+          "name": "MCP Basic",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBasicUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "BASIC",
+            "username": "{{basicUser}}",
+            "password": "{{basicPassword}}"
+          }
+        },
+        {
+          "name": "MCP API Key",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpApiKeyUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "API_KEY",
+            "apiKey": "X-Api-Key",
+            "apiValue": "{{mcpApiKey}}"
+          }
+        },
+        {
+          "name": "MCP JWT",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpJwtUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "JWT",
+            "token": "{{mcpJwtToken}}"
+          }
+        },
+        {
+          "name": "MCP URL params",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpTenantUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO"
+        }
+      ]
     }
   ],
   "requests": [

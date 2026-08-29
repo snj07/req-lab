@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
@@ -1409,6 +1410,19 @@ private fun CollectionTreeNode(
                         .size(14.dp)
                         .testTag(if (depth == 0) "collection-root-icon-${node.id}" else "collection-subfolder-icon-${node.id}"),
                 )
+            } else if (node.kind == com.reqlab.core.model.RequestKind.MCP) {
+                Icon(
+                    Icons.Default.DragIndicator,
+                    contentDescription = Strings.t("drag_to_reorder"),
+                    tint = ReqLabColors.OnSurfaceDim.copy(alpha = 0.4f),
+                    modifier = Modifier.size(12.dp),
+                )
+                Icon(
+                    Icons.Default.Hub,
+                    contentDescription = "MCP",
+                    tint = ReqLabColors.Primary,
+                    modifier = Modifier.size(14.dp).testTag("mcp-badge-${node.id}"),
+                )
             } else if (node.method != null) {
                 Icon(
                     Icons.Default.DragIndicator,
@@ -1505,6 +1519,14 @@ private fun CollectionTreeNode(
                             text = { Text(Strings.t("add_request")) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onAddRequest(node) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(Strings.t("new_mcp_connection")) },
+                            leadingIcon = { Icon(Icons.Default.Hub, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = {
+                                showMenu = false
+                                state.addMcpConnectionToCollection(node.id)
+                            },
                         )
                         if (isCollectionRoot) {
                             DropdownMenuItem(

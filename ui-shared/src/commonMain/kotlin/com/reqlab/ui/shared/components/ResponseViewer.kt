@@ -63,11 +63,13 @@ fun ResponseViewer(tab: RequestTabState) {
             ResponseStatusBar(response)
 
             // ── Tabs ────────────────────────────────────────────
-            ResponseTabBar(tab.responseTab, onTabSelected = { tab.responseTab = it })
+            val visibleTabs = responseTabsFor(tab)
+            val selectedTab = if (tab.responseTab in visibleTabs) tab.responseTab else ResponseTab.BODY
+            ResponseTabBar(visibleTabs, selectedTab, onTabSelected = { tab.responseTab = it })
 
             // ── Content ─────────────────────────────────────────
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                when (tab.responseTab) {
+                when (selectedTab) {
                     ResponseTab.BODY    -> ResponseBodyView(response)
                     ResponseTab.HEADERS -> ResponseHeadersView(response)
                     ResponseTab.COOKIES -> ResponseCookiesView(response)
@@ -215,22 +217,33 @@ private fun MetricChip(text: String, color: Color) {
 
 // ── Tab Bar ─────────────────────────────────────────────────────
 
+private fun responseTabsFor(tab: RequestTabState): List<ResponseTab> =
+    if (tab.kind == com.reqlab.core.model.RequestKind.MCP) {
+        ResponseTab.entries.filter { it != ResponseTab.COOKIES }
+    } else {
+        ResponseTab.entries
+    }
+
 @Composable
-private fun ResponseTabBar(selectedTab: ResponseTab, onTabSelected: (ResponseTab) -> Unit) {
+private fun ResponseTabBar(
+    tabs: List<ResponseTab>,
+    selectedTab: ResponseTab,
+    onTabSelected: (ResponseTab) -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(ReqLabColors.Surface)
     ) {
         ScrollableTabRow(
-            selectedTabIndex = selectedTab.ordinal,
+            selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0),
             containerColor = Color.Transparent,
             contentColor = ReqLabColors.OnSurface,
             edgePadding = 0.dp,
             divider = {},
             indicator = {},
         ) {
-            ResponseTab.entries.forEach { tab ->
+            tabs.forEach { tab ->
                 val selected = tab == selectedTab
                 Tab(
                     selected = selected,

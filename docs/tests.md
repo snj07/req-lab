@@ -37,6 +37,12 @@ LLM streaming E2E against the embedded sample-server:
 ./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.LlmApiE2ETest
 ```
 
+MCP Streamable HTTP + OAuth E2E:
+
+```bash
+./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.McpHttpE2ETest
+```
+
 Run full project checks:
 
 ```bash

@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -45,6 +46,8 @@ fun HorizontalSplitPane(
     minFraction: Float = 0.20f,
     maxFraction: Float = 0.80f,
     dividerTag: String = "h-split-divider",
+    /** 1.dp internal line inside a 6.dp drag hit; does not grow on hover. */
+    hairline: Boolean = false,
     first: @Composable () -> Unit,
     second: @Composable () -> Unit,
 ) {
@@ -66,8 +69,11 @@ fun HorizontalSplitPane(
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(if (isHovered) 6.dp else 4.dp)
-                .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.6f) else ReqLabColors.Border)
+                .width(if (hairline) 6.dp else if (isHovered) 6.dp else 4.dp)
+                .then(
+                    if (hairline) Modifier
+                    else Modifier.background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.6f) else ReqLabColors.Border),
+                )
                 .hoverable(dividerInteraction)
                 .pointerHoverIcon(horizontalResizeCursor)
                 .platformResizeCursorStyle(isHorizontal = true)
@@ -85,7 +91,17 @@ fun HorizontalSplitPane(
                     },
                 )
                 .testTag(dividerTag),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            if (hairline) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(1.dp)
+                        .background(if (isHovered) ReqLabColors.Primary.copy(alpha = 0.45f) else ReqLabColors.Border),
+                )
+            }
+        }
 
         Box(modifier = Modifier.fillMaxHeight().weight(1f - currentSplit.coerceIn(minFraction, maxFraction))) {
             second()
