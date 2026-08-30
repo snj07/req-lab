@@ -169,6 +169,40 @@
           ]
         },
         {
+          "name": "JSON5",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST JSON5 comments",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{\n  \"name\": \"Ada\",\n  // \"role\": \"admin\",\n  /* \"debug\": true, */\n  \"active\": true\n}"
+              },
+              "testScript": "reqlab.test(\"echoed body has no comments\", function() {\n    reqlab.expect(reqlab.response.json().body).to.not.include(\"//\")\n})\nreqlab.test(\"commented field omitted\", function() {\n    reqlab.expect(reqlab.response.json().body).to.not.include(\"role\")\n})"
+            },
+            {
+              "name": "POST JSON5 trailing comma",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{\n  \"name\": \"Ada\",\n  \"active\": true,\n}"
+              }
+            },
+            {
+              "name": "POST JSON5 unquoted keys",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{ name: 'Ada', active: true }"
+              }
+            }
+          ]
+        },
+        {
           "name": "Raw Text",
           "folders": [],
           "requests": [
@@ -1011,6 +1045,212 @@
             "content": "{\n  \"model\": \"{{llmModel}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Say hello\"}],\n  \"stream\": true\n}"
           },
           "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"partial assembled text\", function() {\n  reqlab.expect(reqlab.response.llm.assembledText).to.include(\"Hello\");\n});"
+        }
+      ]
+    },
+    {
+      "name": "SSE",
+      "folders": [],
+      "requests": [
+        {
+          "name": "SSE GET events",
+          "method": "GET",
+          "url": "{{baseUrl}}/sse",
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"has stream events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0);\n});\nreqlab.test(\"ping event\", function() {\n  reqlab.expect(reqlab.response.streamEvents.join(\"\\n\")).to.include(\"ping-0\");\n});"
+        },
+        {
+          "name": "SSE GET delayed",
+          "method": "GET",
+          "url": "{{baseUrl}}/sse?delayMs=50&count=3",
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"three ping events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.equal(3);\n});\nreqlab.test(\"last ping\", function() {\n  reqlab.expect(reqlab.response.streamEvents.join(\"\\n\")).to.include(\"ping-2\");\n});"
+        },
+        {
+          "name": "SSE POST events",
+          "method": "POST",
+          "url": "{{baseUrl}}/sse",
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"message\": \"hello-sse\"\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"has stream events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0);\n});\nreqlab.test(\"echoes body\", function() {\n  reqlab.expect(reqlab.response.streamEvents.join(\"\\n\")).to.include(\"hello-sse\");\n});"
+        }
+      ]
+    },
+    {
+      "name": "MCP (Model Context Protocol)",
+      "folders": [],
+      "requests": [
+        {
+          "name": "MCP Initialize + tools/list",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO"
+        },
+        {
+          "name": "MCP Authed Initialize + tools/list",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpAuthedUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{mcpBearerToken}}"
+          },
+          "headers": [
+            {
+              "key": "X-Api-Key",
+              "value": "{{mcpApiKey}}"
+            }
+          ]
+        },
+        {
+          "name": "MCP Bearer",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBearerUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "BEARER",
+            "token": "{{mcpBearerToken}}"
+          }
+        },
+        {
+          "name": "MCP Basic",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBasicUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "BASIC",
+            "username": "{{basicUser}}",
+            "password": "{{basicPassword}}"
+          }
+        },
+        {
+          "name": "MCP API Key",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpApiKeyUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "API_KEY",
+            "apiKey": "X-Api-Key",
+            "apiValue": "{{mcpApiKey}}"
+          }
+        },
+        {
+          "name": "MCP JWT",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpJwtUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "auth": {
+            "type": "JWT",
+            "token": "{{mcpJwtToken}}"
+          }
+        },
+        {
+          "name": "MCP URL params",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpTenantUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO"
+        },
+        {
+          "name": "MCP Legacy HTTP+SSE",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpLegacyUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "LEGACY_2024_11_05"
+        },
+        {
+          "name": "MCP stdio",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "",
+          "mcpTransport": "STDIO",
+          "mcpHttpMode": "AUTO",
+          "mcpCommand": "{{mcpStdioCommand}}"
+        },
+        {
+          "name": "MCP Sampling mock",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpSamplingMode": "MOCK"
+        },
+        {
+          "name": "MCP Sampling manual",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpSamplingMode": "MANUAL"
+        },
+        {
+          "name": "MCP Sampling LLM",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpSamplingMode": "FORWARD_LLM",
+          "mcpSamplingForwardUrl": "{{llmBaseUrl}}/v1/chat/completions",
+          "mcpSamplingForwardToken": "{{llmApiKey}}",
+          "mcpSamplingMaxTokens": 256
+        },
+        {
+          "name": "MCP Roots",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpRoots": [
+            {
+              "uri": "file:///tmp/reqlab",
+              "name": "tmp"
+            }
+          ]
+        },
+        {
+          "name": "MCP Elicitation auto-accept",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpAutoRespondElicitation": true
+        },
+        {
+          "name": "MCP Elicitation decline",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpAutoRespondElicitation": false
         }
       ]
     }

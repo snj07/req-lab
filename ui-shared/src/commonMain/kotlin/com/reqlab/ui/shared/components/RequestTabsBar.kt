@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.SolidColor
 import com.reqlab.ui.shared.i18n.Strings
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestTabState
+import com.reqlab.ui.shared.state.hasSseAccept
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.platform.horizontalResizeCursor
@@ -210,7 +211,17 @@ private fun RequestTabChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            MethodBadge(tab.method, compact = true)
+            if (tab.kind == com.reqlab.core.model.RequestKind.MCP) {
+                McpMethodBadge(compact = true, modifier = Modifier.testTag("tab-mcp-badge-${tab.id}"))
+            } else {
+                val sse = tab.hasSseAccept()
+                MethodBadge(
+                    tab.method,
+                    compact = true,
+                    sse = sse,
+                    modifier = if (sse) Modifier.testTag("tab-sse-badge-${tab.id}") else Modifier,
+                )
+            }
             if (renameMode) {
                 BasicTextField(
                     value = renameText,

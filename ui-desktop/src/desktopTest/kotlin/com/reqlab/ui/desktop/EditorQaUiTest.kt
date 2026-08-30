@@ -199,6 +199,157 @@ class BasicEditorInteractionTest {
     }
 
     @Test
+    fun format_button_click_restores_editor_focus_so_cmd_z_undoes() {
+        val minified = """{"name":"Alice","age":30}"""
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = minified
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-format-toggle", useUnmergedTree = true)
+            .performClick()
+        composeRule.waitForIdle()
+
+        val formatted = state.activeTab?.bodyContent ?: ""
+        assertTrue(formatted.contains('\n'),
+            "Format must expand minified JSON before undo; content: ${formatted.take(200)}")
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performKeyInput {
+                keyDown(Key.MetaLeft)
+                pressKey(Key.Z)
+                keyUp(Key.MetaLeft)
+            }
+        composeRule.waitForIdle()
+
+        assertEquals(minified, state.activeTab?.bodyContent,
+            "Cmd+Z after Format must restore the minified body without clicking the editor")
+    }
+
+    @Test
+    fun word_wrap_toggle_click_restores_editor_focus() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = """{"long":"value".repeat(200)}"""
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-word-wrap-toggle", useUnmergedTree = true)
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
+    fun fold_all_click_restores_editor_focus() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{\n  \"name\": \"Alice\",\n  \"role\": \"admin\"\n}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-fold-all", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true)
+            .performTextInput(" ")
+        composeRule.waitForIdle()
+        assertTrue(
+            (state.activeTab?.bodyContent ?: "").contains(" "),
+            "Typing after Fold All must work without clicking the editor",
+        )
+    }
+
+    @Test
+    fun unfold_all_click_restores_editor_focus() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{\n  \"name\": \"Alice\",\n  \"role\": \"admin\"\n}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-fold-all", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-unfold-all", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
+    fun copy_button_click_restores_editor_focus() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = """{"key":"value"}"""
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-copy-button", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
+    fun search_close_via_toggle_restores_editor_focus() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = """{"key":"value"}"""
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-toggle", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-search-input", useUnmergedTree = true).assertIsFocused()
+
+        composeRule.onNodeWithTag("body-editor-search-toggle", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
+    fun search_close_button_restores_editor_focus() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = """{"key":"value"}"""
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-search-toggle", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-search-input", useUnmergedTree = true).assertIsFocused()
+
+        composeRule.onNodeWithTag("body-editor-search-close", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-input", useUnmergedTree = true).assertIsFocused()
+    }
+
+    @Test
     fun word_wrap_toggle_click_does_not_crash() {
         val state = AppState()
         composeRule.runOnUiThread {

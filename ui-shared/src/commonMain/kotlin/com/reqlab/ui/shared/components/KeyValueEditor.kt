@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -39,6 +40,8 @@ import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.HeaderKind
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.SystemHeaderRules
+import com.reqlab.ui.shared.platform.PlatformLazyVerticalScrollbar
+import com.reqlab.ui.shared.platform.insetScrollbar
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
 
@@ -72,22 +75,33 @@ fun KeyValueEditor(
             androidx.compose.foundation.layout.Spacer(Modifier.size(32.dp))
         }
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            itemsIndexed(entries, key = { idx, _ -> idx }) { idx, kv ->
-                KeyValueRow(
-                    kv = kv,
-                    onDelete = {
-                        if (!(isHeaderEditor && kv.kind == HeaderKind.SYSTEM)) {
-                            entries.removeAt(idx)
-                            onDirty()
-                        }
-                    },
-                    onDirty = onDirty,
-                    isHeaderEditor = isHeaderEditor,
-                    state = state,
-                    testTag = "$tag-row-$idx",
-                )
+        val listState = rememberLazyListState()
+        Box(Modifier.weight(1f).fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(end = 10.dp),
+            ) {
+                itemsIndexed(entries, key = { idx, _ -> idx }) { idx, kv ->
+                    KeyValueRow(
+                        kv = kv,
+                        onDelete = {
+                            if (!(isHeaderEditor && kv.kind == HeaderKind.SYSTEM)) {
+                                entries.removeAt(idx)
+                                onDirty()
+                            }
+                        },
+                        onDirty = onDirty,
+                        isHeaderEditor = isHeaderEditor,
+                        state = state,
+                        testTag = "$tag-row-$idx",
+                    )
+                }
             }
+            PlatformLazyVerticalScrollbar(
+                listState = listState,
+                modifier = Modifier.align(Alignment.CenterEnd).insetScrollbar(),
+                testTag = "$tag-list-vscrollbar",
+            )
         }
 
         // "Add …" button

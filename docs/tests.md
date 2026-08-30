@@ -37,6 +37,30 @@ LLM streaming E2E against the embedded sample-server:
 ./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.LlmApiE2ETest
 ```
 
+Generic SSE (`GET`/`POST /sse`) E2E:
+
+```bash
+./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.SseApiE2ETest
+```
+
+MCP Streamable HTTP, legacy HTTP+SSE, stdio, sampling/roots/elicitation, LLM generate, and OAuth E2E:
+
+```bash
+./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.McpHttpE2ETest
+./gradlew :ui-desktop:desktopTest --tests com.reqlab.ui.desktop.McpSessionCallbackE2ETest
+./gradlew :ui-desktop:desktopTest --tests com.reqlab.ui.desktop.McpCallbackPaneUiTest
+```
+
+### MCP fixtures
+
+Import [qa-tests/fixtures/reqlab-test-collection.json](../qa-tests/fixtures/reqlab-test-collection.json) and [qa-tests/fixtures/reqlab-test-environment.json](../qa-tests/fixtures/reqlab-test-environment.json). Folder **MCP (Model Context Protocol)** covers Streamable HTTP (plain + auth + query params), legacy SSE, stdio (`{{mcpStdioCommand}}` = `sample-server`), sampling mock/manual/LLM (`{{llmBaseUrl}}` + `{{llmApiKey}}`), roots, and elicitation accept/decline.
+
+The JS collection validator skips `STDIO` and `LEGACY_2024_11_05`. Kotlin e2e (`:qa-tests:jvmTest --tests com.reqlab.qa.McpHttpE2ETest`) is the protocol source of truth. Product guide: [docs/mcp.md](mcp.md). Mock routes and PATH shim: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
+Folder **JSON5** under Body Types authors JSON5 in `body.content` strings. The JS collection validator **skips** paths that include `JSON5` and does **not** count them as passed (Node `fetch` does not convert). Kotlin e2e (`:qa-tests:jvmTest --tests com.reqlab.qa.SampleCollectionE2ETest`) through `KtorApiClient` is the only JSON5 send coverage.
+
+Folder **SSE** is generic `text/event-stream` (`GET`/`POST /sse`). The **LLM (OpenAI-compatible)** folder remains OpenAI chat completions.
+
 Run full project checks:
 
 ```bash
@@ -53,8 +77,8 @@ Run full project checks:
 
 ## Coverage Highlights
 
-- HTTP methods, body types (JSON, form-data, urlencoded, raw, binary), auth (Basic, Bearer, API Key)
-- SSE/NDJSON streaming and OpenAI-compatible `/v1` chat mocks (including `?demo=true`)
+- HTTP methods, body types (JSON, JSON5 authoring, form-data, urlencoded, raw, binary), auth (Basic, Bearer, API Key)
+- SSE/NDJSON streaming, generic `/sse` mocks, and OpenAI-compatible `/v1` chat mocks (including `?demo=true`)
 - Variable interpolation (`{{var}}`), scope precedence, and scripting runtime (pre-request, post-response, assertions, `response.llm.*`)
 - Retry/error handling and WebSocket lifecycle (connect, send, receive, disconnect, reconnect)
 - Settings dialog persistence and impact on request behavior

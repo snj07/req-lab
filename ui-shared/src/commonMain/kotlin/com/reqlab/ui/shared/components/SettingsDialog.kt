@@ -276,6 +276,14 @@ private fun GeneralSettings(s: AppSettings) {
         onCheckedChange = { s.confirmBeforeDelete = it },
     )
     SettingsDivider()
+    SettingToggle(
+        label = Strings.t("json5_in_json_bodies"),
+        description = Strings.t("settings_json5_in_json_bodies_desc"),
+        checked = s.allowJson5InJsonBodies,
+        onCheckedChange = { s.allowJson5InJsonBodies = it },
+        tag = "json5-body-toggle",
+    )
+    SettingsDivider()
     SettingNumberField(
         label = Strings.t("default_request_timeout_seconds"),
         value = s.defaultTimeoutSec,

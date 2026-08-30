@@ -1,9 +1,11 @@
 package com.reqlab.ui.shared.persistence
 
+import com.reqlab.core.model.AuthConfig
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.ui.shared.state.FormDataEntryState
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
@@ -19,6 +21,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -78,6 +81,18 @@ data class RequestDto(
     val authToken: String? = null,
     val authApiKey: String? = null,
     val authApiValue: String? = null,
+    val kind: String? = null,
+    val mcpTransport: String? = null,
+    val mcpHttpMode: String? = null,
+    val mcpCommand: String? = null,
+    val mcpArgs: List<String> = emptyList(),
+    val mcpEnv: Map<String, String> = emptyMap(),
+    val mcpSamplingMode: String? = null,
+    val mcpSamplingForwardUrl: String? = null,
+    val mcpSamplingForwardToken: String? = null,
+    val mcpSamplingMaxTokens: Int? = null,
+    val mcpAutoRespondElicitation: Boolean? = null,
+    val mcpRoots: List<Pair<String, String?>> = emptyList(),
 )
 
 data class ReqLabEnvironmentDto(
@@ -406,6 +421,32 @@ object ImportExportRepository {
                     node.authApiValue?.takeIf { it.isNotBlank() }?.let { put("apiValue", it) }
                 })
             }
+            if (node.kind == com.reqlab.core.model.RequestKind.MCP) {
+                put("kind", "MCP")
+                val mcp = node.mcpConfig
+                if (mcp != null) {
+                    put("mcpTransport", mcp.transport.name)
+                    put("mcpHttpMode", mcp.httpMode.name)
+                    if (mcp.command.isNotBlank()) put("mcpCommand", mcp.command)
+                    if (mcp.args.isNotEmpty()) put("mcpArgs", buildJsonArray { mcp.args.forEach { add(JsonPrimitive(it)) } })
+                    if (mcp.env.isNotEmpty()) put("mcpEnv", buildJsonObject { mcp.env.forEach { (k, v) -> put(k, v) } })
+                    put("mcpSamplingMode", mcp.samplingMode.name)
+                    mcp.samplingForwardUrl?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardUrl", it) }
+                    mcp.samplingForwardToken?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardToken", it) }
+                    mcp.samplingMaxTokens?.let { put("mcpSamplingMaxTokens", it) }
+                    put("mcpAutoRespondElicitation", mcp.autoRespondElicitation)
+                    if (mcp.roots.isNotEmpty()) {
+                        put("mcpRoots", buildJsonArray {
+                            mcp.roots.forEach { root ->
+                                add(buildJsonObject {
+                                    put("uri", root.uri)
+                                    root.name?.let { put("name", it) }
+                                })
+                            }
+                        })
+                    }
+                }
+            }
         }
     }
 
@@ -527,6 +568,27 @@ object ImportExportRepository {
                     dto.authApiValue?.takeIf { it.isNotBlank() }?.let { put("apiValue", it) }
                 })
             }
+            dto.kind?.takeIf { it.equals("MCP", ignoreCase = true) }?.let { put("kind", it) }
+            dto.mcpTransport?.let { put("mcpTransport", it) }
+            dto.mcpHttpMode?.let { put("mcpHttpMode", it) }
+            dto.mcpCommand?.takeIf { it.isNotBlank() }?.let { put("mcpCommand", it) }
+            if (dto.mcpArgs.isNotEmpty()) put("mcpArgs", buildJsonArray { dto.mcpArgs.forEach { add(JsonPrimitive(it)) } })
+            if (dto.mcpEnv.isNotEmpty()) put("mcpEnv", buildJsonObject { dto.mcpEnv.forEach { (k, v) -> put(k, v) } })
+            dto.mcpSamplingMode?.let { put("mcpSamplingMode", it) }
+            dto.mcpSamplingForwardUrl?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardUrl", it) }
+            dto.mcpSamplingForwardToken?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardToken", it) }
+            dto.mcpSamplingMaxTokens?.let { put("mcpSamplingMaxTokens", it) }
+            dto.mcpAutoRespondElicitation?.let { put("mcpAutoRespondElicitation", it) }
+            if (dto.mcpRoots.isNotEmpty()) {
+                put("mcpRoots", buildJsonArray {
+                    dto.mcpRoots.forEach { (uri, name) ->
+                        add(buildJsonObject {
+                            put("uri", uri)
+                            name?.let { put("name", it) }
+                        })
+                    }
+                })
+            }
         }
 
     private fun environmentDtoToJson(dto: ReqLabEnvironmentDto): JsonObject =
@@ -635,6 +697,22 @@ object ImportExportRepository {
             authType = authType,
             authUsername = authUsername, authPassword = authPassword,
             authToken = authToken, authApiKey = authApiKey, authApiValue = authApiValue,
+            kind = root["kind"]?.jsonPrimitive?.contentOrNull,
+            mcpTransport = root["mcpTransport"]?.jsonPrimitive?.contentOrNull,
+            mcpHttpMode = root["mcpHttpMode"]?.jsonPrimitive?.contentOrNull,
+            mcpCommand = root["mcpCommand"]?.jsonPrimitive?.contentOrNull,
+            mcpArgs = root["mcpArgs"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
+            mcpEnv = root["mcpEnv"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
+            mcpSamplingMode = root["mcpSamplingMode"]?.jsonPrimitive?.contentOrNull,
+            mcpSamplingForwardUrl = root["mcpSamplingForwardUrl"]?.jsonPrimitive?.contentOrNull,
+            mcpSamplingForwardToken = root["mcpSamplingForwardToken"]?.jsonPrimitive?.contentOrNull,
+            mcpSamplingMaxTokens = root["mcpSamplingMaxTokens"]?.jsonPrimitive?.intOrNull,
+            mcpAutoRespondElicitation = root["mcpAutoRespondElicitation"]?.jsonPrimitive?.booleanOrNull,
+            mcpRoots = root["mcpRoots"]?.jsonArray?.mapNotNull { el ->
+                val obj = el.jsonObject
+                val uri = obj["uri"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                uri to obj["name"]?.jsonPrimitive?.contentOrNull
+            } ?: emptyList(),
         )
     }
 
@@ -763,6 +841,40 @@ object ImportExportRepository {
         val method = runCatching { HttpMethodType.valueOf(dto.method.uppercase()) }.getOrDefault(HttpMethodType.GET)
         val bodyType = dto.bodyType?.let { runCatching { BodyType.valueOf(it.uppercase()) }.getOrNull() }
         val authType = dto.authType?.let { runCatching { AuthType.valueOf(it.uppercase()) }.getOrNull() }
+        val kind = dto.kind?.let { runCatching { com.reqlab.core.model.RequestKind.valueOf(it.uppercase()) }.getOrNull() }
+            ?: com.reqlab.core.model.RequestKind.HTTP
+        val mcp = if (kind == com.reqlab.core.model.RequestKind.MCP) {
+            val authParams = when (authType) {
+                AuthType.BASIC -> mapOf("username" to dto.authUsername.orEmpty(), "password" to dto.authPassword.orEmpty())
+                AuthType.BEARER, AuthType.JWT -> mapOf("token" to dto.authToken.orEmpty())
+                AuthType.API_KEY -> mapOf("key" to dto.authApiKey.orEmpty(), "value" to dto.authApiValue.orEmpty())
+                else -> emptyMap()
+            }
+            com.reqlab.core.model.McpConnectionConfig(
+                transport = runCatching {
+                    com.reqlab.core.model.McpTransportType.valueOf(dto.mcpTransport ?: "STREAMABLE_HTTP")
+                }.getOrDefault(com.reqlab.core.model.McpTransportType.STREAMABLE_HTTP),
+                httpMode = runCatching {
+                    com.reqlab.core.model.McpHttpMode.valueOf(dto.mcpHttpMode ?: "AUTO")
+                }.getOrDefault(com.reqlab.core.model.McpHttpMode.AUTO),
+                url = dto.url,
+                headers = dto.userHeaders.map { KeyValueEntry(it.first, it.second) },
+                auth = AuthConfig(type = authType ?: AuthType.NONE, params = authParams),
+                command = dto.mcpCommand.orEmpty(),
+                args = dto.mcpArgs,
+                env = dto.mcpEnv,
+                samplingMode = runCatching {
+                    com.reqlab.core.model.McpSamplingMode.valueOf(dto.mcpSamplingMode ?: "MOCK")
+                }.getOrDefault(com.reqlab.core.model.McpSamplingMode.MOCK),
+                samplingForwardUrl = dto.mcpSamplingForwardUrl,
+                samplingForwardToken = dto.mcpSamplingForwardToken,
+                samplingMaxTokens = dto.mcpSamplingMaxTokens,
+                autoRespondElicitation = dto.mcpAutoRespondElicitation ?: true,
+                roots = dto.mcpRoots.map { (uri, name) ->
+                    com.reqlab.core.model.McpRoot(uri = uri, name = name)
+                },
+            )
+        } else null
         return CollectionNode(
             id = generateUuid(),
             requestRef = dto.requestRef ?: generateUuid(),
@@ -784,6 +896,8 @@ object ImportExportRepository {
             authToken = dto.authToken,
             authApiKey = dto.authApiKey,
             authApiValue = dto.authApiValue,
+            kind = kind,
+            mcpConfig = mcp,
         )
     }
 

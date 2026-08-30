@@ -14,6 +14,8 @@ import com.reqlab.ui.shared.i18n.AppLanguage
 import com.reqlab.ui.shared.theme.ReqLabTheme
 import org.junit.Rule
 import org.junit.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Compose UI tests covering:
@@ -154,5 +156,22 @@ class SettingsDialogUiTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Historial", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun json5_body_toggle_is_displayed_and_click_disables_setting() {
+        val state = AppState()
+        composeRule.setContent { MainScreen(state = state) }
+
+        composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("json5-body-toggle", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(state.settings.allowJson5InJsonBodies)
+
+        composeRule.onNodeWithTag("json5-body-toggle", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertFalse(state.settings.allowJson5InJsonBodies)
     }
 }

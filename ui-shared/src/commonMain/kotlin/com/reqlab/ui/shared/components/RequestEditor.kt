@@ -168,9 +168,9 @@ private fun copyToClipboard(text: String) {
 private fun buildCopyFormats(tab: RequestTabState, state: AppState): List<Pair<String, () -> Unit>> {
     val layers = state.activeVariableLayers()
     return listOf(
-        "cURL"                   to { copyToClipboard(buildCurlCommand(tab, layers)) },
-        "Python"                 to { copyToClipboard(buildPythonCommand(tab, layers)) },
-        "PowerShell"             to { copyToClipboard(buildPowerShellCommand(tab, layers)) },
+        "cURL"                   to { copyToClipboard(buildCurlCommand(tab, layers, state.settings.allowJson5InJsonBodies)) },
+        "Python"                 to { copyToClipboard(buildPythonCommand(tab, layers, state.settings.allowJson5InJsonBodies)) },
+        "PowerShell"             to { copyToClipboard(buildPowerShellCommand(tab, layers, state.settings.allowJson5InJsonBodies)) },
     )
 }
 

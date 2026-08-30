@@ -56,7 +56,7 @@ You can import these sample fixtures from the repo:
 - Collection sample: [qa-tests/fixtures/reqlab-test-collection.json](qa-tests/fixtures/reqlab-test-collection.json)
 - Environment sample: [qa-tests/fixtures/reqlab-test-environment.json](qa-tests/fixtures/reqlab-test-environment.json)
 
-The collection includes an **LLM (OpenAI-compatible)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** to watch a token stream on one POST.
+The collection includes an **LLM (OpenAI-compatible)** folder, an **SSE** folder, and an **MCP (Model Context Protocol)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** or an SSE item to watch events arrive, or open an MCP item and Connect. See [docs/mcp.md](docs/mcp.md).
 
 ## Features
 
@@ -65,11 +65,26 @@ The collection includes an **LLM (OpenAI-compatible)** folder. Start the sample 
 - Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`
 - URL editing with live query-parameter table synchronisation
 - Request headers editor (key/value table)
-- Body types: JSON, GraphQL, form-data, x-www-form-urlencoded, raw text, binary
+- Body types: JSON (JSON5 authoring by default; Send converts to strict JSON), GraphQL, form-data, x-www-form-urlencoded, raw text, binary
 - Auth: None, Basic, Bearer Token, API Key, JWT
 - Retry controls and per-request timeout
-- HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`)
+- HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`). Collection items with `Accept: text/event-stream` show an **SSE** badge in the HTTP method color; folder ⋮ → **New SSE Request**
 - Copy request as `curl`
+
+### MCP
+
+ReqLab is an [MCP](https://modelcontextprotocol.io/) client in the same workspace as REST: collections, environments, auth, and a shared Response pane.
+
+![ReqLab MCP tools — connected session, tool list, Form/JSON arguments, JSON-RPC result](docs/images/mcp-tools.png)
+
+- Transports: Streamable HTTP, Auto (legacy fallback), Legacy HTTP+SSE, desktop stdio
+- Tools (Form/JSON), resources (read + subscribe), prompts — results in the shared Response pane
+- Activity JSON-RPC inspector; Logs vs Console
+- Sampling, roots, elicitation on the Client tab
+- Same auth editors as REST (None / Basic / Bearer / API Key / JWT); `{{variables}}` in URL, command, headers, and auth
+- Collection save, import, and export of MCP items
+
+Full guide: [docs/mcp.md](docs/mcp.md)
 
 ### 📬 Response Inspection
 
@@ -191,6 +206,7 @@ Open from the toolbar `Help` icon or via **Settings → Open Help & About**:
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Build, run, and contribute locally |
 | [docs/architecture.md](docs/architecture.md) | Module structure and data flow |
 | [docs/editor-architecture.md](docs/editor-architecture.md) | Code editor internals |
+| [docs/mcp.md](docs/mcp.md) | MCP client: tools, resources, prompts, Activity, sampling |
 | [docs/scripts.md](docs/scripts.md) | Scripting API and variable scopes |
 | [docs/shortcuts.md](docs/shortcuts.md) | Keyboard shortcut reference |
 | [docs/testing.md](docs/testing.md) | Test strategy and coverage matrix |

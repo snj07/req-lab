@@ -539,12 +539,92 @@ class EditorViewModelFixTest {
         v.insertAtCursor("Y")
         assertTrue(v.getFullText().endsWith("XY"), "Should have XY appended")
 
-        // External text completely replaced (simulates Format or Import)
+        // External text completely replaced (simulates Import / load, not Format)
         v.onExternalTextChanged("completely different content")
 
         // After a genuine external change, undo must not go back to the pre-import state
         v.undo() // should be a no-op
         assertEquals("completely different content", v.getFullText(),
             "Undo must not cross an external-text-change boundary")
+    }
+
+    @Test
+    fun replaceDocument_keeps_undo_of_prior_edits() {
+        val v = vm("{\"a\":1}")
+        v.moveCursorTo(v.document.length)
+        v.insertAtCursor("X")
+        val afterType = v.getFullText()
+        v.replaceDocument("{\n  \"a\": 1\n}X")
+        v.undo()
+        assertEquals(afterType, v.getFullText(), "Undo Format must restore text including typed suffix")
+        v.undo()
+        assertEquals("{\"a\":1}", v.getFullText(), "Undo after Format must still undo the keystroke")
+    }
+
+    @Test
+    fun replaceDocument_maps_caret_at_start_to_start() {
+        val compact = "{\"a\":1}"
+        val pretty = "{\n  \"a\": 1\n}"
+        val v = EditorViewModel(compact, LanguageMode.JSON)
+        v.moveCursorTo(0)
+        v.replaceDocument(pretty)
+        assertEquals(0, v.state.value.cursorOffset)
+        v.dispose()
+    }
+
+    @Test
+    fun replaceDocument_eof_stays_at_end_of_pretty_text() {
+        val compact = "{\"a\":1}"
+        val pretty = "{\n  \"a\": 1\n}"
+        val v = EditorViewModel(compact, LanguageMode.JSON)
+        v.moveCursorTo(compact.length)
+        v.replaceDocument(pretty)
+        assertEquals(
+            pretty.length,
+            v.state.value.cursorOffset,
+            "EOF caret must stay at the end of the pretty document, not on line 0",
+        )
+        v.dispose()
+    }
+
+    @Test
+    fun replaceDocument_maps_caret_by_line_and_column() {
+        val old = "aaa\nbbbb"
+        val new = "aaa\ncccccc"
+        val v = EditorViewModel(old, LanguageMode.PLAIN_TEXT)
+        v.moveCursorTo(6) // line 1, col 2
+        v.replaceDocument(new)
+        assertEquals(6, v.state.value.cursorOffset, "Line 1 col 2 must map to the same line/col")
+        v.dispose()
+    }
+
+    @Test
+    fun replaceDocument_noop_does_not_move_caret() {
+        val v = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
+        v.moveCursorTo(3)
+        v.replaceDocument("Hello")
+        assertEquals(3, v.state.value.cursorOffset)
+        v.dispose()
+    }
+
+    @Test
+    fun replaceDocument_undo_restores_pre_format_caret() {
+        val compact = "{\"a\":1}"
+        val pretty = "{\n  \"a\": 1\n}"
+        val v = EditorViewModel(compact, LanguageMode.JSON)
+        v.moveCursorTo(compact.length)
+        v.replaceDocument(pretty)
+        v.undo()
+        assertEquals(compact, v.getFullText())
+        assertEquals(compact.length, v.state.value.cursorOffset, "Undo Format must restore the pre-format caret")
+        v.dispose()
+    }
+
+    @Test
+    fun mapCursorByLineCol_eof_and_line_col() {
+        val pretty = "{\n  \"a\": 1\n}"
+        assertEquals(pretty.length, mapCursorByLineCol("{\"a\":1}", 7, pretty))
+        assertEquals(0, mapCursorByLineCol("{\"a\":1}", 0, pretty))
+        assertEquals(6, mapCursorByLineCol("aaa\nbbbb", 6, "aaa\ncccccc"))
     }
 }

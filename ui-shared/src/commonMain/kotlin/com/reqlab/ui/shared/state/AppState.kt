@@ -10,11 +10,19 @@ import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.McpConnectionConfig
+import com.reqlab.core.model.RequestKind
+import com.reqlab.editor.core.Json5EditorSupport
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.ui.EditorViewModel
 import com.reqlab.editor.ui.SyntaxHighlighterRegistry
 import com.reqlab.core.model.ResponseDefinition
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import com.reqlab.ui.shared.mcp.McpSessionState
 import com.reqlab.ui.shared.platform.generateUuid
 import com.reqlab.ui.shared.platform.currentTimeMillis
 import com.reqlab.ui.shared.components.syncParamsFromUrl
@@ -96,6 +104,8 @@ data class CollectionNode(
     val authApiKey: String? = null,
     val authApiValue: String? = null,
     val requestRef: String? = null,
+    val kind: RequestKind = RequestKind.HTTP,
+    val mcpConfig: McpConnectionConfig? = null,
 )
 
 /**
@@ -171,6 +181,19 @@ object SystemHeaderRules {
     }
 }
 
+const val SSE_ACCEPT_MEDIA_TYPE = "text/event-stream"
+
+fun isSseAccept(key: String, value: String, enabled: Boolean = true): Boolean =
+    enabled &&
+        key.equals(SystemHeaderRules.ACCEPT, ignoreCase = true) &&
+        value.contains(SSE_ACCEPT_MEDIA_TYPE, ignoreCase = true)
+
+fun RequestTabState.hasSseAccept(): Boolean =
+    headers.any { isSseAccept(it.key, it.value, it.enabled) }
+
+fun CollectionNode.hasSseAccept(): Boolean =
+    userHeaders.any { isSseAccept(it.first, it.second) }
+
 // ── Environment model ───────────────────────────────────────────
 
 class EnvState(
@@ -220,6 +243,9 @@ class AppSettings {
     // Environment
     /** Name of the last selected environment; restored on app launch. Empty = first env. */
     var selectedEnvName      by mutableStateOf("")
+
+    /** When true (default), JSON bodies accept JSON5; Send converts to strict JSON. */
+    var allowJson5InJsonBodies by mutableStateOf(true)
 }
 
 // ── Per-tab state (one per open request tab) ────────────────────
@@ -290,6 +316,8 @@ class RequestTabState(
 
     var preRequestScript by mutableStateOf("")
     var testScript       by mutableStateOf("")
+    var kind by mutableStateOf(RequestKind.HTTP)
+    var mcpConfig by mutableStateOf(McpConnectionConfig())
 
     var retryEnabled by mutableStateOf(false)
     var retryCount by mutableStateOf(1)
@@ -312,12 +340,29 @@ class RequestTabState(
     // Keyed by BodyType so JSON/XML/etc. each keep independent undo stacks.
     // Not part of Compose state — not serialized, not tracked for dirty checking.
     private val bodyViewModelCache = HashMap<BodyType, EditorViewModel>()
+    private var json5EnabledForCachedJsonVm: Boolean? = null
 
-    fun getOrCreateBodyViewModel(bodyType: BodyType, initialText: String, languageMode: LanguageMode): EditorViewModel {
+    fun getOrCreateBodyViewModel(
+        bodyType: BodyType,
+        initialText: String,
+        languageMode: LanguageMode,
+        allowJson5: Boolean = true,
+    ): EditorViewModel {
         if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
             SyntaxHighlighterRegistry.registerBuiltinHighlighters()
         }
-        return bodyViewModelCache.getOrPut(bodyType) { EditorViewModel(initialText, languageMode) }
+        if (languageMode == LanguageMode.JSON) {
+            val cached = bodyViewModelCache[bodyType]
+            if (cached != null && json5EnabledForCachedJsonVm != null && json5EnabledForCachedJsonVm != allowJson5) {
+                cached.dispose()
+                bodyViewModelCache.remove(bodyType)
+            }
+            json5EnabledForCachedJsonVm = allowJson5
+        }
+        return bodyViewModelCache.getOrPut(bodyType) {
+            val provider = if (allowJson5 && languageMode == LanguageMode.JSON) Json5EditorSupport else null
+            EditorViewModel(initialText, languageMode, provider)
+        }
     }
 
     /** Disposes all cached body EditorViewModels. Call before removing this tab. */
@@ -379,6 +424,25 @@ class RequestTabState(
             headersSnapshot,
             formRowsSnapshot,
             urlencodedRowsSnapshot,
+            kind.name,
+            mcpClientFingerprint(),
+        ).joinToString("#")
+    }
+
+    /** Compact fingerprint of Client-tab MCP settings for dirty tracking and auto-save. */
+    fun mcpClientFingerprint(): String {
+        val roots = mcpConfig.roots.joinToString(";") { "${it.uri}|${it.name.orEmpty()}" }
+        return listOf(
+            mcpConfig.url,
+            mcpConfig.transport.name,
+            mcpConfig.httpMode.name,
+            mcpConfig.command,
+            mcpConfig.samplingMode.name,
+            mcpConfig.samplingForwardUrl.orEmpty(),
+            mcpConfig.samplingForwardToken.orEmpty(),
+            mcpConfig.samplingMaxTokens?.toString().orEmpty(),
+            mcpConfig.autoRespondElicitation.toString(),
+            roots,
         ).joinToString("#")
     }
 
@@ -549,6 +613,26 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     }
     var activeTabIndex by mutableStateOf(if (openDefaultTab) 0 else -1)
     val activeTab: RequestTabState? get() = openTabs.getOrNull(activeTabIndex)
+
+    // ── MCP sessions ──
+    // Long-lived, keyed by tab id so an MCP connection (and its loaded tools/
+    // resources) survives tab switches. Disposed only when the tab is closed.
+    /** Application-lifetime scope for background work that must outlive individual composables. */
+    val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val mcpSessions = mutableMapOf<String, McpSessionState>()
+
+    /** Returns the persistent MCP session for [tabId], creating it on first use. */
+    fun getOrCreateMcpSession(tabId: String): McpSessionState =
+        mcpSessions.getOrPut(tabId) {
+            McpSessionState(appScope, onConsole = { message, level ->
+                logNetworkEvent(message, level, echoToConsole = false)
+            })
+        }
+
+    /** Disconnects and forgets the MCP session for [tabId] (called on tab close). */
+    fun disposeMcpSession(tabId: String) {
+        mcpSessions.remove(tabId)?.let { session -> appScope.launch { session.disconnect() } }
+    }
 
     // ── bottom panel ──
     var selectedBottomTab    by mutableStateOf(BottomTab.CONSOLE)
@@ -792,6 +876,11 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             if (existing != null) existing.value = v
             else tab.headers.add(MutableKeyValue(k, v, kind = HeaderKind.USER))
         }
+        tab.kind = node?.kind ?: RequestKind.HTTP
+        node?.mcpConfig?.let { tab.mcpConfig = it }
+        if (tab.kind == RequestKind.MCP && tab.url.isBlank()) {
+            tab.url = tab.mcpConfig.url
+        }
         // Re-anchor the saved snapshot after all fields (including system headers
         // injected by syncSystemHeaders above) have been populated. Without this,
         // the snapshot captured in RequestTabState.init{} pre-dates the system
@@ -818,6 +907,18 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         for (node in nodes) {
             if (node.id == id) return node
             if (node.isFolder) findNodeById(node.children, id)?.let { return it }
+        }
+        return null
+    }
+
+    /** Folder anywhere in the tree (root or nested). */
+    fun findFolder(id: String): CollectionNode? =
+        findNodeById(collections, id)?.takeIf { it.isFolder }
+
+    private fun rootCollectionIdContaining(nodeId: String): String? {
+        for (root in collections) {
+            if (root.id == nodeId) return root.id
+            if (findNodeById(listOf(root), nodeId) != null) return root.id
         }
         return null
     }
@@ -978,6 +1079,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     fun closeTab(index: Int) {
         if (index !in openTabs.indices) return
         openTabs[index].disposeBodyViewModels()
+        disposeMcpSession(openTabs[index].id)
         openTabs.removeAt(index)
         if (openTabs.isEmpty()) {
             activeTabIndex = -1
@@ -1000,6 +1102,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             .filter { openTabs[it].id in idSet }
             .forEach { idx ->
                 openTabs[idx].disposeBodyViewModels()
+                disposeMcpSession(openTabs[idx].id)
                 openTabs.removeAt(idx)
             }
         if (openTabs.isEmpty()) {
@@ -1032,12 +1135,13 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     /**
      * Appends a network-level event to the structured Logs tab.
-     * Also echoes to the Console for unified visibility (fixes M-3).
+     * REST traffic also echoes to Console ([echoToConsole] default true). MCP
+     * summaries pass false so Console stays for scripts and app messages.
      */
-    fun logNetworkEvent(message: String, level: LogLevel = LogLevel.INFO) {
+    fun logNetworkEvent(message: String, level: LogLevel = LogLevel.INFO, echoToConsole: Boolean = true) {
         val entry = ConsoleEntry(message, level)
         networkEventLogs.add(0, entry)
-        consoleLogs.add(0, entry)
+        if (echoToConsole) consoleLogs.add(0, entry)
     }
 
     fun notifyCollectionsChanged() {
@@ -1068,7 +1172,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     /** Add a new request node inside the given collection (folder). Opens it as a tab. */
     fun addRequestToCollection(collectionId: String) {
-        val folder = collections.firstOrNull { it.id == collectionId && it.isFolder } ?: return
+        val folder = findFolder(collectionId) ?: return
         val siblingNames = folder.children.map { it.name }.toSet()
         val name = generateUniqueName("New Request", siblingNames)
         val requestId = generateUuid()
@@ -1082,16 +1186,60 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         )
         folder.children.add(node)
         notifyCollectionsChanged()
-        selectedCollectionId = collectionId
+        selectedCollectionId = rootCollectionIdContaining(collectionId) ?: collectionId
         selectedRequestId = requestId
-        // Also open a tab for the new request
         addTab(requestId = requestId, name = name, method = HttpMethodType.GET, url = "")
+    }
+
+    fun addMcpConnectionToCollection(collectionId: String) {
+        val folder = findFolder(collectionId) ?: return
+        val siblingNames = folder.children.map { it.name }.toSet()
+        val name = generateUniqueName("New MCP Connection", siblingNames)
+        val requestId = generateUuid()
+        val mcp = McpConnectionConfig(url = "{{mcpBaseUrl}}")
+        val node = CollectionNode(
+            id = requestId,
+            requestRef = generateUuid(),
+            name = name,
+            isFolder = false,
+            method = HttpMethodType.POST,
+            url = mcp.url,
+            kind = RequestKind.MCP,
+            mcpConfig = mcp,
+        )
+        folder.children.add(node)
+        notifyCollectionsChanged()
+        selectedCollectionId = rootCollectionIdContaining(collectionId) ?: collectionId
+        selectedRequestId = requestId
+        addTab(requestId = requestId, name = name, method = HttpMethodType.POST, url = mcp.url)
+    }
+
+    fun addSseRequestToCollection(collectionId: String) {
+        val folder = findFolder(collectionId) ?: return
+        val siblingNames = folder.children.map { it.name }.toSet()
+        val name = generateUniqueName("New SSE Request", siblingNames)
+        val requestId = generateUuid()
+        val url = "{{baseUrl}}/sse"
+        val node = CollectionNode(
+            id = requestId,
+            requestRef = generateUuid(),
+            name = name,
+            isFolder = false,
+            method = HttpMethodType.GET,
+            url = url,
+            userHeaders = listOf(SystemHeaderRules.ACCEPT to SSE_ACCEPT_MEDIA_TYPE),
+        )
+        folder.children.add(node)
+        notifyCollectionsChanged()
+        selectedCollectionId = rootCollectionIdContaining(collectionId) ?: collectionId
+        selectedRequestId = requestId
+        addTab(requestId = requestId, name = name, method = HttpMethodType.GET, url = url)
     }
 
     /** Create a request in the selected collection, ensuring a default collection exists when needed. */
     fun addTabInSelectedCollection() {
         val collId = selectedCollectionId
-        val folder = if (collId != null) collections.firstOrNull { it.id == collId && it.isFolder } else null
+        val folder = if (collId != null) findFolder(collId) else null
         if (folder != null) {
             addRequestToCollection(folder.id)
         } else {
@@ -1446,6 +1594,13 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
                 val userHeadersSnapshot = tab.headers
                     .filter { it.kind == HeaderKind.USER }
                     .map { it.key to it.value }
+                    .toMutableList()
+                val sseAccept = tab.headers.firstOrNull { isSseAccept(it.key, it.value, it.enabled) }
+                if (sseAccept != null &&
+                    userHeadersSnapshot.none { it.first.equals(SystemHeaderRules.ACCEPT, ignoreCase = true) }
+                ) {
+                    userHeadersSnapshot.add(sseAccept.key to sseAccept.value)
+                }
                 val bodyContentsSnapshot: Map<String, String> =
                     tab.bodyContents.entries.associate { it.key.name to it.value }
                 val formEntriesSnapshot = tab.formRows.map { r ->
@@ -1473,6 +1628,10 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
                     userHeaders        = userHeadersSnapshot,
                     preRequestScript   = tab.preRequestScript.ifBlank { null },
                     testScript         = tab.testScript.ifBlank { null },
+                    kind               = tab.kind,
+                    mcpConfig          = tab.mcpConfig.copy(
+                        url = tab.url.ifBlank { tab.mcpConfig.url },
+                    ),
                 )
                 return true
             }

@@ -413,6 +413,39 @@ const a = 1;
         assertEquals(input, result)
     }
 
+    @Test
+    fun autoFormat_json5_on_formats_commented_body() {
+        val input = """
+            {
+              "name": "Ada",
+              // "role": "admin",
+              "active": true
+            }
+        """.trimIndent()
+        val result = autoFormat(input, SyntaxLanguage.JSON, allowJson5 = true)
+        assertTrue(result.contains("//"), result)
+        assertTrue(result.contains("role"), result)
+        assertTrue(result.contains("Ada"), result)
+
+        val compact = autoFormat("{a:1,}", SyntaxLanguage.JSON, allowJson5 = true)
+        assertTrue(compact.lines().size > 1, compact)
+        assertTrue(compact.contains("a"), compact)
+        assertTrue(!compact.contains("\"a\""), compact)
+        assertTrue(compact.contains(","), compact)
+    }
+
+    @Test
+    fun autoFormat_json5_off_leaves_commented_body() {
+        val input = """
+            {
+              "name": "Ada",
+              // "role": "admin",
+              "active": true
+            }
+        """.trimIndent()
+        assertEquals(input, autoFormat(input, SyntaxLanguage.JSON, allowJson5 = false))
+    }
+
     // ── tryPrettyPrint ──────────────────────────────────────────
 
     @Test
@@ -437,5 +470,14 @@ const a = 1;
     fun fileExtension_javascript() {
         assertEquals("js", fileExtensionForContentType("application/javascript"))
         assertEquals("js", fileExtensionForContentType("text/javascript"))
+    }
+}
+
+class ReadOnlyFormatOffloadTest {
+    @Test
+    fun shouldOffloadReadOnlyFormat_cutoff() {
+        assertTrue(!shouldOffloadReadOnlyFormat(READ_ONLY_FORMAT_OFFLOAD_CHARS))
+        assertTrue(!shouldOffloadReadOnlyFormat(1))
+        assertTrue(shouldOffloadReadOnlyFormat(READ_ONLY_FORMAT_OFFLOAD_CHARS + 1))
     }
 }

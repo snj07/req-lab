@@ -54,17 +54,22 @@ actual fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier =
 
 actual fun pickFileForImport(onResult: (String) -> Unit) {
     val chooser = JFileChooser()
+    chooser.applyRememberedDirectory()
     chooser.fileFilter = FileNameExtensionFilter("JSON files", "json")
     if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-        runCatching { chooser.selectedFile.readText() }
+        val selected = chooser.selectedFile
+        rememberChooserDirectory(selected)
+        runCatching { selected.readText() }
             .onSuccess { onResult(it) }
     }
 }
 
 actual fun pickBinaryFileForRequest(onResult: (PickedBinaryFile) -> Unit) {
     val chooser = JFileChooser()
+    chooser.applyRememberedDirectory()
     if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
         val selected = chooser.selectedFile
+        rememberChooserDirectory(selected)
         runCatching { selected.readBytes() }
             .onSuccess { bytes ->
                 val base64 = Base64.getEncoder().encodeToString(bytes)
@@ -75,13 +80,29 @@ actual fun pickBinaryFileForRequest(onResult: (PickedBinaryFile) -> Unit) {
 
 actual fun saveFileForExport(content: String, defaultFilename: String) {
     val chooser = JFileChooser()
-    chooser.selectedFile = File(defaultFilename)
+    chooser.applyRememberedDirectory()
+    chooser.selectedFile = File(chooser.currentDirectory, defaultFilename)
     chooser.fileFilter = FileNameExtensionFilter("JSON files", "json")
     if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
         var file = chooser.selectedFile
         if (!file.name.endsWith(".json")) file = File(file.absolutePath + ".json")
+        rememberChooserDirectory(file)
         runCatching { file.writeText(content) }
     }
+}
+
+private fun JFileChooser.applyRememberedDirectory() {
+    val path = FileChooserMemory.directoryToOpen(PlatformStorage.getString(FileChooserMemory.LAST_DIR_KEY)) { candidate ->
+        File(candidate).isDirectory
+    }
+    if (path != null) currentDirectory = File(path)
+}
+
+private fun rememberChooserDirectory(file: File) {
+    val path = FileChooserMemory.directoryToRemember(file.absolutePath) { candidate ->
+        File(candidate).isDirectory
+    }
+    if (path != null) PlatformStorage.putString(FileChooserMemory.LAST_DIR_KEY, path)
 }
 
 actual object PlatformStorage {

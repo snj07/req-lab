@@ -163,4 +163,17 @@ class AppStateBehaviorTest {
             "Repeated syncSystemHeaders calls must not reset a user-overridden Accept value",
         )
     }
+
+    @Test
+    fun mcp_session_is_reused_until_tab_is_closed() {
+        val state = AppState()
+        val tab = state.openTabs.first()
+        val first = state.getOrCreateMcpSession(tab.id)
+        val second = state.getOrCreateMcpSession(tab.id)
+        assertTrue(first === second, "MCP session must survive tab switches")
+        val tabId = tab.id
+        state.closeTab(0)
+        val afterClose = state.getOrCreateMcpSession(tabId)
+        assertTrue(first !== afterClose, "Closing the tab must dispose the MCP session")
+    }
 }

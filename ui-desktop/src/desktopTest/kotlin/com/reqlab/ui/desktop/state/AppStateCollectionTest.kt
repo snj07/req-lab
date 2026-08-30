@@ -3,7 +3,11 @@ package com.reqlab.ui.shared.state
 import androidx.compose.runtime.mutableStateListOf
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.McpRoot
+import com.reqlab.core.model.McpSamplingMode
+import com.reqlab.core.model.RequestKind
 import com.reqlab.ui.shared.components.moveRequestToCollection
+import com.reqlab.ui.shared.persistence.ImportExportRepository
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -35,6 +39,52 @@ class AppStateCollectionTest {
         state.addRequestToCollection("nonexistent-id")
 
         assertEquals(tabsBefore, state.openTabs.size)
+    }
+
+    @Test
+    fun addRequestToCollection_adds_into_nested_folder() {
+        val state = AppState(withDemoData = true)
+        val root = state.collections.first()
+        val nested = CollectionNode(
+            id = "nested-folder",
+            name = "Nested",
+            isFolder = true,
+            children = mutableStateListOf(),
+        )
+        root.children.add(nested)
+        val rootCount = root.children.size
+
+        state.addRequestToCollection(nested.id)
+
+        assertEquals(rootCount, root.children.size)
+        assertEquals(1, nested.children.size)
+        assertEquals("New Request", nested.children.single().name)
+        assertEquals(root.id, state.selectedCollectionId)
+        assertEquals(nested.children.single().id, state.selectedRequestId)
+    }
+
+    @Test
+    fun addMcpAndSse_add_into_nested_folder() {
+        val state = AppState(withDemoData = true)
+        val root = state.collections.first()
+        val nested = CollectionNode(
+            id = "nested-folder-mcp-sse",
+            name = "Nested",
+            isFolder = true,
+            children = mutableStateListOf(),
+        )
+        root.children.add(nested)
+
+        state.addMcpConnectionToCollection(nested.id)
+        state.addSseRequestToCollection(nested.id)
+
+        assertEquals(2, nested.children.size)
+        assertEquals(RequestKind.MCP, nested.children[0].kind)
+        assertEquals("New MCP Connection", nested.children[0].name)
+        assertEquals(RequestKind.HTTP, nested.children[1].kind)
+        assertEquals("New SSE Request", nested.children[1].name)
+        assertTrue(nested.children[1].hasSseAccept())
+        assertEquals(root.id, state.selectedCollectionId)
     }
 
     @Test
@@ -253,6 +303,95 @@ class AppStateCollectionTest {
         assertEquals("Renamed request", tab.name)
         val node = state.collections.flatMap { it.children }.first { it.id == requestId }
         assertEquals("Renamed request", node.name)
+    }
+
+    @Test
+    fun syncTabToCollectionNode_writes_mcp_config_for_export() {
+        val state = AppState(withDemoData = true)
+        val collectionId = state.collections.first().id
+        state.addMcpConnectionToCollection(collectionId)
+        val tab = state.openTabs.last()
+        tab.mcpConfig = tab.mcpConfig.copy(
+            samplingMode = McpSamplingMode.MANUAL,
+            args = listOf("--keep"),
+            roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")),
+        )
+        assertTrue(state.syncTabToCollectionNode(tab))
+        val node = state.collections.first().children.first { it.id == tab.id }
+        assertEquals(RequestKind.MCP, node.kind)
+        assertEquals(McpSamplingMode.MANUAL, node.mcpConfig!!.samplingMode)
+        assertEquals(listOf("--keep"), node.mcpConfig!!.args)
+        assertEquals("file:///tmp/reqlab", node.mcpConfig!!.roots.single().uri)
+        val exported = ImportExportRepository.exportCollectionToString(state.collections.first())
+        assertTrue(exported.contains("MANUAL"))
+        assertTrue(exported.contains("file:///tmp/reqlab"))
+        assertTrue(exported.contains("--keep"))
+    }
+
+    @Test
+    fun mcp_client_field_change_marks_tab_dirty() {
+        val tab = RequestTabState()
+        tab.kind = RequestKind.MCP
+        tab.markSaved()
+        assertFalse(tab.isDirty)
+        tab.mcpConfig = tab.mcpConfig.copy(autoRespondElicitation = false)
+        tab.markDirty()
+        assertTrue(tab.isDirty)
+        tab.markSaved()
+        assertFalse(tab.isDirty)
+        tab.mcpConfig = tab.mcpConfig.copy(roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")))
+        tab.markDirty()
+        assertTrue(tab.isDirty)
+    }
+
+    @Test
+    fun addSseRequestToCollection_prefills_get_and_accept_header() {
+        val state = AppState(withDemoData = true)
+        val collectionId = state.collections.first().id
+        state.addSseRequestToCollection(collectionId)
+        val node = state.collections.first().children.first { it.name == "New SSE Request" }
+        assertEquals(RequestKind.HTTP, node.kind)
+        assertEquals(HttpMethodType.GET, node.method)
+        assertEquals("{{baseUrl}}/sse", node.url)
+        assertTrue(node.hasSseAccept())
+        val tab = state.openTabs.last()
+        assertEquals("New SSE Request", tab.name)
+        assertEquals(HttpMethodType.GET, tab.method)
+        assertEquals("{{baseUrl}}/sse", tab.url)
+        assertTrue(tab.hasSseAccept())
+        val accept = tab.headers.first { it.key.equals("Accept", ignoreCase = true) }
+        assertEquals("text/event-stream", accept.value)
+    }
+
+    @Test
+    fun addSseRequestToCollection_generates_unique_name() {
+        val state = AppState(withDemoData = true)
+        val collectionId = state.collections.first().id
+        state.addSseRequestToCollection(collectionId)
+        state.addSseRequestToCollection(collectionId)
+        val names = state.collections.first().children.map { it.name }
+        assertTrue("New SSE Request" in names)
+        assertTrue("New SSE Request 2" in names)
+    }
+
+    @Test
+    fun syncTabToCollectionNode_persists_sse_accept_and_clears_when_json() {
+        val state = AppState(withDemoData = true)
+        val collectionId = state.collections.first().id
+        state.addSseRequestToCollection(collectionId)
+        val tab = state.openTabs.last()
+        assertTrue(state.syncTabToCollectionNode(tab))
+        val nodeAfterSave = state.collections.first().children.first { it.id == tab.id }
+        assertTrue(nodeAfterSave.hasSseAccept())
+        assertTrue(
+            nodeAfterSave.userHeaders.any {
+                it.first.equals("Accept", ignoreCase = true) && it.second.contains("text/event-stream")
+            },
+        )
+        tab.headers.first { it.key.equals("Accept", ignoreCase = true) }.value = "application/json"
+        assertTrue(state.syncTabToCollectionNode(tab))
+        val nodeAfterClear = state.collections.first().children.first { it.id == tab.id }
+        assertFalse(nodeAfterClear.hasSseAccept())
     }
 
     // ── Issue 1: Closing last tab ────────────────────────────────────

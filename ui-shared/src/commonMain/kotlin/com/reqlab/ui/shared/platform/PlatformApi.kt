@@ -60,7 +60,9 @@ expect fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier
 
 /**
  * Pick a file from the filesystem and deliver its text content to [onResult].
- * On desktop this opens a JFileChooser; on web it triggers an <input type=file>.
+ * On desktop this opens a JFileChooser starting at the last imported/exported
+ * folder (user home on first use). On web it triggers an `<input type=file>`;
+ * browsers do not allow setting that dialog's start directory.
  */
 expect fun pickFileForImport(onResult: (String) -> Unit)
 

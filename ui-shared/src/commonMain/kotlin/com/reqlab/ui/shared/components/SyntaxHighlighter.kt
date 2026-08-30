@@ -2,6 +2,7 @@ package com.reqlab.ui.shared.components
 
 import androidx.compose.ui.text.AnnotatedString
 import com.reqlab.editor.core.ContentTypeUtil
+import com.reqlab.editor.core.EditorEngine
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.core.LanguageRegistry
 import com.reqlab.editor.core.XmlMode
@@ -136,13 +137,13 @@ fun applySearchHighlights(
 
 fun formatXml(raw: String): String = XmlMode.format(raw)
 
-fun tryPrettyPrint(raw: String): String {
+fun tryPrettyPrint(raw: String, allowJson5: Boolean = false): String {
     if (!LanguageRegistry.hasProvider(LanguageMode.JSON)) LanguageRegistry.registerBuiltins()
-    return LanguageRegistry.getProvider(LanguageMode.JSON).format(raw)
+    return editorAutoFormat(raw, LanguageMode.JSON, allowJson5)
 }
 
-fun autoFormat(raw: String, language: SyntaxLanguage): String =
-    editorAutoFormat(raw, language.toLanguageMode())
+fun autoFormat(raw: String, language: SyntaxLanguage, allowJson5: Boolean = false): String =
+    editorAutoFormat(raw, language.toLanguageMode(), allowJson5)
 
 // ── Validation ──────────────────────────────────────────────────
 
@@ -152,10 +153,10 @@ data class JsonValidationError(
     val col: Int = -1,
 )
 
-fun validateJson(text: String): JsonValidationError? {
+fun validateJson(text: String, allowJson5: Boolean = false): JsonValidationError? {
     if (text.isBlank()) return null
     if (!LanguageRegistry.hasProvider(LanguageMode.JSON)) LanguageRegistry.registerBuiltins()
-    val errors = LanguageRegistry.getProvider(LanguageMode.JSON).validate(text)
+    val errors = EditorEngine().validate(text, LanguageMode.JSON, allowJson5)
     if (errors.isEmpty()) return null
     val first = errors.first()
     return JsonValidationError(

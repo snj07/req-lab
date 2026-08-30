@@ -4,18 +4,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.withTimeoutOrNull
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -23,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -92,10 +91,10 @@ internal fun LineView(
     // A value of -1f means no cursor on this line; treat as fully transparent.
     val effectiveCursorAlpha = cursorVisible.coerceAtLeast(0f)
 
-    val lineText: String = remember(version, docLine) {
+    val lineText: String = remember(version, docLine, document) {
         if (docLine < document.lineCount) document.lineText(docLine) else ""
     }
-    val lineStartOffset: Int = remember(version, docLine) {
+    val lineStartOffset: Int = remember(version, docLine, document) {
         if (docLine < document.lineCount) document.lineStart(docLine) else 0
     }
 
@@ -121,8 +120,6 @@ internal fun LineView(
         )
     }
 
-    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-
     val measured: TextLayoutResult = remember(annotated, wordWrap, containerWidthPx) {
         // Compose's packed Constraints use 18 bits per dimension: max = (1 shl 18) - 1 = 262_143 px.
         // In non-wordWrap mode, measuring an unbounded single line can easily exceed this limit
@@ -137,7 +134,7 @@ internal fun LineView(
             annotated, textStyle,
             softWrap    = wordWrap,
             constraints = constraints,
-        ).also { layoutResult = it }
+        )
     }
 
     // Notify caller whenever the layout is (re-)computed so the drag handler
@@ -146,6 +143,8 @@ internal fun LineView(
     LaunchedEffect(measured) {
         onLayoutMeasured?.invoke(measured)
     }
+
+    val measuredLatest = rememberUpdatedState(measured)
 
     val lineLen    = lineText.length
     val lineEndOff = lineStartOffset + lineLen
@@ -165,16 +164,23 @@ internal fun LineView(
     val lineHeightDp = with(density) { measured.size.height.toDp() }.coerceAtLeast(20.dp)
     val lineWidthDp  = with(density) { measured.size.width.toDp() }
     val wrapping = wordWrap && containerWidthPx > 0
+    val padStartPx = with(density) { LINE_PAD_START.toPx() }
+    val padTopPx = with(density) { LINE_PAD_VERT.toPx() }
 
     Box(
         modifier = modifier
             .then(if (wrapping) Modifier.fillMaxWidth() else Modifier)
-            .height(lineHeightDp)
-            .pointerInput(lineStartOffset) {
+            .semantics { contentDescription = lineText }
+            .pointerInput(lineStartOffset, version, document, wordWrap, containerWidthPx) {
+                fun toLayout(p: Offset) = Offset(
+                    (p.x - padStartPx).coerceAtLeast(0f),
+                    (p.y - padTopPx).coerceAtLeast(0f),
+                )
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val lr0 = layoutResult ?: return@awaitEachGesture
-                    val charOff0 = offsetInLayout(lr0, down.position)
+                    val layout = measuredLatest.value
+                    val charOff0 = if (down.position.x < padStartPx) 0
+                        else offsetInLayout(layout, toLayout(down.position))
                     val absOff0 = lineStartOffset + charOff0
 
                     // Immediately place cursor on first press — no delay.
@@ -183,7 +189,7 @@ internal fun LineView(
                     onTap(absOff0, shiftHeld)
                     down.consume()
 
-                    val lineHeightPx = with(density) { lineHeightDp.toPx() }
+                    val lineHeightPx = with(density) { lineHeightDp.toPx() } + padTopPx * 2f
                     // Drain pointer events until release, handling drag selection
                     // with zero startup delay (drag starts on the very first move event).
                     var released = false
@@ -195,8 +201,8 @@ internal fun LineView(
                         if (ptr.position != ptr.previousPosition) {
                             dragged = true
                             if (ptr.position.y in 0f..lineHeightPx) {
-                                val lr = layoutResult ?: break
-                                val charOff = offsetInLayout(lr, ptr.position)
+                                val charOff = if (ptr.position.x < padStartPx) 0
+                                    else offsetInLayout(measuredLatest.value, toLayout(ptr.position))
                                 onDragTo?.invoke(lineStartOffset + charOff)
                             }
                             ptr.consume()
@@ -215,7 +221,9 @@ internal fun LineView(
                         }
                     }
                 }
-            },
+            }
+            .padding(start = LINE_PAD_START, end = LINE_PAD_END, top = LINE_PAD_VERT, bottom = LINE_PAD_VERT)
+            .height(lineHeightDp),
     ) {
         Canvas(
             modifier = if (wrapping) Modifier.matchParentSize()
@@ -273,6 +281,10 @@ private fun offsetInLayout(lr: TextLayoutResult, position: androidx.compose.ui.g
 }
 
 private const val MAX_RENDER_CHARS_PER_LINE = 50_000
+
+internal val LINE_PAD_START = 8.dp
+internal val LINE_PAD_END = 16.dp
+internal val LINE_PAD_VERT = 1.dp
 
 /**
  * Compose's Constraints representation caps each dimension at (1 shl 18) − 1 = 262_143 px.

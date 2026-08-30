@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +54,8 @@ import com.reqlab.ui.shared.components.HorizontalSplitPane
 import com.reqlab.ui.shared.components.OperationProgressDialog
 import com.reqlab.ui.shared.components.RealtimePanel
 import com.reqlab.ui.shared.components.RequestEditor
+import com.reqlab.ui.shared.components.McpPanel
+import com.reqlab.ui.shared.components.McpWorkspaceResponse
 import com.reqlab.ui.shared.components.RequestTabsBar
 import com.reqlab.ui.shared.components.ResponseViewer
 import com.reqlab.ui.shared.components.SettingsDialog
@@ -115,7 +118,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy" +
+                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies" +
                     "|${state.selectedEnvironment?.name ?: ""}"
             }
         }.drop(1)
@@ -142,7 +145,8 @@ fun MainScreen(state: AppState = remember { AppState() }) {
             // rows triggers auto-save even if bodyContent length is unchanged.
             val formCount = t?.formRows?.size ?: 0
             val urlEncCount = t?.urlencodedRows?.size ?: 0
-            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|BL:$bodyLen|FR:$formCount|UE:$urlEncCount|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}"
+            val mcp = t?.mcpClientFingerprint() ?: ""
+            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|BL:$bodyLen|FR:$formCount|UE:$urlEncCount|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}|$mcp"
         }.drop(1)
             .collect {
                 if (state.settings.autoSaveRequests) {
@@ -201,7 +205,10 @@ fun MainScreen(state: AppState = remember { AppState() }) {
                     isMeta && event.key == Key.Enter -> {
                         val activeTab = state.activeTab
                         if (activeTab != null) {
-                            if (activeTab.isLoading) {
+                            if (activeTab.kind == com.reqlab.core.model.RequestKind.MCP) {
+                                val session = state.getOrCreateMcpSession(activeTab.id)
+                                if (activeTab.isLoading) session.cancelCall() else session.pendingShortcut?.invoke()
+                            } else if (activeTab.isLoading) {
                                 activeTab.currentJob?.cancel()
                                 activeTab.isLoading = false
                             } else {
@@ -372,22 +379,44 @@ private fun ColumnScope.HttpWorkspaceContent(
 
                 val tab = state.activeTab
                 if (tab != null) {
-                    if (state.settings.responseLayout == ResponseLayout.RIGHT) {
+                    if (tab.kind == com.reqlab.core.model.RequestKind.MCP) {
+                        if (state.settings.responseLayout == ResponseLayout.RIGHT) {
+                            HorizontalSplitPane(
+                                modifier = Modifier.weight(1f).testTag("mcp-workspace"),
+                                splitFraction = state.requestResponseSplit,
+                                onSplitChanged = { state.requestResponseSplit = it },
+                                first = { McpPanel(state, tab) },
+                                second = { McpWorkspaceResponse(state, tab) },
+                            )
+                        } else {
+                            VerticalSplitPane(
+                                modifier = Modifier.weight(1f).testTag("mcp-workspace"),
+                                splitFraction = state.mainVerticalSplit,
+                                onSplitChanged = { state.mainVerticalSplit = it },
+                                first = { McpPanel(state, tab) },
+                                second = { McpWorkspaceResponse(state, tab) },
+                            )
+                        }
+                    } else if (state.settings.responseLayout == ResponseLayout.RIGHT) {
                         HorizontalSplitPane(
                             modifier = Modifier.weight(1f).testTag("response-layout-right"),
                             splitFraction = state.requestResponseSplit,
                             onSplitChanged = { state.requestResponseSplit = it },
                             first = {
-                                RequestEditor(
-                                    tab = tab,
-                                    state = state,
-                                    onSend = { sendRequest(scope, state, tab) },
-                                    onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
-                                    onSave = { saveRequest(scope, state, tab) },
-                                )
+                                key(tab.id) {
+                                    RequestEditor(
+                                        tab = tab,
+                                        state = state,
+                                        onSend = { sendRequest(scope, state, tab) },
+                                        onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
+                                        onSave = { saveRequest(scope, state, tab) },
+                                    )
+                                }
                             },
                             second = {
-                                ResponseViewer(tab)
+                                key(tab.id) {
+                                    ResponseViewer(tab)
+                                }
                             },
                         )
                     } else {
@@ -396,16 +425,20 @@ private fun ColumnScope.HttpWorkspaceContent(
                             splitFraction = state.mainVerticalSplit,
                             onSplitChanged = { state.mainVerticalSplit = it },
                             first = {
-                                RequestEditor(
-                                    tab = tab,
-                                    state = state,
-                                    onSend = { sendRequest(scope, state, tab) },
-                                    onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
-                                    onSave = { saveRequest(scope, state, tab) },
-                                )
+                                key(tab.id) {
+                                    RequestEditor(
+                                        tab = tab,
+                                        state = state,
+                                        onSend = { sendRequest(scope, state, tab) },
+                                        onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
+                                        onSave = { saveRequest(scope, state, tab) },
+                                    )
+                                }
                             },
                             second = {
-                                ResponseViewer(tab)
+                                key(tab.id) {
+                                    ResponseViewer(tab)
+                                }
                             },
                         )
                     }

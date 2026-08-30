@@ -3,6 +3,7 @@ package com.reqlab.editor.ui
 import androidx.compose.ui.text.AnnotatedString
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.core.LanguageRegistry
+import com.reqlab.editor.core.Json5EditorSupport
 
 /**
  * Top-level highlighting entry points.
@@ -39,8 +40,13 @@ fun highlightLine(line: String, mode: LanguageMode): AnnotatedString {
  * Delegates to the [com.reqlab.editor.core.TextFormatter] (via [LanguageRegistry]) registered
  * for [mode], so custom formatters registered with [LanguageRegistry.register] are picked up.
  */
-fun autoFormat(text: String, mode: LanguageMode): String {
+fun autoFormat(text: String, mode: LanguageMode, allowJson5: Boolean = false): String {
     if (!LanguageRegistry.hasProvider(mode)) LanguageRegistry.registerBuiltins()
-    return LanguageRegistry.getProvider(mode).format(text)
+    val provider = if (allowJson5 && mode == LanguageMode.JSON) {
+        Json5EditorSupport
+    } else {
+        LanguageRegistry.getProvider(mode)
+    }
+    return provider.format(text)
 }
 

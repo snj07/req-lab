@@ -53,6 +53,8 @@ class UiRegressionFixTest {
             "Expand All",
             "Collapse All",
             "Add Request",
+            "New MCP Connection",
+            "New SSE Request",
             "Export Collection",
             "Duplicate Collection",
             "Rename",

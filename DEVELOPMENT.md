@@ -168,7 +168,72 @@ Available endpoints (selected):
 | POST | `/v1/chat/ndjson` | Ollama-style NDJSON chat stream |
 | POST | `/v1/embeddings` | Fixed-length embedding vector |
 | GET | `/v1/chat/slow` | Delayed non-stream chat completion |
+| GET | `/sse` | Finite SSE (`text/event-stream`); `?count=` (default 3), `?delayMs=` |
+| POST | `/sse` | Finite SSE; last event echoes a body snippet; same `count` / `delayMs` |
+| POST | `/mcp` | MCP Streamable HTTP (JSON-RPC) |
+| POST | `/mcp/auth/bearer` | MCP Bearer `reqlab-mcp-token` |
+| POST | `/mcp/auth/basic` | MCP Basic `admin` / `password` |
+| POST | `/mcp/auth/apikey` | MCP header `X-Api-Key: reqlab-key` |
+| POST | `/mcp/auth/jwt` | MCP Bearer JWT `reqlab-mcp-jwt` |
+| POST | `/mcp/authed` | MCP requiring Bearer `reqlab-mcp-token` and `X-Api-Key: reqlab-key` |
+| POST | `/mcp?requireTenant=true&tenant=acme` | MCP query params required by the mock |
+| GET | `/mcp` | MCP GET SSE (server-initiated) |
+| DELETE | `/mcp` | MCP session terminate (`Mcp-Session-Id`) |
+| GET | `/mcp/sse` | Legacy MCP HTTP+SSE |
+| POST | `/mcp/messages` | Legacy MCP POST |
+| POST | `/mcp/secure` | MCP with Bearer `mcp-oauth-token` |
+| GET | `/.well-known/oauth-*` | MCP OAuth 2.1 metadata |
+| POST | `/oauth/register` `/oauth/token` | Dynamic registration + token |
+| GET | `/oauth/authorize` | Authorization (auto-approve for tests) |
 | WS | `/ws` | WebSocket echo |
+
+### MCP stdio and PATH shim
+
+Stdio only (no HTTP port):
+
+```bash
+./gradlew :sample-server:run --args='--stdio'
+```
+
+To put `sample-server` on your login PATH:
+
+```bash
+./gradlew :sample-server:installMcpCommand
+```
+
+That writes `~/.local/bin/sample-server` on macOS/Linux, or `%USERPROFILE%\AppData\Local\ReqLab\bin\sample-server.cmd` on Windows. The shim always starts MCP stdio (the Gradle HTTP start script without `--stdio` would print a banner on stdout and break framing). After install, the command field is `sample-server`. On a new machine or after moving the repo, run `installMcpCommand` again (the shim stores an absolute path to this repo’s `mcp-stdio` script).
+
+How ReqLab resolves a stdio command:
+
+1. Parse the command line (tokens and quoting). Quoted paths with spaces work.
+2. Resolve PATH from your login shell (`zsh`/`bash -ilc 'echo $PATH'`), merged with the process PATH, then look up the first token. On Windows, `.cmd` / `.exe` / `.bat` are tried.
+3. If the first token looks like a path (`/` or `\`), resolve it against the process working directory once if that file exists.
+4. Otherwise spawn the token as given. GUI apps often see a short PATH; the login-shell PATH is why `npx` and Homebrew binaries still resolve.
+
+### MCP mock tools
+
+| Tool | Role |
+|---|---|
+| `echo` | Returns the `text` argument |
+| `add` | Adds numbers |
+| `fail` | Error result |
+| `slow` | Delayed result |
+| `trigger_sampling` | Server requests `sampling/createMessage`; tool result is the client’s sampling reply |
+| `trigger_roots` | Server requests `roots/list`; tool result is the client’s roots JSON |
+| `trigger_elicitation` | Server requests `elicitation/create`; tool result is accept/decline |
+| `trigger_ping` | Server requests `ping`; tool result is the client’s empty ping result |
+
+Resources, prompts, and logging are also advertised so you can exercise those tabs. Product guide: [docs/mcp.md](docs/mcp.md).
+
+### MCP sample-server troubleshooting
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| `Cannot run program "sample-server"` | Not on login PATH | `./gradlew :sample-server:installMcpCommand`, or an absolute path, or `./gradlew :sample-server:run --args='--stdio'` |
+| Handshake is garbage / HTTP banner on stdout | PATH `sample-server` is the Gradle HTTP script without `--stdio` | Use the shim from `installMcpCommand` |
+| `Cannot run program "sample-server --stdio"` | Whole string used as the executable (fixed in current builds) | Use current ReqLab; command can be `sample-server` once it is on PATH |
+| Timed out waiting for legacy SSE endpoint | Sample HTTP server not running, or GET `/mcp/sse` not streaming | `./gradlew :sample-server:run`; URL is `/mcp/sse` not `/mcp` |
+| `Lost pending id` on legacy SSE | Reply arrived on SSE before POST returned (fixed in current builds) | Use current ReqLab; **Legacy** and `http://localhost:8080/mcp/sse` |
 
 LLM mock query parameters:
 
@@ -244,7 +309,10 @@ GitHub Actions release packaging is defined in [`.github/workflows/release.yml`]
 - **Push to `main`** — runs a quality gate first, then builds desktop artifacts for macOS/Linux/Windows.
 - **Push tag `v*`** — runs the same quality gate, then builds artifacts and publishes a GitHub release.
 - **Manual dispatch** — allows on-demand artifact builds.
-
+```
+git tag -a v1.18.0 -m "<MSG>"
+git push origin v1.18.0
+```
 ---
 
 ## Project Architecture

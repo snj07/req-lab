@@ -91,6 +91,16 @@ class QaFixesStateTest {
     }
 
     @Test
+    fun `logNetworkEvent echoToConsole false writes logs only`() {
+        val state = AppState()
+        val consoleStart = state.consoleLogs.size
+        state.logNetworkEvent("MCP SENT initialize", echoToConsole = false)
+        assertEquals(consoleStart, state.consoleLogs.size, "Console should stay unchanged")
+        assertEquals(1, state.networkEventLogs.size)
+        assertEquals("MCP SENT initialize", state.networkEventLogs.last().message)
+    }
+
+    @Test
     fun `M-3 regular log() does NOT write to networkEventLogs`() {
         val state = AppState()
         state.log("Some console message", LogLevel.INFO)

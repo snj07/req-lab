@@ -6,6 +6,9 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
@@ -152,6 +155,73 @@ class NoWrapHorizontalScrollTest {
         }
         vm.dispose()
     }
+
+    @Test
+    fun toggling_word_wrap_resets_horizontal_scroll() {
+        val content = "HORIZONTAL_".repeat(80)
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
+        var wrap by mutableStateOf(false)
+        var capturedState: ScrollState? = null
+
+        composeRule.setContent {
+            Box(Modifier.size(400.dp, 100.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = false,
+                    language = LanguageMode.PLAIN_TEXT,
+                    wordWrap = wrap,
+                    testTagPrefix = "hscroll_wrap",
+                    onScrollStateReady = { capturedState = it },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val scrollState = requireNotNull(capturedState)
+        composeRule.runOnIdle { scrollState.dispatchRawDelta(320f) }
+        composeRule.waitForIdle()
+        assertTrue(scrollState.value > 0, "fixture: must be scrolled horizontally")
+
+        composeRule.runOnUiThread { wrap = true }
+        composeRule.waitForIdle()
+        composeRule.runOnUiThread { wrap = false }
+        composeRule.waitForIdle()
+
+        assertEquals(0, scrollState.value, "Wrap toggle must zero horizontal scroll")
+        vm.dispose()
+    }
+
+    @Test
+    fun switching_viewmodels_resets_horizontal_scroll_on_new_tab() {
+        val vmA = EditorViewModel("HORIZONTAL_".repeat(80), LanguageMode.PLAIN_TEXT)
+        val vmB = EditorViewModel("short", LanguageMode.PLAIN_TEXT)
+        var active by mutableStateOf(vmA)
+        val states = mutableMapOf<EditorViewModel, ScrollState>()
+
+        composeRule.setContent {
+            Box(Modifier.size(400.dp, 100.dp)) {
+                EditorRenderer(
+                    viewModel = active,
+                    isReadOnly = false,
+                    language = LanguageMode.PLAIN_TEXT,
+                    wordWrap = false,
+                    testTagPrefix = "htab",
+                    onScrollStateReady = { states[active] = it },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val scrollA = requireNotNull(states[vmA])
+        composeRule.runOnIdle { scrollA.dispatchRawDelta(320f) }
+        composeRule.waitForIdle()
+        assertTrue(scrollA.value > 0)
+
+        composeRule.runOnUiThread { active = vmB }
+        composeRule.waitForIdle()
+        assertEquals(0, requireNotNull(states[vmB]).value, "New tab must not inherit A's horizontal scroll")
+
+        vmA.dispose()
+        vmB.dispose()
+    }
 }
 
 /**
@@ -252,6 +322,74 @@ class NoWrapClickRightOfTextTest {
         assertEquals(
             9, cursor,
             "Click right of second line must place cursor at offset 9, got $cursor"
+        )
+        vm.dispose()
+    }
+
+    @Test
+    fun click_near_gutter_on_first_line_places_cursor_near_start() {
+        val content = listOf("Hello", "World", "Test").joinToString("\n")
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
+        composeRule.setContent {
+            Box(Modifier.size(500.dp, 150.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = false,
+                    language = LanguageMode.PLAIN_TEXT,
+                    wordWrap = false,
+                    testTagPrefix = "click_gutter",
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        vm.moveCursorTo(5)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("click_gutter-line-numbers")
+            .performTouchInput {
+                down(Offset(100.dp.toPx(), 10f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        val cursor = vm.state.value.cursorOffset
+        assertTrue(
+            cursor in 0..2,
+            "Click just after the gutter on 'Hello' must be near the start, not line end; got $cursor",
+        )
+        vm.dispose()
+    }
+
+    @Test
+    fun click_near_gutter_on_second_line_places_cursor_near_that_line_start() {
+        val content = listOf("Hello", "World", "Test").joinToString("\n")
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
+        composeRule.setContent {
+            Box(Modifier.size(500.dp, 150.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = false,
+                    language = LanguageMode.PLAIN_TEXT,
+                    wordWrap = false,
+                    testTagPrefix = "click_gutter2",
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        vm.moveCursorTo(0)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("click_gutter2-line-numbers")
+            .performTouchInput {
+                down(Offset(100.dp.toPx(), 30f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        val cursor = vm.state.value.cursorOffset
+        assertTrue(
+            cursor in 6..8,
+            "Click just after the gutter on 'World' must be near that line start, not line end; got $cursor",
         )
         vm.dispose()
     }

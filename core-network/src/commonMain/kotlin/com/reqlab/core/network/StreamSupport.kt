@@ -1,6 +1,7 @@
 package com.reqlab.core.network
 
 import com.reqlab.core.model.RequestDefinition
+import com.reqlab.core.model.json.Json5
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -25,20 +26,26 @@ fun isNdjsonContentType(contentType: String?): Boolean {
 fun isStreamingContentType(contentType: String?): Boolean =
     isSseContentType(contentType) || isNdjsonContentType(contentType)
 
-fun requestLooksLikeStreaming(request: RequestDefinition): Boolean {
+fun requestLooksLikeStreaming(request: RequestDefinition, allowJson5: Boolean = true): Boolean {
     val acceptStreaming = request.headers.any {
         it.enabled && it.key.equals("Accept", ignoreCase = true) &&
             (it.value.contains("text/event-stream", ignoreCase = true) ||
                 it.value.contains("ndjson", ignoreCase = true))
     }
     val body = request.body.content.orEmpty()
-    val streamTrue = Regex(""""stream"\s*:\s*true""").containsMatchIn(body)
+    val streamProbe = if (allowJson5) {
+        Json5.toWireJson(body).getOrDefault(body)
+    } else {
+        body
+    }
+    val streamTrue = Regex(""""stream"\s*:\s*true""").containsMatchIn(streamProbe)
     return acceptStreaming || streamTrue
 }
 
 data class SseEvent(
     val data: String,
     val eventType: String = "message",
+    val id: String? = null,
     val isDone: Boolean = false,
 )
 
@@ -55,6 +62,7 @@ data class SseEvent(
  */
 class SseParser {
     private var eventType: String = ""
+    private var eventId: String? = null
     private val data = StringBuilder()
 
     fun feedLine(line: String): SseEvent? {
@@ -65,27 +73,34 @@ class SseParser {
                 eventType = stripOneLeadingSpace(normalized.removePrefix("event:"))
                 return null
             }
+            normalized.startsWith("id:") -> {
+                eventId = stripOneLeadingSpace(normalized.removePrefix("id:"))
+                return null
+            }
             normalized.startsWith("data:") -> {
                 val payload = stripOneLeadingSpace(normalized.removePrefix("data:"))
                 if (data.isNotEmpty()) data.append('\n')
                 data.append(payload)
                 return null
             }
-            normalized.isBlank() && data.isNotEmpty() -> return dispatch()
+            normalized.isBlank() && (data.isNotEmpty() || eventType.isNotEmpty() || eventId != null) -> return dispatch()
             else -> return null
         }
     }
 
-    fun flush(): SseEvent? = if (data.isNotEmpty()) dispatch() else null
+    fun flush(): SseEvent? = if (data.isNotEmpty() || eventType.isNotEmpty() || eventId != null) dispatch() else null
 
     private fun dispatch(): SseEvent {
         val payload = data.toString()
         val type = eventType.ifEmpty { "message" }
+        val id = eventId
         data.clear()
         eventType = ""
+        eventId = null
         return SseEvent(
             data = payload,
             eventType = type,
+            id = id,
             isDone = payload.trim() == "[DONE]",
         )
     }

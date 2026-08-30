@@ -50,6 +50,7 @@ actual object NetworkClientFactory {
             logger = logger,
             retryPolicy = retryPolicy,
             idleTimeoutMs = timeoutMs,
+            allowJson5InJsonBodies = settings.allowJson5InJsonBodies,
         )
     }
 }

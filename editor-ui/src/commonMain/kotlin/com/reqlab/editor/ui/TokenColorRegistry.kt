@@ -50,6 +50,7 @@ object TokenColorRegistry {
                 TokenType.KEYWORD     -> SyntaxColors.jsonBoolean
                 TokenType.PROPERTY    -> SyntaxColors.jsonKey
                 TokenType.PUNCTUATION -> SyntaxColors.jsonBrace
+                TokenType.COMMENT     -> SyntaxColors.jsComment
                 TokenType.ERROR       -> Color(0xFFFF6B6B)
                 else                  -> SyntaxColors.plain
             }

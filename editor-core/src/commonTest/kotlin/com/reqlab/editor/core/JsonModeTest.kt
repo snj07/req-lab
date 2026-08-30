@@ -106,4 +106,42 @@ class JsonModeTest {
         assertEquals(1, regions[0].startLine)
         assertEquals(4, regions[0].endLine)
     }
+
+    @Test
+    fun formatUnwrapsJsonEncodedObjectString() {
+        val input = """{"text":"{\"jsonrpc\":\"2.0\",\"id\":\"srv-sample\"}"}"""
+        val result = JsonMode.format(input)
+        assertTrue(result.contains("\"text\": {") || result.contains("\"text\":{"), result)
+        assertTrue(result.contains("\"srv-sample\""), result)
+        assertTrue(!result.contains("\\\""), result)
+    }
+
+    @Test
+    fun formatUnwrapsJsonEncodedArrayString() {
+        val result = JsonMode.format("""{"items":"[1,2]"}""")
+        assertTrue(result.contains("\"items\": [") || result.contains("\"items\":["), result)
+        assertTrue(result.contains("1"), result)
+    }
+
+    @Test
+    fun formatLeavesPlainString() {
+        val result = JsonMode.format("""{"text":"hello"}""")
+        assertTrue(result.contains("\"hello\""), result)
+        assertTrue(!result.contains("\"text\": {") && !result.contains("\"text\":{"), result)
+    }
+
+    @Test
+    fun formatPreservesNumericValue() {
+        val result = JsonMode.format("""{"text":6}""")
+        assertTrue(result.contains("\"text\": 6") || result.contains("\"text\":6"), result)
+    }
+
+    @Test
+    fun formatLeavesBooleanAndNumberStrings() {
+        val boolResult = JsonMode.format("""{"text":"true"}""")
+        assertTrue(boolResult.contains("\"true\""), boolResult)
+        val numResult = JsonMode.format("""{"text":"6"}""")
+        assertTrue(numResult.contains("\"6\""), numResult)
+        assertTrue(!numResult.contains("\"text\": 6") && !numResult.contains("\"text\":6"), numResult)
+    }
 }

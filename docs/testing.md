@@ -156,6 +156,8 @@ JVM integration and E2E tests against the running `sample-server`.
 - `NetworkClientWsAndMultipartE2ETest` — WebSocket connect/send/receive/disconnect; multipart upload
 - `SampleCollectionE2ETest` — scripted collection run against the sample collection fixture
 - `LlmApiE2ETest` — OpenAI-compatible chat, SSE/NDJSON assembly, embeddings, tools, JSON mode, error statuses, visible `demo=true` stream
+- `SseApiE2ETest` — generic `GET`/`POST /sse` (`text/event-stream`), finite ping events, POST body echo, `?count=`
+- `McpHttpE2ETest` — MCP Streamable HTTP handshake, tools, resources, prompts, subscribe notifications, Bearer+API key auth, variable interpolation, OAuth Bearer, GET SSE notifications
 - `ScriptingDocsIntegrationTest` — scripting doc examples execute correctly end-to-end
 - `WebSocketE2ETest` — WebSocket lifecycle: connect, send, receive, close, reconnect
 
@@ -189,6 +191,8 @@ JVM integration and E2E tests against the running `sample-server`.
 - `POST /v1/chat/ndjson`
 - `POST /v1/embeddings`
 - `GET /v1/chat/slow?ms=<delay>`
+- `GET /sse` (`?count=`, `?delayMs=`)
+- `POST /sse` (echoes a body snippet as the last event)
 - `WS /ws`
 
 Simulation parameters used by current endpoints:
