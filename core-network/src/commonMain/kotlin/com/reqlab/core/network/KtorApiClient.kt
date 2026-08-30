@@ -7,6 +7,7 @@ import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestDefinition
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
+import com.reqlab.core.model.json.Json5
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpTimeoutConfig
@@ -59,6 +60,7 @@ class KtorApiClient(
         prettyPrint = true
     },
     private val idleTimeoutMs: Long = 30_000L,
+    private val allowJson5InJsonBodies: Boolean = true,
 ) : ApiClient {
 
     override fun execute(
@@ -184,7 +186,7 @@ class KtorApiClient(
         applyAuth(builder, request, variableLayers)
         applyBody(builder, request, variableLayers)
 
-        if (requestLooksLikeStreaming(request)) {
+        if (requestLooksLikeStreaming(request, allowJson5InJsonBodies)) {
             runCatching {
                 builder.timeout {
                     requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
@@ -286,9 +288,16 @@ class KtorApiClient(
         contentType: ContentType,
         rawContent: String?,
         variableLayers: List<Map<String, String>>,
+        canonicalizeJson5: Boolean = false,
     ) {
         builder.contentType(contentType)
-        builder.setBody(VariableResolver.resolve(rawContent.orEmpty(), variableLayers))
+        val resolved = VariableResolver.resolve(rawContent.orEmpty(), variableLayers)
+        val wire = if (canonicalizeJson5) {
+            Json5.toWireJson(resolved).getOrElse { throw it }
+        } else {
+            resolved
+        }
+        builder.setBody(wire)
     }
 
     private fun applyBody(
@@ -299,7 +308,13 @@ class KtorApiClient(
         val body = request.body
         when (body.type) {
             BodyType.NONE -> Unit
-            BodyType.JSON -> applyRawBody(builder, ContentType.Application.Json, body.content, variableLayers)
+            BodyType.JSON -> applyRawBody(
+                builder,
+                ContentType.Application.Json,
+                body.content,
+                variableLayers,
+                canonicalizeJson5 = allowJson5InJsonBodies,
+            )
             BodyType.RAW_TEXT -> applyRawBody(builder, ContentType.Text.Plain, body.content, variableLayers)
             BodyType.XML -> applyRawBody(builder, ContentType.Application.Xml, body.content, variableLayers)
             BodyType.HTML -> applyRawBody(builder, ContentType.Text.Html, body.content, variableLayers)
@@ -320,7 +335,12 @@ class KtorApiClient(
                     }
                     if (!variables.isNullOrBlank()) {
                         append(",\"variables\":")
-                        append(variables)
+                        if (allowJson5InJsonBodies) {
+                            val resolvedVars = VariableResolver.resolve(variables, variableLayers)
+                            append(Json5.toWireJson(resolvedVars).getOrElse { throw it })
+                        } else {
+                            append(variables)
+                        }
                     }
                     append("}")
                 }

@@ -87,6 +87,8 @@
   "sending_request": "Envoi de la requête…",
   "server_processing": "Traitement serveur",
   "settings": "Paramètres",
+  "json5_in_json_bodies": "JSON5 dans les corps JSON",
+  "settings_json5_in_json_bodies_desc": "Autoriser les commentaires, virgules finales et clés non citées dans les corps JSON. L'envoi transmet toujours du JSON strict. Désactiver restaure la validation, le formatage et l'envoi stricts.",
   "success": "Succès",
   "system_theme": "Système",
   "tcp_connect": "Connexion TCP",

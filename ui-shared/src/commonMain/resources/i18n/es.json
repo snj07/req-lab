@@ -87,6 +87,8 @@
   "sending_request": "Enviando solicitud…",
   "server_processing": "Procesamiento del servidor",
   "settings": "Configuración",
+  "json5_in_json_bodies": "JSON5 en cuerpos JSON",
+  "settings_json5_in_json_bodies_desc": "Permitir comentarios, comas finales y claves sin comillas en los cuerpos JSON. El envío sigue transmitiendo JSON estricto. Desactivar restaura la validación, el formato y el envío estrictos.",
   "success": "Éxito",
   "system_theme": "Sistema",
   "tcp_connect": "Conexión TCP",

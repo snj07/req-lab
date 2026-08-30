@@ -12,6 +12,7 @@ import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.McpConnectionConfig
 import com.reqlab.core.model.RequestKind
+import com.reqlab.editor.core.Json5EditorSupport
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.ui.EditorViewModel
 import com.reqlab.editor.ui.SyntaxHighlighterRegistry
@@ -242,6 +243,9 @@ class AppSettings {
     // Environment
     /** Name of the last selected environment; restored on app launch. Empty = first env. */
     var selectedEnvName      by mutableStateOf("")
+
+    /** When true (default), JSON bodies accept JSON5; Send converts to strict JSON. */
+    var allowJson5InJsonBodies by mutableStateOf(true)
 }
 
 // ── Per-tab state (one per open request tab) ────────────────────
@@ -336,12 +340,29 @@ class RequestTabState(
     // Keyed by BodyType so JSON/XML/etc. each keep independent undo stacks.
     // Not part of Compose state — not serialized, not tracked for dirty checking.
     private val bodyViewModelCache = HashMap<BodyType, EditorViewModel>()
+    private var json5EnabledForCachedJsonVm: Boolean? = null
 
-    fun getOrCreateBodyViewModel(bodyType: BodyType, initialText: String, languageMode: LanguageMode): EditorViewModel {
+    fun getOrCreateBodyViewModel(
+        bodyType: BodyType,
+        initialText: String,
+        languageMode: LanguageMode,
+        allowJson5: Boolean = true,
+    ): EditorViewModel {
         if (!SyntaxHighlighterRegistry.hasHighlighter(LanguageMode.PLAIN_TEXT)) {
             SyntaxHighlighterRegistry.registerBuiltinHighlighters()
         }
-        return bodyViewModelCache.getOrPut(bodyType) { EditorViewModel(initialText, languageMode) }
+        if (languageMode == LanguageMode.JSON) {
+            val cached = bodyViewModelCache[bodyType]
+            if (cached != null && json5EnabledForCachedJsonVm != null && json5EnabledForCachedJsonVm != allowJson5) {
+                cached.dispose()
+                bodyViewModelCache.remove(bodyType)
+            }
+            json5EnabledForCachedJsonVm = allowJson5
+        }
+        return bodyViewModelCache.getOrPut(bodyType) {
+            val provider = if (allowJson5 && languageMode == LanguageMode.JSON) Json5EditorSupport else null
+            EditorViewModel(initialText, languageMode, provider)
+        }
     }
 
     /** Disposes all cached body EditorViewModels. Call before removing this tab. */

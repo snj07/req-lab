@@ -1,10 +1,11 @@
 package com.reqlab.core.network
 
+import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.GraphQlBody
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestBody
 import com.reqlab.core.model.RequestDefinition
-import com.reqlab.core.model.BodyType
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -19,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class KtorApiClientTest {
@@ -331,4 +333,136 @@ class KtorApiClientTest {
         assertEquals("Hello", success.response.assembledText)
         assertEquals(1, success.response.streamEvents.size)
     }
+
+    @Test
+    fun json5_on_compact_json_body_bytes_are_unchanged() = runTest {
+        var capturedBody = ""
+        val client = capturingClient { capturedBody = it }
+        val compact = """{"name":"Alice","age":30}"""
+        val events = client.execute(jsonRequest(compact)).toList()
+        assertTrue(events.last() is NetworkEvent.Success)
+        assertEquals(compact, capturedBody)
+    }
+
+    @Test
+    fun json5_on_comments_and_trailing_comma_arrive_as_strict_json() = runTest {
+        var capturedBody = ""
+        val client = capturingClient { capturedBody = it }
+        val json5 = """
+            {
+              "name": "Ada",
+              // "role": "admin",
+              "active": true,
+            }
+        """.trimIndent()
+        val events = client.execute(jsonRequest(json5)).toList()
+        assertTrue(events.last() is NetworkEvent.Success)
+        assertTrue(!capturedBody.contains("//"), capturedBody)
+        assertTrue(!capturedBody.contains("role"), capturedBody)
+        assertTrue(capturedBody.contains("Ada"), capturedBody)
+        assertTrue(capturedBody.contains("active"), capturedBody)
+    }
+
+    @Test
+    fun json5_on_invalid_json5_does_not_send() = runTest {
+        var sent = false
+        val client = capturingClient { sent = true }
+        val events = client.execute(jsonRequest("{ not json5")).toList()
+        assertFalse(sent)
+        assertTrue(events.last() is NetworkEvent.Failure)
+    }
+
+    @Test
+    fun json5_off_sends_comments_as_is() = runTest {
+        var capturedBody = ""
+        val client = capturingClient(allowJson5 = false) { capturedBody = it }
+        val json5 = """
+            {
+              "name": "Ada",
+              // "role": "admin",
+              "active": true,
+            }
+        """.trimIndent()
+        val events = client.execute(jsonRequest(json5)).toList()
+        assertTrue(events.last() is NetworkEvent.Success)
+        assertTrue(capturedBody.contains("//"), capturedBody)
+        assertTrue(capturedBody.contains("role"), capturedBody)
+    }
+
+    @Test
+    fun json5_on_resolves_vars_in_strings_and_omits_comment_only_secrets() = runTest {
+        var capturedBody = ""
+        val client = capturingClient { capturedBody = it }
+        val json5 = """
+            {
+              "id": "{{n}}",
+              // "secret": "{{secret}}"
+            }
+        """.trimIndent()
+        val events = client.execute(
+            jsonRequest(json5),
+            listOf(mapOf("n" to "42", "secret" to "s3cret-value")),
+        ).toList()
+        assertTrue(events.last() is NetworkEvent.Success)
+        assertTrue(capturedBody.contains("42"), capturedBody)
+        assertTrue(!capturedBody.contains("{{n}}"), capturedBody)
+        assertTrue(!capturedBody.contains("s3cret-value"), capturedBody)
+        assertTrue(!capturedBody.contains("secret"), capturedBody)
+    }
+
+    @Test
+    fun json5_on_graphql_variables_with_comment_are_strict_json() = runTest {
+        var capturedBody = ""
+        val client = capturingClient { capturedBody = it }
+        val request = RequestDefinition(
+            id = "req-gql",
+            name = "GQL",
+            method = HttpMethodType.POST,
+            url = "https://api.test/graphql",
+            body = RequestBody(
+                type = BodyType.GRAPHQL,
+                graphQl = GraphQlBody(
+                    query = "query { user }",
+                    variablesJson = "{\n  // skip\n  \"id\": \"1\",\n}",
+                ),
+            ),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+        val events = client.execute(request).toList()
+        assertTrue(events.last() is NetworkEvent.Success)
+        assertTrue(!capturedBody.contains("//"), capturedBody)
+        assertTrue(capturedBody.contains("\"id\""), capturedBody)
+        assertTrue(capturedBody.contains("1"), capturedBody)
+    }
+
+    private fun capturingClient(
+        allowJson5: Boolean = true,
+        onCapture: (String) -> Unit,
+    ): KtorApiClient {
+        val mockEngine = MockEngine { request ->
+            onCapture(request.body.toByteArray().decodeToString())
+            respond(
+                content = "ok",
+                status = HttpStatusCode.OK,
+                headers = io.ktor.http.headersOf(HttpHeaders.ContentType, ContentType.Text.Plain.toString()),
+            )
+        }
+        val http = HttpClient(mockEngine) { expectSuccess = false }
+        return KtorApiClient(
+            httpClient = http,
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+            allowJson5InJsonBodies = allowJson5,
+        )
+    }
+
+    private fun jsonRequest(content: String) = RequestDefinition(
+        id = "req-json",
+        name = "JSON",
+        method = HttpMethodType.POST,
+        url = "https://api.test/json",
+        body = RequestBody(BodyType.JSON, content = content),
+        createdAtEpochMillis = 1L,
+        updatedAtEpochMillis = 1L,
+    )
 }

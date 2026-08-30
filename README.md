@@ -65,7 +65,7 @@ The collection includes an **LLM (OpenAI-compatible)** folder, an **SSE** folder
 - Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`
 - URL editing with live query-parameter table synchronisation
 - Request headers editor (key/value table)
-- Body types: JSON, GraphQL, form-data, x-www-form-urlencoded, raw text, binary
+- Body types: JSON (JSON5 authoring by default; Send converts to strict JSON), GraphQL, form-data, x-www-form-urlencoded, raw text, binary
 - Auth: None, Basic, Bearer Token, API Key, JWT
 - Retry controls and per-request timeout
 - HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`). Collection items with `Accept: text/event-stream` show an **SSE** badge in the HTTP method color; folder ⋮ → **New SSE Request**

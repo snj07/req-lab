@@ -110,6 +110,35 @@ class ImportExportFixturesIntegrationTest {
         assertEquals(HttpMethodType.POST, postEvents.method)
     }
 
+    @Test
+    fun imported_json5_folder_keeps_authored_comments() {
+        val state = AppState(openDefaultTab = false, withDemoData = false)
+        ImportExportRepository.importCollectionFromString(state, collectionFixture.readText())
+
+        val bodyTypes = findFolder(state.collections, "Body Types")
+        assertNotNull(bodyTypes)
+        assertTrue(bodyTypes.children.any { it.isFolder && it.name == "JSON5" })
+
+        val comments = findRequest(state.collections, "POST JSON5 comments")
+        assertNotNull(comments)
+        val authored = comments.bodyContent.orEmpty().ifBlank {
+            comments.bodyContents["JSON"].orEmpty()
+        }
+        assertTrue(authored.contains("//"), authored)
+        assertTrue(authored.contains("role"), authored)
+
+        assertNotNull(findRequest(state.collections, "POST JSON5 trailing comma"))
+        assertNotNull(findRequest(state.collections, "POST JSON5 unquoted keys"))
+    }
+
+    private fun findFolder(nodes: List<CollectionNode>, name: String): CollectionNode? {
+        for (node in nodes) {
+            if (node.isFolder && node.name == name) return node
+            if (node.isFolder) findFolder(node.children, name)?.let { return it }
+        }
+        return null
+    }
+
     private fun findRequest(nodes: List<CollectionNode>, name: String): CollectionNode? {
         for (node in nodes) {
             if (!node.isFolder && node.name == name) return node

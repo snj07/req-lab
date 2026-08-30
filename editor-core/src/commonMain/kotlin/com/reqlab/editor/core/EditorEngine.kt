@@ -101,9 +101,10 @@ class EditorEngine {
     fun moveCursorRight(state: EditorState): EditorState =
         state.copy(cursor = state.cursor.moveRight(state.document), selection = SelectionModel.EMPTY)
 
-    fun validate(text: String, languageMode: LanguageMode): List<InlineEditorError> {
+    fun validate(text: String, languageMode: LanguageMode, allowJson5: Boolean = false): List<InlineEditorError> {
         if (text.isBlank()) return emptyList()
-        return LanguageRegistry.getProvider(languageMode).validate(text)
+        val provider = jsonProvider(languageMode, allowJson5)
+        return provider.validate(text)
     }
 
     fun visibleLines(state: EditorState): List<Pair<Int, String>> {
@@ -117,4 +118,8 @@ class EditorEngine {
         val foldRegions = if (state.foldingEnabled) provider.foldingRegions(state.document) else emptyList()
         return state.copy(diagnostics = diagnostics, folding = state.folding.updateRegions(foldRegions))
     }
+
+    private fun jsonProvider(languageMode: LanguageMode, allowJson5: Boolean): LanguageModeProvider =
+        if (allowJson5 && languageMode == LanguageMode.JSON) Json5EditorSupport
+        else LanguageRegistry.getProvider(languageMode)
 }

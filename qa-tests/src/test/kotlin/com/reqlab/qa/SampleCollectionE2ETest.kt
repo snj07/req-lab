@@ -1,5 +1,12 @@
 package com.reqlab.qa
 
+import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.RequestBody
+import com.reqlab.core.model.RequestDefinition
+import com.reqlab.core.network.KtorApiClient
+import com.reqlab.core.network.NetworkEvent
+import com.reqlab.core.network.RetryPolicy
 import com.reqlab.server.module
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -27,6 +34,7 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -38,6 +46,7 @@ import org.junit.Test
 import java.net.ServerSocket
 import java.util.Base64
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -332,6 +341,72 @@ class SampleCollectionE2ETest {
             assertTrue(parseJson(r.bodyAsText())["body"]?.jsonPrimitive?.content?.contains("Bob") == true)
         }
     }
+
+    @Test
+    fun body_json5_comments() {
+        runBlocking {
+            val body = """
+                {
+                  "name": "Ada",
+                  // "role": "admin",
+                  /* "debug": true, */
+                  "active": true
+                }
+            """.trimIndent()
+            val events = ktorClient().execute(json5Request(body)).toList()
+            val success = events.last() as NetworkEvent.Success
+            assertEquals(200, success.response.statusCode)
+            val echoed = parseJson(success.response.bodyText)["body"]?.jsonPrimitive?.content.orEmpty()
+            assertTrue(echoed.contains("Ada"), echoed)
+            assertFalse(echoed.contains("//"), echoed)
+            assertFalse(echoed.contains("role"), echoed)
+            assertFalse(echoed.contains("debug"), echoed)
+        }
+    }
+
+    @Test
+    fun body_json5_trailing_comma() {
+        runBlocking {
+            val body = """
+                {
+                  "name": "Ada",
+                  "active": true,
+                }
+            """.trimIndent()
+            val events = ktorClient().execute(json5Request(body)).toList()
+            val success = events.last() as NetworkEvent.Success
+            assertEquals(200, success.response.statusCode)
+            val echoed = parseJson(success.response.bodyText)["body"]?.jsonPrimitive?.content.orEmpty()
+            assertTrue(echoed.contains("Ada"), echoed)
+            assertFalse(echoed.trimEnd().endsWith(",}"), echoed)
+        }
+    }
+
+    @Test
+    fun body_json5_unquoted_keys() {
+        runBlocking {
+            val body = "{ name: 'Ada', active: true }"
+            val events = ktorClient().execute(json5Request(body)).toList()
+            val success = events.last() as NetworkEvent.Success
+            assertEquals(200, success.response.statusCode)
+            val echoed = parseJson(success.response.bodyText)["body"]?.jsonPrimitive?.content.orEmpty()
+            assertTrue(echoed.contains("Ada"), echoed)
+            assertTrue(echoed.contains("\"name\""), echoed)
+            assertFalse(echoed.contains("'Ada'"), echoed)
+        }
+    }
+
+    private fun ktorClient() = KtorApiClient(retryPolicy = RetryPolicy(maxAttempts = 1))
+
+    private fun json5Request(content: String) = RequestDefinition(
+        id = "json5",
+        name = "json5",
+        method = HttpMethodType.POST,
+        url = "$baseUrl/api/json",
+        body = RequestBody(BodyType.JSON, content = content),
+        createdAtEpochMillis = 1,
+        updatedAtEpochMillis = 1,
+    )
 
     @Test
     fun body_raw_text() {

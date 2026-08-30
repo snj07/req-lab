@@ -1,6 +1,7 @@
 package com.reqlab.core.network
 
 import com.reqlab.core.model.RequestDefinition
+import com.reqlab.core.model.json.Json5
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -25,14 +26,19 @@ fun isNdjsonContentType(contentType: String?): Boolean {
 fun isStreamingContentType(contentType: String?): Boolean =
     isSseContentType(contentType) || isNdjsonContentType(contentType)
 
-fun requestLooksLikeStreaming(request: RequestDefinition): Boolean {
+fun requestLooksLikeStreaming(request: RequestDefinition, allowJson5: Boolean = true): Boolean {
     val acceptStreaming = request.headers.any {
         it.enabled && it.key.equals("Accept", ignoreCase = true) &&
             (it.value.contains("text/event-stream", ignoreCase = true) ||
                 it.value.contains("ndjson", ignoreCase = true))
     }
     val body = request.body.content.orEmpty()
-    val streamTrue = Regex(""""stream"\s*:\s*true""").containsMatchIn(body)
+    val streamProbe = if (allowJson5) {
+        Json5.toWireJson(body).getOrDefault(body)
+    } else {
+        body
+    }
+    val streamTrue = Regex(""""stream"\s*:\s*true""").containsMatchIn(streamProbe)
     return acceptStreaming || streamTrue
 }
 

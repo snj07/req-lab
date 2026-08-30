@@ -36,12 +36,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -58,7 +58,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.reqlab.editor.core.InlineEditorError
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.ui.EditorRenderer
 import com.reqlab.editor.ui.EditorTheme
@@ -70,7 +69,13 @@ import com.reqlab.ui.shared.platform.readFromClipboard
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.LocalAppColors
 import com.reqlab.ui.shared.theme.ReqLabColors
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** Pretty-print of read-only bodies larger than this is offloaded off the composition thread. */
+internal const val READ_ONLY_FORMAT_OFFLOAD_CHARS = 64_000
+
+internal fun shouldOffloadReadOnlyFormat(length: Int): Boolean = length > READ_ONLY_FORMAT_OFFLOAD_CHARS
 
 // ── Theme Helper ─────────────────────────────────────────────────
 
@@ -114,8 +119,6 @@ private fun editorTheme(): EditorTheme {
  * @param enableDownload Show download-to-file button.
  * @param onDownload    Callback for the download action.
  * @param placeholder   Placeholder text shown when the editor is empty.
- * @param inlineErrors  Diagnostics to underline inline in editable mode.
- *                      Errors show as a red underline; warnings as amber.
  * @param testTagPrefix Prefix for Compose test tags.
  */
 @kotlinx.serialization.ExperimentalSerializationApi
@@ -134,10 +137,10 @@ fun CodeEditor(
     enableDownload: Boolean = false,
     onDownload: (() -> Unit)? = null,
     placeholder: String = "",
-    inlineErrors: List<InlineEditorError> = emptyList(),
     testTagPrefix: String = "code-editor",
     onCursorTap: ((Int) -> Unit)? = null,
     lineVariableSpans: ((lineText: String, lineStartOffset: Int) -> List<Pair<IntRange, androidx.compose.ui.graphics.Color>>)? = null,
+    allowJson5: Boolean = false,
     /**
      * An already-created [EditorViewModel] to use instead of creating a new one.
      * When provided, [CodeEditor] does NOT dispose it on removal — the caller
@@ -172,8 +175,22 @@ fun CodeEditor(
 
     // ── Format / display state ───────────────────────────────
     var isFormatted by remember { mutableStateOf(isReadOnly) }
-    val displayText = remember(text, isFormatted, language) {
-        if (isFormatted && isReadOnly) autoFormat(text, language) else text
+    var offloadedFormatted by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(text, isFormatted, language, allowJson5, isReadOnly) {
+        if (!isReadOnly || !isFormatted || !shouldOffloadReadOnlyFormat(text.length)) {
+            offloadedFormatted = null
+            return@LaunchedEffect
+        }
+        offloadedFormatted = withContext(Dispatchers.Default) {
+            autoFormat(text, language, allowJson5)
+        }
+    }
+    val displayText = remember(text, isFormatted, language, allowJson5, offloadedFormatted, isReadOnly) {
+        when {
+            !isReadOnly || !isFormatted -> text
+            shouldOffloadReadOnlyFormat(text.length) -> offloadedFormatted ?: text
+            else -> autoFormat(text, language, allowJson5)
+        }
     }
     // Keep doc in sync with external text (or formatted text for read-only),
     // but skip no-op updates. Re-applying identical text after paste can
@@ -189,7 +206,15 @@ fun CodeEditor(
     var showSearch by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var activeMatchIndex by remember { mutableIntStateOf(0) }
-    val coroutineScope = rememberCoroutineScope()
+    val editorFocus = remember { FocusRequester() }
+    // Bump a tick from click handlers; requestFocus in LaunchedEffect so it is
+    // not nested inside IconButton/performClick (deadlocks desktop tests).
+    var restoreFocusTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(restoreFocusTick) {
+        if (restoreFocusTick == 0) return@LaunchedEffect
+        try { editorFocus.requestFocus() } catch (_: Exception) { }
+    }
+    val restoreEditorFocus: () -> Unit = { restoreFocusTick++ }
 
     // ── Fold regions (synchronous, for toolbar display) ───────
     val allLines = remember(displayText) { displayText.split('\n') }
@@ -215,7 +240,10 @@ fun CodeEditor(
 
     val toggleSearch: () -> Unit = {
         showSearch = !showSearch
-        if (!showSearch) searchQuery = ""
+        if (!showSearch) {
+            searchQuery = ""
+            restoreEditorFocus()
+        }
     }
     LaunchedEffect(searchMatches.size) {
         activeMatchIndex = if (searchMatches.isNotEmpty())
@@ -256,7 +284,10 @@ fun CodeEditor(
                 isReadOnly = isReadOnly,
                 wordWrap = wordWrap,
                 onToggleWordWrap = if (enableWordWrap) {
-                    { wordWrap = !wordWrap }
+                    {
+                        wordWrap = !wordWrap
+                        restoreEditorFocus()
+                    }
                 } else null,
                 isFormatted = isFormatted,
                 onToggleFormat = if (enableFormat) {
@@ -264,9 +295,11 @@ fun CodeEditor(
                         if (isReadOnly) {
                             isFormatted = !isFormatted
                         } else {
-                            val formatted = autoFormat(text, language)
-                            if (formatted != text) onTextChange?.invoke(formatted)
+                            val current = viewModel.getFullText()
+                            val formatted = autoFormat(current, language, allowJson5)
+                            if (formatted != current) viewModel.replaceDocument(formatted)
                         }
+                        restoreEditorFocus()
                     }
                 } else null,
                 showSearch = showSearch,
@@ -274,15 +307,23 @@ fun CodeEditor(
                     toggleSearch
                 } else null,
                 onCopy = if (enableCopy) {
-                    { platformCopyToClipboard(viewModel.getFullText()) }
+                    {
+                        platformCopyToClipboard(viewModel.getFullText())
+                        restoreEditorFocus()
+                    }
                 } else null,
-                onDownload = if (enableDownload) onDownload else null,
+                onDownload = if (enableDownload) {
+                    {
+                        onDownload?.invoke()
+                        restoreEditorFocus()
+                    }
+                } else null,
                 hasFoldRegions = toolbarFoldRegions.isNotEmpty(),
                 onFoldAll   = if (enableFolding && toolbarFoldRegions.isNotEmpty()) {
-                    { viewModel.foldAll() }
+                    { viewModel.foldAll(); restoreEditorFocus() }
                 } else null,
                 onUnfoldAll = if (enableFolding && toolbarFoldRegions.isNotEmpty()) {
-                    { viewModel.unfoldAll() }
+                    { viewModel.unfoldAll(); restoreEditorFocus() }
                 } else null,
                 testTagPrefix = testTagPrefix,
             )
@@ -305,7 +346,7 @@ fun CodeEditor(
                         activeMatchIndex = (activeMatchIndex - 1 + searchMatches.size) % searchMatches.size
                     }
                 },
-                onClose = { showSearch = false; searchQuery = "" },
+                onClose = { showSearch = false; searchQuery = ""; restoreEditorFocus() },
                 testTagPrefix = testTagPrefix,
             )
         }
@@ -329,6 +370,7 @@ fun CodeEditor(
             activeSearchMatch = activeSearchMatch,
             onPrimaryTapOffset = onCursorTap,
             lineVariableSpans = lineVariableSpans,
+            focusRequester = editorFocus,
         )
     }
 }
@@ -470,6 +512,7 @@ private fun ToolbarBtn(
         onClick = onClick,
         modifier = Modifier
             .size(28.dp)
+            .focusProperties { canFocus = false }
             .then(if (testTag.isNotEmpty()) Modifier.testTag(testTag) else Modifier),
     ) {
         Icon(
@@ -548,13 +591,25 @@ private fun CodeEditorSearchBar(
             )
         }
 
-        IconButton(onClick = onPrev, modifier = Modifier.size(24.dp)) {
+        IconButton(
+            onClick = onPrev,
+            modifier = Modifier.size(24.dp).focusProperties { canFocus = false },
+        ) {
             Icon(Icons.Default.ArrowUpward, "Previous match", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
-        IconButton(onClick = onNext, modifier = Modifier.size(24.dp)) {
+        IconButton(
+            onClick = onNext,
+            modifier = Modifier.size(24.dp).focusProperties { canFocus = false },
+        ) {
             Icon(Icons.Default.ArrowDownward, "Next match", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
-        IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier
+                .size(24.dp)
+                .focusProperties { canFocus = false }
+                .testTag("$testTagPrefix-search-close"),
+        ) {
             Icon(Icons.Default.Close, "Close search", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }

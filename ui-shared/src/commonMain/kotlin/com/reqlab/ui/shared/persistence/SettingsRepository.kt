@@ -47,6 +47,7 @@ object SettingsRepository {
 
         settings.scriptPrefix = PlatformStorage.getString(PREFIX + "scriptPrefix") ?: settings.scriptPrefix
         settings.selectedEnvName = PlatformStorage.getString(PREFIX + "selectedEnvName") ?: settings.selectedEnvName
+        settings.allowJson5InJsonBodies = getBool("allowJson5InJsonBodies", settings.allowJson5InJsonBodies)
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ object SettingsRepository {
 
         PlatformStorage.putString(PREFIX + "scriptPrefix", settings.scriptPrefix)
         PlatformStorage.putString(PREFIX + "selectedEnvName", settings.selectedEnvName)
+        putBool("allowJson5InJsonBodies", settings.allowJson5InJsonBodies)
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

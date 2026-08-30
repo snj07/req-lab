@@ -164,6 +164,8 @@
   "settings_auto_save_desc": "Automatically save request changes before switching tabs",
   "settings_confirm_delete_desc": "Show confirmation dialog when deleting requests or collections",
   "settings_follow_redirects_desc": "Automatically follow HTTP 3xx redirect responses",
+  "json5_in_json_bodies": "JSON5 in JSON bodies",
+  "settings_json5_in_json_bodies_desc": "Allow comments, trailing commas, and unquoted keys in JSON request bodies. Send still transmits strict JSON. Turn off to restore strict JSON validation, formatting, and sending.",
   "settings_response_layout_desc": "Choose where response panel appears",
   "settings_enable_proxy_desc": "Route requests through a proxy server",
   "settings_language_change_hint": "Changes take effect immediately. The UI language will update when you close this dialog.",

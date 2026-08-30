@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -117,7 +118,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy" +
+                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies" +
                     "|${state.selectedEnvironment?.name ?: ""}"
             }
         }.drop(1)
@@ -402,16 +403,20 @@ private fun ColumnScope.HttpWorkspaceContent(
                             splitFraction = state.requestResponseSplit,
                             onSplitChanged = { state.requestResponseSplit = it },
                             first = {
-                                RequestEditor(
-                                    tab = tab,
-                                    state = state,
-                                    onSend = { sendRequest(scope, state, tab) },
-                                    onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
-                                    onSave = { saveRequest(scope, state, tab) },
-                                )
+                                key(tab.id) {
+                                    RequestEditor(
+                                        tab = tab,
+                                        state = state,
+                                        onSend = { sendRequest(scope, state, tab) },
+                                        onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
+                                        onSave = { saveRequest(scope, state, tab) },
+                                    )
+                                }
                             },
                             second = {
-                                ResponseViewer(tab)
+                                key(tab.id) {
+                                    ResponseViewer(tab)
+                                }
                             },
                         )
                     } else {
@@ -420,16 +425,20 @@ private fun ColumnScope.HttpWorkspaceContent(
                             splitFraction = state.mainVerticalSplit,
                             onSplitChanged = { state.mainVerticalSplit = it },
                             first = {
-                                RequestEditor(
-                                    tab = tab,
-                                    state = state,
-                                    onSend = { sendRequest(scope, state, tab) },
-                                    onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
-                                    onSave = { saveRequest(scope, state, tab) },
-                                )
+                                key(tab.id) {
+                                    RequestEditor(
+                                        tab = tab,
+                                        state = state,
+                                        onSend = { sendRequest(scope, state, tab) },
+                                        onCancel = { tab.currentJob?.cancel(); tab.isLoading = false },
+                                        onSave = { saveRequest(scope, state, tab) },
+                                    )
+                                }
                             },
                             second = {
-                                ResponseViewer(tab)
+                                key(tab.id) {
+                                    ResponseViewer(tab)
+                                }
                             },
                         )
                     }

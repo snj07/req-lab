@@ -275,4 +275,58 @@ class CopyCommandIntegrationTest {
 
         tempCommandFile.delete()
     }
+
+    @Test
+    fun json5_body_copy_strips_comments_when_enabled() {
+        val json5 = """
+            {
+              "name": "Ada",
+              // "role": "admin",
+              "active": true
+            }
+        """.trimIndent()
+        val tab = RequestTabState(
+            name = "JSON5 copy",
+            method = HttpMethodType.POST,
+            url = "http://localhost:$PORT/api/json",
+        ).apply {
+            bodyType = BodyType.JSON
+            bodyContent = json5
+        }
+
+        val curlOn = buildCurlCommand(tab, emptyList(), allowJson5 = true)
+        val pythonOn = buildPythonCommand(tab, emptyList(), allowJson5 = true)
+        val powershellOn = buildPowerShellCommand(tab, emptyList(), allowJson5 = true)
+        assertFalse(curlOn.contains("// \"role\""), curlOn)
+        assertFalse(pythonOn.contains("role"), pythonOn)
+        assertFalse(powershellOn.contains("// \"role\""), powershellOn)
+        assertFalse(curlOn.contains("role"), curlOn)
+        assertTrue(curlOn.contains("Ada"), curlOn)
+
+        val curlOff = buildCurlCommand(tab, emptyList(), allowJson5 = false)
+        val pythonOff = buildPythonCommand(tab, emptyList(), allowJson5 = false)
+        val powershellOff = buildPowerShellCommand(tab, emptyList(), allowJson5 = false)
+        assertTrue(curlOff.contains("// \"role\""), curlOff)
+        assertTrue(pythonOff.contains("role"), pythonOff)
+        assertTrue(powershellOff.contains("// \"role\""), powershellOff)
+    }
+
+    @Test
+    fun compact_json_copy_is_unchanged() {
+        val compact = """{"name":"Alice","age":30}"""
+        val tab = RequestTabState(
+            name = "compact JSON",
+            method = HttpMethodType.POST,
+            url = "http://localhost:$PORT/api/json",
+        ).apply {
+            bodyType = BodyType.JSON
+            bodyContent = compact
+        }
+        val curl = buildCurlCommand(tab, emptyList(), allowJson5 = true)
+        val python = buildPythonCommand(tab, emptyList(), allowJson5 = true)
+        val powershell = buildPowerShellCommand(tab, emptyList(), allowJson5 = true)
+        assertTrue(curl.contains(compact), curl)
+        assertTrue(python.contains("\\\"name\\\":\\\"Alice\\\""), python)
+        assertTrue(powershell.contains(compact), powershell)
+    }
 }

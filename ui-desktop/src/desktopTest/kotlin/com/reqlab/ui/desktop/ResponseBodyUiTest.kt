@@ -3,6 +3,7 @@ package com.reqlab.ui.desktop
 import com.reqlab.ui.shared.MainScreen
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -190,6 +191,17 @@ class ResponseBodyUiTest {
     fun download_body_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
         composeRule.onNodeWithTag("response-download-button").assertIsDisplayed()
+    }
+
+    @Test
+    fun download_button_click_restores_response_editor_focus() {
+        composeRule.setContent { MainScreen(stateWithJsonResponse()) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("response-download-button").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("response-input", useUnmergedTree = true).assertIsFocused()
     }
 
     // ── Search bar ──

@@ -47,7 +47,7 @@ class I18nCompletenessTest {
         "settings", "general", "theme", "network", "proxy", "language",
         "auto_save", "confirm_before_delete", "default_timeout",
         "response_layout", "follow_redirects", "dark_mode", "light_mode",
-        "system_theme",
+        "system_theme", "json5_in_json_bodies", "settings_json5_in_json_bodies_desc",
         // Global Variables
         "global_variables", "global_variables_desc", "add_variable",
         "no_global_variables", "variable_name", "value",

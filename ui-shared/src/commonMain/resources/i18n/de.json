@@ -87,6 +87,8 @@
   "sending_request": "Anfrage wird gesendet…",
   "server_processing": "Serververarbeitung",
   "settings": "Einstellungen",
+  "json5_in_json_bodies": "JSON5 in JSON-Bodies",
+  "settings_json5_in_json_bodies_desc": "Kommentare, nachgestellte Kommas und unquoted Keys in JSON-Request-Bodies erlauben. Gesendet wird weiterhin striktes JSON. Aus: strikte JSON-Prüfung, Formatierung und Übertragung.",
   "success": "Erfolg",
   "system_theme": "System",
   "tcp_connect": "TCP-Verbindung",

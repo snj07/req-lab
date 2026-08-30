@@ -63,4 +63,27 @@ class LlmTextAssemblerTest {
         )
         assertTrue(requestLooksLikeStreaming(accept))
     }
+
+    @Test
+    fun requestLooksLikeStreaming_json5_on_ignores_commented_stream_true() {
+        val commented = RequestDefinition(
+            id = "2",
+            name = "s",
+            method = HttpMethodType.POST,
+            url = "https://api.test/v1/chat/completions",
+            body = RequestBody(
+                BodyType.JSON,
+                content = """
+                    {
+                      // "stream": true
+                      "n": 1
+                    }
+                """.trimIndent(),
+            ),
+            createdAtEpochMillis = 1,
+            updatedAtEpochMillis = 1,
+        )
+        assertFalse(requestLooksLikeStreaming(commented, allowJson5 = true))
+        assertTrue(requestLooksLikeStreaming(commented, allowJson5 = false))
+    }
 }

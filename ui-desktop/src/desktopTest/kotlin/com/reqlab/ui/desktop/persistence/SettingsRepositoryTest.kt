@@ -30,6 +30,7 @@ class SettingsRepositoryTest {
         "settings.httpsProxy",
         "settings.scriptPrefix",
         "settings.selectedEnvName",
+        "settings.allowJson5InJsonBodies",
     )
 
     @Before
@@ -62,6 +63,7 @@ class SettingsRepositoryTest {
         assertFalse(settings.proxyEnabled)
         assertEquals("", settings.httpProxy)
         assertEquals("", settings.httpsProxy)
+        assertTrue(settings.allowJson5InJsonBodies)
     }
 
     // ── Round-trip ──────────────────────────────────────────────────────────
@@ -83,6 +85,7 @@ class SettingsRepositoryTest {
             httpProxy           = "http://proxy.example.com:8080"
             httpsProxy          = "https://proxy.example.com:8443"
             scriptPrefix        = "api"
+            allowJson5InJsonBodies = false
         }
 
         SettingsRepository.save(original)
@@ -104,6 +107,7 @@ class SettingsRepositoryTest {
         assertEquals("http://proxy.example.com:8080", loaded.httpProxy)
         assertEquals("https://proxy.example.com:8443", loaded.httpsProxy)
         assertEquals("api", loaded.scriptPrefix)
+        assertFalse(loaded.allowJson5InJsonBodies)
     }
 
     // ── Theme enum ──────────────────────────────────────────────────────────
@@ -182,6 +186,26 @@ class SettingsRepositoryTest {
         SettingsRepository.load(loaded)
 
         assertEquals("Staging", loaded.selectedEnvName)
+    }
+
+    @Test
+    fun json5_in_json_bodies_defaults_to_true() {
+        val settings = AppSettings()
+        SettingsRepository.load(settings)
+        assertTrue(settings.allowJson5InJsonBodies)
+    }
+
+    @Test
+    fun json5_in_json_bodies_round_trips_false_and_true() {
+        SettingsRepository.save(AppSettings().apply { allowJson5InJsonBodies = false })
+        val off = AppSettings()
+        SettingsRepository.load(off)
+        assertFalse(off.allowJson5InJsonBodies)
+
+        SettingsRepository.save(AppSettings().apply { allowJson5InJsonBodies = true })
+        val on = AppSettings()
+        SettingsRepository.load(on)
+        assertTrue(on.allowJson5InJsonBodies)
     }
 
     @Test

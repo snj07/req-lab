@@ -29,13 +29,10 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,9 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
-import com.reqlab.editor.core.EditorEngine
-import com.reqlab.editor.core.InlineEditorError
-import com.reqlab.editor.core.LanguageMode
 import com.reqlab.ui.shared.platform.pickBinaryFileForRequest
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.MutableFormDataRow
@@ -272,15 +266,6 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 // RAW and GRAPHQL → unified inline code editor with
                 // syntax highlighting, code folding, search, and format
                 val language = bodyTypeToLanguage(tab.bodyType)
-
-                // Compute inline diagnostics to underline in the editor.
-                // JSON: exact line/col from the parser.
-                // XML:  no line info from the lightweight validator — underline line 1.
-                // Route all validation through EditorEngine from editor-core so that
-                // inline error logic is centralised and testable independently of the UI.
-                val editorEngine = remember { EditorEngine() }
-                var inlineErrors by remember { mutableStateOf<List<InlineEditorError>>(emptyList()) }
-                var validationPaused by remember { mutableStateOf(false) }
                 var bodyPopupVariable by remember { mutableStateOf<String?>(null) }
                 // Compute the set of all defined variable names from all active layers
                 // (env → collection → globals). Used to colour tokens orange (resolved)
@@ -288,48 +273,8 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                 val definedVarNames: Set<String> = state?.activeVariableLayers()
                     ?.flatMap { it.keys }?.toSet() ?: emptySet()
 
-                // Debounce validation — avoid calling EditorEngine.validate() on
-                // every keystroke. For large files validation runs on Dispatchers.Default
-                // so the main/UI thread is NEVER blocked by O(n) validation work.
-                // We keep validation enabled up to 20 MB with a larger debounce window.
-                LaunchedEffect(tab.bodyContent, tab.bodyType) {
-                    val content = tab.bodyContent
-                    val bodyType = tab.bodyType
-                    if (content.isBlank()) {
-                        inlineErrors = emptyList()
-                        validationPaused = false
-                        return@LaunchedEffect
-                    }
-                    if (shouldPauseValidation(content.length)) {
-                        // Clear stale errors immediately and surface a paused indicator
-                        inlineErrors = emptyList()
-                        validationPaused = true
-                        return@LaunchedEffect
-                    }
-                    validationPaused = false
-                    val delayMs = when {
-                        content.length > 5_000_000 -> 1200L
-                        content.length > 1_000_000 -> 900L
-                        content.length > 100_000 -> 600L
-                        else -> 300L
-                    }
-                    kotlinx.coroutines.delay(delayMs)
-                    // Re-read after delay — user may have continued typing
-                    if (content != tab.bodyContent) return@LaunchedEffect
-                    val langMode = when (bodyType) {
-                        BodyType.JSON       -> LanguageMode.JSON
-                        BodyType.XML        -> LanguageMode.XML
-                        BodyType.HTML       -> LanguageMode.HTML
-                        BodyType.JAVASCRIPT -> LanguageMode.JAVASCRIPT
-                        else                -> LanguageMode.PLAIN_TEXT
-                    }
-                    // Run the actual O(n) validation off the main thread
-                    val result = withContext(Dispatchers.Default) {
-                        editorEngine.validate(content, langMode)
-                    }
-                    // Guard: only apply if still current content
-                    if (content == tab.bodyContent) inlineErrors = result
-                }
+                val allowJson5 = state.settings.allowJson5InJsonBodies
+                val validationPaused = shouldPauseValidation(tab.bodyContent.length)
 
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (validationPaused) {
@@ -347,6 +292,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                             bodyType = tab.bodyType,
                             initialText = tab.bodyContent,
                             languageMode = language.toLanguageMode(),
+                            allowJson5 = allowJson5 && language == SyntaxLanguage.JSON,
                         )
                         CodeEditor(
                             text = tab.bodyContent,
@@ -360,7 +306,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                             enableWordWrap = true,
                             enableCopy = true,
                             enableDownload = false,
-                            inlineErrors = inlineErrors,
+                            allowJson5 = allowJson5 && language == SyntaxLanguage.JSON,
                             placeholder = when (tab.bodyType) {
                                 BodyType.JSON       -> "{\n  \n}"
                                 BodyType.XML        -> "<root>\n  \n</root>"

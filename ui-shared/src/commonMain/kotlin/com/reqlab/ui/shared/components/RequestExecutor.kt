@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.components
 import com.reqlab.core.model.AuthConfig
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.json.Json5
 import com.reqlab.core.model.FormDataEntry
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
@@ -496,7 +497,11 @@ private fun parseBinaryAttachment(content: String): Pair<String, String>? {
 }
 
 /** Builds a cURL command string for the given tab, resolving {{vars}} from variable layers. */
-fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+fun buildCurlCommand(
+    tab: RequestTabState,
+    variableLayers: List<Map<String, String>> = emptyList(),
+    allowJson5: Boolean = true,
+): String {
     fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val parts = mutableListOf("curl", "-X ${tab.method.name}")
@@ -528,7 +533,7 @@ fun buildCurlCommand(tab: RequestTabState, variableLayers: List<Map<String, Stri
     }
 
     if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
-        parts += "--data ${shellQuote(resolve(tab.bodyContent))}"
+        parts += "--data ${shellQuote(jsonBodyForCopy(tab, resolve(tab.bodyContent), allowJson5))}"
     }
 
     // Build URL with inline query params
@@ -551,10 +556,15 @@ internal fun resolveUrlForLog(
 }
 
 /** cURL command with raw (unresolved) {{variables}} preserved – useful for sharing templates. */
-fun buildCurlCommandRaw(tab: RequestTabState): String = buildCurlCommand(tab, emptyList())
+fun buildCurlCommandRaw(tab: RequestTabState, allowJson5: Boolean = true): String =
+    buildCurlCommand(tab, emptyList(), allowJson5)
 
 /** Python `requests` snippet resolving {{vars}}. */
-fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+fun buildPythonCommand(
+    tab: RequestTabState,
+    variableLayers: List<Map<String, String>> = emptyList(),
+    allowJson5: Boolean = true,
+): String {
     fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val sb = StringBuilder()
@@ -573,7 +583,7 @@ fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, St
     val method = tab.method.name.uppercase()
 
     if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
-        val body = resolve(tab.bodyContent)
+        val body = jsonBodyForCopy(tab, resolve(tab.bodyContent), allowJson5)
         sb.appendLine("data = ${pyStr(body)}")
         sb.appendLine()
         sb.append("response = requests.${method.lowercase()}(${pyStr(url)}")
@@ -589,7 +599,11 @@ fun buildPythonCommand(tab: RequestTabState, variableLayers: List<Map<String, St
 }
 
 /** HTTPie CLI snippet resolving {{vars}}. */
-fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+fun buildHTTPieCommand(
+    tab: RequestTabState,
+    variableLayers: List<Map<String, String>> = emptyList(),
+    allowJson5: Boolean = true,
+): String {
     fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val parts = mutableListOf("http", tab.method.name)
@@ -600,14 +614,18 @@ fun buildHTTPieCommand(tab: RequestTabState, variableLayers: List<Map<String, St
 
     if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
         parts += "--raw"
-        parts += shellQuote(resolve(tab.bodyContent))
+        parts += shellQuote(jsonBodyForCopy(tab, resolve(tab.bodyContent), allowJson5))
     }
 
     return parts.joinToString(" \\\n  ")
 }
 
 /** PowerShell `Invoke-WebRequest` snippet resolving {{vars}}. */
-fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String, String>> = emptyList()): String {
+fun buildPowerShellCommand(
+    tab: RequestTabState,
+    variableLayers: List<Map<String, String>> = emptyList(),
+    allowJson5: Boolean = true,
+): String {
     fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
 
     val sb = StringBuilder()
@@ -625,7 +643,7 @@ fun buildPowerShellCommand(tab: RequestTabState, variableLayers: List<Map<String
     if (headers.isNotEmpty()) sb.append(" -Headers \$headers")
 
     if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
-        val body = resolve(tab.bodyContent).replace("'", "''")
+        val body = jsonBodyForCopy(tab, resolve(tab.bodyContent), allowJson5).replace("'", "''")
         sb.append(" -Body '$body'")
     }
 
@@ -651,6 +669,11 @@ private fun buildUrlWithParams(
         "${VariableResolver.resolve(p.key, variableLayers, removeUnresolved)}=${VariableResolver.resolve(p.value, variableLayers, removeUnresolved)}"
     }
     return "$base?$qs"
+}
+
+private fun jsonBodyForCopy(tab: RequestTabState, resolved: String, allowJson5: Boolean): String {
+    if (!allowJson5 || tab.bodyType != BodyType.JSON || resolved.isBlank()) return resolved
+    return Json5.toWireJson(resolved).getOrDefault(resolved)
 }
 
 private fun buildHeaderMap(

@@ -22,6 +22,7 @@ ReqLab supports end-to-end API testing with:
 - URL editing with query parameter table synchronization
 - Header editing and request body editing
 - Request body support for JSON, GraphQL, form-style payloads, and raw text
+- JSON bodies accept JSON5 by default (comments, trailing commas, unquoted keys). Send converts to strict JSON; turn off in Settings to restore strict JSON.
 - Authentication modes: None, Basic, Bearer, API Key, JWT (OAuth2 planned)
 - Retry controls and timeout behavior
 - HTTP streaming for SSE (`text/event-stream`) and NDJSON (OpenAI-style `"stream": true`). Items with `Accept: text/event-stream` show an **SSE** badge in the HTTP method color; folder ⋮ → **New SSE Request**.
@@ -62,7 +63,7 @@ ReqLab features a full-featured code editor used across request body editing, sc
 - Keyboard-driven toggle (toolbar button)
 
 **Formatting** — Auto-format source code:
-- JSON pretty-print (indented with 2-space indent)
+- JSON pretty-print (indented with 2-space indent). With JSON5 on, Format pretty-prints JSON5 and keeps comments, unquoted keys, single quotes, and trailing commas; Send still converts to strict JSON. With JSON5 off, Format is a no-op on invalid JSON.
 - XML / HTML indentation
 - JavaScript formatting (including script editor)
 - Toggle on/off from toolbar
@@ -126,7 +127,7 @@ Pre-request scripts can mutate outgoing request values:
 
 ### Collections and Test Automation
 
-- Collection import/export using `qa-tests/fixtures/reqlab-test-collection.json`
+- Collection import/export using `qa-tests/fixtures/reqlab-test-collection.json` (includes a **JSON5** folder under Body Types)
 - **Postman Collection v2 / v2.1 import** — auto-detected and converted to ReqLab format
   - Folders, requests, headers, auth (bearer / basic / API key), body (raw JSON, form-data, urlencoded, GraphQL, binary), and scripts
   - Postman `pm.*` script namespace automatically rewritten to `reqlab.*`
@@ -134,7 +135,7 @@ Pre-request scripts can mutate outgoing request values:
    - `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and `postman.setNextRequest` rewritten to `reqlab.execution.*`
 - **Postman Environment import** — name and enabled variables imported; disabled variables skipped
 - Request-level pre-request and post-request scripts in collection items
-- Automated collection validation via `qa-tests/collection-validator.mjs`
+- Automated collection validation via `qa-tests/collection-validator.mjs` (JSON5 requests are skipped, not counted as passed; Kotlin `SampleCollectionE2ETest` is the JSON5 send coverage)
 - Deterministic sample-server endpoints for reproducible test runs
 
 ### Sample Server

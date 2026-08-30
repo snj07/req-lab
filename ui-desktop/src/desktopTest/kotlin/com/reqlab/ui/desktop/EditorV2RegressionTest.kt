@@ -194,14 +194,11 @@ class EditorV2RegressionTest {
 
         // Trigger an external text change (runs on background thread)
         vm.onExternalTextChanged("external_update")
-
-        // Immediately type a character (bumps editSequence)
         vm.insertAtCursor("X")
 
-        // Wait for background job to complete
-        Thread.sleep(500)
-
         val content = vm.getFullText()
+        assertEquals(vm.document.length, content.length)
+        assertEquals(vm.document.toFullString(), content)
         assertTrue(
             content.contains("X"),
             "User's typed character 'X' must survive despite concurrent external text change. Content: $content",

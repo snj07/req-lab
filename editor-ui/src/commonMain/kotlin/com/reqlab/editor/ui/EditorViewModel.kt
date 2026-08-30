@@ -6,6 +6,7 @@ import com.reqlab.editor.core.FoldRegion
 import com.reqlab.editor.core.FoldingStyle
 import com.reqlab.editor.core.InlineEditorError
 import com.reqlab.editor.core.LanguageMode
+import com.reqlab.editor.core.LanguageModeProvider
 import com.reqlab.editor.core.LanguageRegistry
 import com.reqlab.editor.core.StyleBuffer
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +25,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 // ── Display state ────────────────────────────────────────────────
 
@@ -54,6 +54,7 @@ private data class EditCommand(
 class EditorViewModel(
     initialText: String,
     val languageMode: LanguageMode,
+    languageProvider: LanguageModeProvider? = null,
 ) {
     val document      = DocumentModel(initialText)
     val styleBuffer   = StyleBuffer(maxOf(initialText.length, 64))
@@ -62,7 +63,7 @@ class EditorViewModel(
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val mutex = Mutex()
 
-    private val provider = LanguageRegistry.getProvider(languageMode)
+    private val provider = languageProvider ?: LanguageRegistry.getProvider(languageMode)
 
     private val idleLexer = IdleLexer(
         document    = document,
@@ -83,8 +84,8 @@ class EditorViewModel(
     val state: StateFlow<EditorDisplayState> = _state.asStateFlow()
 
     // textChangedFlow — emitted immediately on every local edit.
-    // Debouncing (150 ms) is applied in the composable LaunchedEffect so that
-    // Compose tests can advance the clock past the debounce with waitForIdle().
+    // The renderer collectLatest invokes onTextChange with getFullText() on the same
+    // path as a keystroke (no 150 ms debounce).
     private val _textChangedFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 64)
     val textChangedFlow: SharedFlow<Unit> = _textChangedFlow.asSharedFlow()
 
@@ -110,42 +111,63 @@ class EditorViewModel(
 
     fun onExternalTextChanged(text: String) {
         if (text == lastExternalText) return
+        editSequence++
         lastExternalText = text
         clearHistory()
-        // Notify immediately: lastExternalText is already correct, so onTextChange fires
-        // before the background coroutine completes. The guard above prevents feedback loops
-        // when onTextChange → bodyContent update → LaunchedEffect → onExternalTextChanged.
-        notifyTextChanged()
+        // Document and lastExternalText stay in lockstep so typing cannot apply
+        // offsets from the new string against a stale buffer.
+        document.replaceAll(text)
+        styleBuffer.invalidateFrom(0)
+        displayLineMap.reset(document.lineCount)
         val capturedSeq = editSequence
+        val newVersion = document.version
+        val docLen = document.length
+        val hasTruncation = computeHasLineTruncation()
+        _state.update {
+            it.copy(
+                version = newVersion,
+                styleClock = styleBuffer.styleClock,
+                cursorOffset = it.cursorOffset.coerceIn(0, docLen),
+                selectionStart = -1,
+                selectionEnd = -1,
+                diagnostics = emptyList(),
+                totalDisplayLines = displayLineMap.totalDisplayLines,
+                hasLineTruncation = hasTruncation,
+            )
+        }
+        notifyTextChanged()
+        idleLexer.scheduleFrom(0, scope)
+        scheduleDiagnostics()
         scope.launch(Dispatchers.Default) {
             mutex.withLock {
                 if (editSequence != capturedSeq) return@withLock
-                document.replaceAll(text)
-                styleBuffer.invalidateFrom(0)
-                styleBuffer.grow(document.length)
-                displayLineMap.reset(document.lineCount)
                 scheduleInitialFoldsInternal()
             }
             if (editSequence != capturedSeq) return@launch
-            val newVersion = document.version
-            val docLen = document.length
-            val hasTruncation = computeHasLineTruncation()
-            // StateFlow.update is @ThreadSafe — update directly on Default dispatcher
-            _state.update {
-                it.copy(
-                    version = newVersion,
-                    styleClock = styleBuffer.styleClock,
-                    cursorOffset = it.cursorOffset.coerceIn(0, docLen),
-                    selectionStart = -1,
-                    selectionEnd = -1,
-                    diagnostics = emptyList(),
-                    totalDisplayLines = displayLineMap.totalDisplayLines,
-                    hasLineTruncation = hasTruncation,
-                )
-            }
-            idleLexer.scheduleFrom(0, scope)
-            scheduleDiagnostics()
+            emitFoldUpdate(computeHasLineTruncation())
         }
+    }
+
+    /**
+     * Replace the whole document as a single user edit (e.g. Format).
+     * Records undo; does **not** clear history. No-op when [newText] matches current text.
+     */
+    fun replaceDocument(newText: String) {
+        if (newText == lastExternalText) return
+        editSequence++
+        val st = _state.value
+        val old = lastExternalText
+        val oldLen = old.length
+        val oldCursor = st.cursorOffset.coerceIn(0, oldLen)
+        applyReplace(
+            from = 0,
+            to = oldLen,
+            insertText = newText,
+            cursorBefore = oldCursor,
+            cursorAfter = mapCursorByLineCol(old, oldCursor, newText),
+            recordHistory = true,
+            clearRedo = true,
+        )
     }
 
     fun insertAtCursor(text: String) {
@@ -799,4 +821,39 @@ class EditorViewModel(
         idleLexer.cancel()
         scope.cancel()
     }
+}
+
+/**
+ * Map [oldOffset] into [newText] by line/column. Caret at EOF of [oldText] stays at
+ * EOF of [newText]. Otherwise the same line index is used (clamped) and the column
+ * is coerced to that line's length.
+ */
+internal fun mapCursorByLineCol(oldText: String, oldOffset: Int, newText: String): Int {
+    val off = oldOffset.coerceIn(0, oldText.length)
+    if (off >= oldText.length) return newText.length
+    var line = 0
+    var lineStart = 0
+    var i = 0
+    while (i < off) {
+        if (oldText[i] == '\n') {
+            line++
+            lineStart = i + 1
+        }
+        i++
+    }
+    val col = off - lineStart
+    var newLine = 0
+    var newStart = 0
+    i = 0
+    while (i < newText.length && newLine < line) {
+        if (newText[i] == '\n') {
+            newLine++
+            newStart = i + 1
+        }
+        i++
+    }
+    if (newLine < line) return newText.length
+    val newLineEnd = newText.indexOf('\n', newStart).let { if (it < 0) newText.length else it }
+    val newCol = col.coerceAtMost((newLineEnd - newStart).coerceAtLeast(0))
+    return newStart + newCol
 }

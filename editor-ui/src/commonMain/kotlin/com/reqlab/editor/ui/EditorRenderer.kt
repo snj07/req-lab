@@ -36,8 +36,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -47,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
@@ -128,7 +129,7 @@ private val NON_CHARACTER_KEYS = setOf(
  * @param language       Language mode driving syntax highlighting.
  * @param theme          Color theme. Defaults to [EditorTheme.Dark].
  * @param wordWrap       Whether long lines wrap or scroll horizontally.
- * @param onTextChange   Called (debounced 150 ms) whenever the document changes.
+ * @param onTextChange   Called immediately whenever the document changes (no debounce).
  * @param onPasteRequest Called to fetch clipboard text on Ctrl/Cmd+V. Return null to skip.
  * @param onCopyRequest  Called with the selected text on Ctrl/Cmd+C. Write it to the clipboard.
  * @param testTagPrefix  Compose test-tag prefix for integration tests.
@@ -154,6 +155,8 @@ fun EditorRenderer(
     onHorizontalScroll: ((Int) -> Unit)? = null,
     /** Called once after composition with the internal horizontal ScrollState. For testing. */
     onScrollStateReady: ((androidx.compose.foundation.ScrollState) -> Unit)? = null,
+    /** Called once after composition with the vertical LazyListState. For testing. */
+    onListStateReady: ((LazyListState) -> Unit)? = null,
     /** Called when the user primary-clicks/taps in the editor content area. */
     onPrimaryTapOffset: ((Int) -> Unit)? = null,
     /**
@@ -163,25 +166,38 @@ fun EditorRenderer(
      * Pass `null` (the default) to leave the editor with plain syntax colours.
      */
     lineVariableSpans: ((lineText: String, lineStartOffset: Int) -> List<Pair<IntRange, Color>>)? = null,
+    /**
+     * Optional focus requester for the editor surface. When null, an internal requester is used.
+     * Pass a shared instance from a parent (e.g. CodeEditor toolbar) to restore focus after
+     * toolbar clicks.
+     */
+    focusRequester: FocusRequester? = null,
 ) {
     val state        by viewModel.state.collectAsState()
-    val listState    = rememberLazyListState()
-    val hScrollState = rememberScrollState()
+    val listStateCache = remember { mutableMapOf<EditorViewModel, LazyListState>() }
+    val hScrollCache   = remember { mutableMapOf<EditorViewModel, ScrollState>() }
+    val listState    = remember(viewModel) {
+        listStateCache.getOrPut(viewModel) { LazyListState() }
+    }
+    val hScrollState = remember(viewModel) {
+        hScrollCache.getOrPut(viewModel) { ScrollState(0) }
+    }
     val scope        = rememberCoroutineScope()
-    val focus        = remember { FocusRequester() }
+    val fallbackFocus = remember { FocusRequester() }
+    val focus        = focusRequester ?: fallbackFocus
     // Tracks the widest line seen (px) so the dummy spacer keeps hScrollState.maxValue correct.
-    // Reset on every document edit (state.version) so deleted/replaced lines shrink the range.
-    var hMaxContentWidthPx by remember(state.version) { mutableStateOf(0) }
+    // Reset on every document edit (state.version) and on VM switch so deleted/replaced lines shrink.
+    var hMaxContentWidthPx by remember(viewModel, state.version) { mutableStateOf(0) }
     // Cache of per-displayLine TextLayoutResults fed back from LineView.
     // Used by the drag handler to map pointer coords → char offset accurately.
-    val layoutResultCache = remember { mutableStateMapOf<Int, TextLayoutResult>() }
+    val layoutResultCache = remember(viewModel) { mutableStateMapOf<Int, TextLayoutResult>() }
     // Context-menu state: show a DropdownMenu on secondary-button (right-click) press.
     var contextMenuVisible by remember { mutableStateOf(false) }
     var contextMenuOffset  by remember { mutableStateOf(Offset.Zero) }
     var shiftPressed by remember { mutableStateOf(false) }
     // Plain mutable object (non-state) — tracks previous doc shape to detect paste.
     // Updated inside the scroll LaunchedEffect so there is no cross-coroutine race.
-    val prevDocState = remember {
+    val prevDocState = remember(viewModel) {
         object {
             var length    = viewModel.document.length
             var lineCount = viewModel.document.lineCount
@@ -218,9 +234,18 @@ fun EditorRenderer(
         label = "cursorAlpha",
     )
 
-    // Expose hScrollState to tests after first successful composition.
+    // Expose scroll state to tests after first successful composition.
     androidx.compose.runtime.SideEffect {
         onScrollStateReady?.invoke(hScrollState)
+        onListStateReady?.invoke(listState)
+    }
+
+    val lastWrap = remember(viewModel) { object { var value = wordWrap } }
+    LaunchedEffect(wordWrap, viewModel) {
+        if (lastWrap.value != wordWrap) {
+            hScrollState.scrollTo(0)
+            lastWrap.value = wordWrap
+        }
     }
 
     LaunchedEffect(listState.firstVisibleItemIndex, listState.layoutInfo) {
@@ -239,22 +264,39 @@ fun EditorRenderer(
         try { focus.requestFocus() } catch (_: Exception) { }
     }
 
+    // Skip caret-follow once after a tab switch so a restored LazyListState keeps its
+    // viewport. Cursor/version keys change when `viewModel` changes even though this
+    // document was not edited.
+    val lastScrollVm = remember { object { var value: EditorViewModel? = null } }
+
     // Auto-scroll the LazyColumn to keep the cursor line in view, but suppress after
     // paste.  Keying on BOTH cursorOffset and version means this single effect handles
     // cursor navigation (only cursorOffset changes) and typed/pasted edits (both change).
     // Because the paste guard and the scroll decision live in the SAME coroutine there
     // is no possible race between a "set flag" effect and a "read flag" effect.
-    LaunchedEffect(state.cursorOffset, state.version) {
+    LaunchedEffect(state.cursorOffset, state.version, viewModel) {
+        val restoredTab = lastScrollVm.value !== viewModel
+        lastScrollVm.value = viewModel
         val newLen       = viewModel.document.length
         val newLineCount = viewModel.document.lineCount
         val charDelta = kotlin.math.abs(newLen - prevDocState.length)
         val lineDelta = newLineCount - prevDocState.lineCount
         prevDocState.length    = newLen
         prevDocState.lineCount = newLineCount
-        // Suppress scroll for large edits OR multi-line insertions (paste).
+        if (restoredTab) return@LaunchedEffect
+        // Suppress scroll for large edits OR multi-line insertions (paste / Format).
         // Pressing Enter adds exactly 1 line (lineDelta == 1) → still scrolls.
         // Pasting any multi-line content adds ≥ 2 → scroll suppressed.
         if (charDelta >= LARGE_EDIT_SCROLL_SUPPRESS_THRESHOLD_CHARS || lineDelta >= 2) {
+            return@LaunchedEffect
+        }
+        // Shrink (Format undo, select-all delete): do not jump to the caret if the
+        // current viewport still shows a valid line. If we scrolled past the new
+        // end, snap to the top.
+        if (lineDelta < 0) {
+            if (listState.firstVisibleItemIndex >= newLineCount) {
+                listState.scrollToItem(0)
+            }
             return@LaunchedEffect
         }
         val cursorDocLine = viewModel.document.lineAt(state.cursorOffset)
@@ -490,6 +532,7 @@ fun EditorRenderer(
             val gutterWidthPx = with(density) { gutterWidth.toPx() }
 
             // ── Single LazyColumn: each item is [gutter | divider | content] ──
+            key(viewModel) {
             LazyColumn(
                 state    = listState,
                 modifier = Modifier
@@ -504,7 +547,7 @@ fun EditorRenderer(
                     // Runs at PointerEventPass.Initial so it can consume vertical drag events
                     // before LazyColumn's built-in scroll handler sees them, preventing
                     // accidental scroll during text selection drag.
-                    .pointerInput(gutterWidthPx) {
+                    .pointerInput(gutterWidthPx, viewModel) {
                         awaitEachGesture {
                             // Observe DOWN without requiring it to be unconsumed
                             // (LineView.awaitFirstDown also uses requireUnconsumed=false)
@@ -707,12 +750,12 @@ fun EditorRenderer(
                                                 val w = coords.size.width
                                                 if (w > hMaxContentWidthPx) hMaxContentWidthPx = w
                                             }
-                                    )
-                                    .padding(start = 8.dp, end = 16.dp, top = 1.dp, bottom = 1.dp),
+                                    ),
                             )
                         }
                     }
                 }
+            }
             }
 
             // ── Scrollbars (overlay) ──────────────────────────────────────

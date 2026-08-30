@@ -57,6 +57,8 @@ Import [qa-tests/fixtures/reqlab-test-collection.json](../qa-tests/fixtures/reql
 
 The JS collection validator skips `STDIO` and `LEGACY_2024_11_05`. Kotlin e2e (`:qa-tests:jvmTest --tests com.reqlab.qa.McpHttpE2ETest`) is the protocol source of truth. Product guide: [docs/mcp.md](mcp.md). Mock routes and PATH shim: [DEVELOPMENT.md](../DEVELOPMENT.md).
 
+Folder **JSON5** under Body Types authors JSON5 in `body.content` strings. The JS collection validator **skips** paths that include `JSON5` and does **not** count them as passed (Node `fetch` does not convert). Kotlin e2e (`:qa-tests:jvmTest --tests com.reqlab.qa.SampleCollectionE2ETest`) through `KtorApiClient` is the only JSON5 send coverage.
+
 Folder **SSE** is generic `text/event-stream` (`GET`/`POST /sse`). The **LLM (OpenAI-compatible)** folder remains OpenAI chat completions.
 
 Run full project checks:
@@ -75,7 +77,7 @@ Run full project checks:
 
 ## Coverage Highlights
 
-- HTTP methods, body types (JSON, form-data, urlencoded, raw, binary), auth (Basic, Bearer, API Key)
+- HTTP methods, body types (JSON, JSON5 authoring, form-data, urlencoded, raw, binary), auth (Basic, Bearer, API Key)
 - SSE/NDJSON streaming, generic `/sse` mocks, and OpenAI-compatible `/v1` chat mocks (including `?demo=true`)
 - Variable interpolation (`{{var}}`), scope precedence, and scripting runtime (pre-request, post-response, assertions, `response.llm.*`)
 - Retry/error handling and WebSocket lifecycle (connect, send, receive, disconnect, reconnect)

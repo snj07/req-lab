@@ -4,6 +4,7 @@ package com.reqlab.ui.desktop
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
@@ -17,9 +18,11 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
+import com.reqlab.editor.core.Json5EditorSupport
 import com.reqlab.editor.core.LanguageMode
 import com.reqlab.editor.ui.EditorRenderer
 import com.reqlab.editor.ui.EditorViewModel
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -786,6 +789,153 @@ class UndoRedoTest {
         composeRule.waitForIdle()
 
         assertEquals("Hello World", vm.getFullText(), "Cmd+Shift+Z must redo the undone insert")
+        vm.dispose()
+    }
+
+    @Test
+    fun replaceDocument_is_undoable_and_keeps_prior_edits() {
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
+        vm.moveCursorTo(5)
+        vm.insertAtCursor("!")
+        assertEquals("Hello!", vm.getFullText())
+
+        vm.replaceDocument("Hello!\nWorld")
+        assertEquals("Hello!\nWorld", vm.getFullText())
+
+        vm.undo()
+        assertEquals("Hello!", vm.getFullText(), "Undo Format must restore pre-format text including prior edits")
+        vm.undo()
+        assertEquals("Hello", vm.getFullText(), "Undo after Format must still undo earlier keystrokes")
+
+        vm.redo()
+        assertEquals("Hello!", vm.getFullText())
+        vm.redo()
+        assertEquals("Hello!\nWorld", vm.getFullText(), "Redo must restore Format")
+        vm.dispose()
+    }
+
+    @Test
+    fun replaceDocument_json5_format_undo_restores_authored_text() {
+        val compact = "{a:1,}"
+        val vm = EditorViewModel(compact, LanguageMode.JSON, Json5EditorSupport)
+        val pretty = Json5EditorSupport.format(compact)
+        assertTrue(pretty.lines().size > 1, pretty)
+        vm.replaceDocument(pretty)
+        assertEquals(pretty, vm.getFullText())
+        vm.undo()
+        assertEquals(compact, vm.getFullText(), "Undo after JSON5 Format must restore authored JSON5")
+        vm.dispose()
+    }
+
+    @Test
+    fun replaceDocument_json5_format_undo_restores_caret() {
+        val compact = "{a:1,}"
+        val vm = EditorViewModel(compact, LanguageMode.JSON, Json5EditorSupport)
+        val pretty = Json5EditorSupport.format(compact)
+        vm.moveCursorTo(compact.length)
+        vm.replaceDocument(pretty)
+        vm.undo()
+        assertEquals(compact, vm.getFullText())
+        assertEquals(compact.length, vm.state.value.cursorOffset)
+        vm.dispose()
+    }
+
+    @Test
+    fun replaceDocument_noop_when_unchanged() {
+        val vm = EditorViewModel("Hello", LanguageMode.PLAIN_TEXT)
+        vm.moveCursorTo(5)
+        vm.insertAtCursor("!")
+        vm.replaceDocument("Hello!")
+        assertEquals(6, vm.state.value.cursorOffset, "No-op replaceDocument must not move the caret")
+        vm.undo()
+        assertEquals("Hello", vm.getFullText(), "No-op replaceDocument must not push a dummy undo entry")
+        vm.dispose()
+    }
+
+    @Test
+    fun format_then_undo_does_not_jump_viewport() {
+        val compact = "{\"k\":1}"
+        val pretty = "{\n  \"k\": 1,\n  \"x\": 2,\n  \"y\": 3,\n  \"z\": 4\n}"
+        val vm = EditorViewModel(compact, LanguageMode.JSON)
+        var listState: LazyListState? = null
+        composeRule.setContent {
+            Box(Modifier.size(400.dp, 200.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = false,
+                    language = LanguageMode.JSON,
+                    testTagPrefix = "fmt_scroll",
+                    onListStateReady = { listState = it },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        vm.moveCursorTo(compact.length)
+        vm.replaceDocument(pretty)
+        composeRule.waitForIdle()
+        assertEquals(0, requireNotNull(listState).firstVisibleItemIndex)
+        vm.undo()
+        composeRule.waitForIdle()
+        assertEquals(0, requireNotNull(listState).firstVisibleItemIndex, "Format undo must not jump the viewport")
+        vm.dispose()
+    }
+
+    @Test
+    fun select_all_delete_from_scrolled_view_snaps_to_top() {
+        val vm = EditorViewModel((0..80).joinToString("\n") { "line-$it" }, LanguageMode.PLAIN_TEXT)
+        var listState: LazyListState? = null
+        composeRule.setContent {
+            Box(Modifier.size(400.dp, 160.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = false,
+                    language = LanguageMode.PLAIN_TEXT,
+                    testTagPrefix = "seldel_scroll",
+                    onListStateReady = { listState = it },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val list = requireNotNull(listState)
+        runBlocking { list.scrollToItem(40) }
+        composeRule.waitForIdle()
+        assertTrue(list.firstVisibleItemIndex >= 20)
+
+        vm.selectAll()
+        vm.deleteBeforeCursor()
+        composeRule.waitForIdle()
+        assertEquals(0, list.firstVisibleItemIndex, "Select-all delete must snap viewport to the top")
+        vm.dispose()
+    }
+
+    @Test
+    fun enter_on_scrolled_view_still_follows_caret() {
+        val vm = EditorViewModel((0..80).joinToString("\n") { "line-$it" }, LanguageMode.PLAIN_TEXT)
+        var listState: LazyListState? = null
+        composeRule.setContent {
+            Box(Modifier.size(400.dp, 160.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = false,
+                    language = LanguageMode.PLAIN_TEXT,
+                    testTagPrefix = "enter_scroll",
+                    onListStateReady = { listState = it },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        val list = requireNotNull(listState)
+        runBlocking { list.scrollToItem(40) }
+        composeRule.waitForIdle()
+        vm.moveCursorTo(vm.document.length)
+        vm.insertNewlineWithAutoIndent()
+        composeRule.waitForIdle()
+        val lastLine = vm.document.lineCount - 1
+        assertTrue(
+            list.firstVisibleItemIndex <= lastLine &&
+                (list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= lastLine,
+            "Enter must bring the new line into view",
+        )
         vm.dispose()
     }
 }

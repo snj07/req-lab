@@ -169,6 +169,40 @@
           ]
         },
         {
+          "name": "JSON5",
+          "folders": [],
+          "requests": [
+            {
+              "name": "POST JSON5 comments",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{\n  \"name\": \"Ada\",\n  // \"role\": \"admin\",\n  /* \"debug\": true, */\n  \"active\": true\n}"
+              },
+              "testScript": "reqlab.test(\"echoed body has no comments\", function() {\n    reqlab.expect(reqlab.response.json().body).to.not.include(\"//\")\n})\nreqlab.test(\"commented field omitted\", function() {\n    reqlab.expect(reqlab.response.json().body).to.not.include(\"role\")\n})"
+            },
+            {
+              "name": "POST JSON5 trailing comma",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{\n  \"name\": \"Ada\",\n  \"active\": true,\n}"
+              }
+            },
+            {
+              "name": "POST JSON5 unquoted keys",
+              "method": "POST",
+              "url": "{{baseUrl}}/api/json",
+              "body": {
+                "type": "JSON",
+                "content": "{ name: 'Ada', active: true }"
+              }
+            }
+          ]
+        },
+        {
           "name": "Raw Text",
           "folders": [],
           "requests": [
