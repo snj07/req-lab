@@ -7,10 +7,14 @@ import com.reqlab.core.model.McpConnectionConfig
 import com.reqlab.core.model.McpHttpMode
 import com.reqlab.core.model.McpOAuthConfig
 import com.reqlab.core.model.McpOAuthGrantType
+import com.reqlab.core.model.McpRoot
+import com.reqlab.core.model.McpSamplingMode
+import com.reqlab.core.model.McpTransportType
 import com.reqlab.core.network.mcp.McpClient
 import com.reqlab.core.network.mcp.McpOAuthClient
 import com.reqlab.core.network.mcp.McpUnauthorizedException
 import com.reqlab.core.network.mcp.NdjsonStdioTransport
+import com.reqlab.core.network.mcp.createStdioTransport
 import com.reqlab.core.network.mcp.mcpStdioSupported
 import com.reqlab.server.module
 import io.ktor.client.HttpClient
@@ -21,8 +25,11 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.runBlocking
@@ -35,6 +42,7 @@ import kotlinx.serialization.json.put
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import org.junit.Test
+import java.io.File
 import java.net.ServerSocket
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -369,6 +377,292 @@ class McpHttpE2ETest {
         assertTrue(mcpStdioSupported)
     }
 
+    @Test
+    fun legacy_http_sse_initialize_and_tools_list() = runBlocking {
+        val client = McpClient(this, http(), callTimeoutMs = 10_000)
+        val init = client.connect(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp/sse",
+                httpMode = McpHttpMode.LEGACY_2024_11_05,
+            ),
+        )
+        assertEquals("ReqLab MCP Mock", init.serverInfo.name)
+        val tools = client.listTools().map { it.name }
+        assertTrue(tools.contains("echo"))
+        client.disconnect()
+    }
+
+    @Test
+    fun stdio_sample_server_initialize_and_echo() = runBlocking {
+        val java = ProcessHandle.current().info().command().orElse("java")
+        val process = ProcessBuilder(
+            java,
+            "-cp",
+            System.getProperty("java.class.path"),
+            "com.reqlab.server.ApplicationKt",
+            "--stdio",
+        ).start()
+        try {
+            val inbound = Channel<String>(Channel.UNLIMITED)
+            val readerJob = launch(Dispatchers.IO) {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { inbound.trySend(it) }
+                }
+            }
+            val transport = NdjsonStdioTransport(
+                scope = this,
+                incomingLines = inbound,
+                writeLine = {
+                    process.outputStream.write((it + "\n").toByteArray(Charsets.UTF_8))
+                    process.outputStream.flush()
+                },
+                onClose = { process.destroy() },
+            )
+            val client = McpClient(this, stdioFactory = { transport }, callTimeoutMs = 15_000)
+            val init = client.connect(
+                McpConnectionConfig(transport = McpTransportType.STDIO, command = "unused"),
+            )
+            assertEquals("ReqLab MCP Mock", init.serverInfo.name)
+            val echo = client.callTool("echo", buildJsonObject { put("text", "hi") })
+            assertEquals("hi", echo.content.single().text)
+            client.disconnect()
+            readerJob.cancel()
+        } finally {
+            process.destroyForcibly()
+        }
+    }
+
+    @Test
+    fun stdio_command_line_splits_and_launches_sample_server() = runBlocking {
+        val transport = createStdioTransport(
+            McpConnectionConfig(transport = McpTransportType.STDIO, command = repoMcpStdioLauncher()),
+        )
+        try {
+            val client = McpClient(this, stdioFactory = { transport }, callTimeoutMs = 15_000)
+            val init = client.connect(
+                McpConnectionConfig(transport = McpTransportType.STDIO, command = "unused"),
+            )
+            assertEquals("ReqLab MCP Mock", init.serverInfo.name)
+            client.disconnect()
+        } finally {
+            transport.close()
+        }
+    }
+
+    @Test
+    fun trigger_sampling_returns_mock_reply() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                samplingMode = McpSamplingMode.MOCK,
+            ),
+            tool = "trigger_sampling",
+            mustContain = listOf("mock reply from ReqLab"),
+            mustNotContain = listOf("cancelled", "Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_sampling_manual_is_cancelled() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                samplingMode = McpSamplingMode.MANUAL,
+            ),
+            tool = "trigger_sampling",
+            mustContain = listOf("cancelled"),
+            mustNotContain = listOf("mock reply from ReqLab", "Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_sampling_forward_llm_echoes_chat_completion() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                samplingMode = McpSamplingMode.FORWARD_LLM,
+                samplingForwardUrl = "$BASE_URL/v1/chat/completions",
+                samplingForwardToken = "llm-test-key",
+            ),
+            tool = "trigger_sampling",
+            mustContain = listOf("Hello from ReqLab"),
+            mustNotContain = listOf("mock reply from ReqLab", "Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_roots_returns_configured_roots() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")),
+            ),
+            tool = "trigger_roots",
+            mustContain = listOf("file:///tmp/reqlab", "tmp"),
+            mustNotContain = listOf("Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_roots_empty_list_is_not_tmp() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                roots = emptyList(),
+            ),
+            tool = "trigger_roots",
+            mustContain = listOf("\"roots\":[]"),
+            mustNotContain = listOf("file:///tmp/reqlab", "Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_elicitation_accept_when_auto() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                autoRespondElicitation = true,
+            ),
+            tool = "trigger_elicitation",
+            mustContain = listOf("accept"),
+            mustNotContain = listOf("decline", "Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_elicitation_decline_when_disabled() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+                autoRespondElicitation = false,
+            ),
+            tool = "trigger_elicitation",
+            mustContain = listOf("decline"),
+            mustNotContain = listOf("\"accept\"", "Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_ping_echoes_empty_result() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp",
+                httpMode = McpHttpMode.STREAMABLE_2025_06_18,
+            ),
+            tool = "trigger_ping",
+            mustContain = listOf("srv-ping"),
+            mustNotContain = listOf("Invalid request"),
+        )
+    }
+
+    @Test
+    fun trigger_roots_legacy_sse_echoes_configured_roots() = runBlocking {
+        verifyCallback(
+            McpConnectionConfig(
+                url = "$BASE_URL/mcp/sse",
+                httpMode = McpHttpMode.LEGACY_2024_11_05,
+                roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")),
+            ),
+            tool = "trigger_roots",
+            mustContain = listOf("file:///tmp/reqlab", "tmp"),
+            mustNotContain = listOf("Invalid request"),
+        )
+    }
+
+    @Test
+    fun stdio_trigger_roots_echoes_configured_roots() = runBlocking {
+        val java = ProcessHandle.current().info().command().orElse("java")
+        val process = ProcessBuilder(
+            java,
+            "-cp",
+            System.getProperty("java.class.path"),
+            "com.reqlab.server.ApplicationKt",
+            "--stdio",
+        ).start()
+        try {
+            val inbound = Channel<String>(Channel.UNLIMITED)
+            val readerJob = launch(Dispatchers.IO) {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { inbound.trySend(it) }
+                }
+            }
+            val transport = NdjsonStdioTransport(
+                scope = this,
+                incomingLines = inbound,
+                writeLine = {
+                    process.outputStream.write((it + "\n").toByteArray(Charsets.UTF_8))
+                    process.outputStream.flush()
+                },
+                onClose = { process.destroy() },
+            )
+            val client = McpClient(this, stdioFactory = { transport }, callTimeoutMs = 15_000)
+            client.connect(
+                McpConnectionConfig(
+                    transport = McpTransportType.STDIO,
+                    command = "unused",
+                    roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")),
+                ),
+            )
+            val result = client.callTool("trigger_roots")
+            assertCallbackOracle(
+                toolText = result.content.single().text.orEmpty(),
+                isError = result.isError,
+                lastPayload = client.lastReceivedPayload.orEmpty(),
+                mustContain = listOf("file:///tmp/reqlab", "tmp"),
+                mustNotContain = listOf("Invalid request"),
+            )
+            client.disconnect()
+            readerJob.cancel()
+        } finally {
+            process.destroyForcibly()
+        }
+    }
+
+    private suspend fun CoroutineScope.verifyCallback(
+        config: McpConnectionConfig,
+        tool: String,
+        mustContain: List<String>,
+        mustNotContain: List<String> = emptyList(),
+    ) {
+        val client = McpClient(this, http(), callTimeoutMs = 10_000)
+        client.connect(config)
+        val result = client.callTool(tool)
+        assertCallbackOracle(
+            toolText = result.content.single().text.orEmpty(),
+            isError = result.isError,
+            lastPayload = client.lastReceivedPayload.orEmpty(),
+            mustContain = mustContain,
+            mustNotContain = mustNotContain,
+        )
+        client.disconnect()
+    }
+
+    private fun assertCallbackOracle(
+        toolText: String,
+        isError: Boolean,
+        lastPayload: String,
+        mustContain: List<String>,
+        mustNotContain: List<String>,
+    ) {
+        assertEquals(false, isError, "tool error: $toolText")
+        mustContain.forEach { needle ->
+            assertTrue(toolText.contains(needle), "tool text missing '$needle': $toolText")
+        }
+        mustNotContain.forEach { needle ->
+            assertTrue(!toolText.contains(needle), "tool text should not contain '$needle': $toolText")
+        }
+        assertTrue(lastPayload.contains("\"result\""), "lastReceivedPayload is not a tools/call result: $lastPayload")
+        assertTrue(!lastPayload.contains("Invalid request"), "lastReceivedPayload has Invalid request: $lastPayload")
+        assertTrue(!lastPayload.contains("-32600"), "lastReceivedPayload has -32600: $lastPayload")
+    }
+
     companion object {
         private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
         private var port: Int = 0
@@ -391,6 +685,17 @@ class McpHttpE2ETest {
         @AfterClass
         fun stopServer() {
             server?.stop(1000, 2000)
+        }
+
+        /** Test-only: locate this checkout's stdio launcher without product walk-up. */
+        private fun repoMcpStdioLauncher(): String {
+            var dir = File(System.getProperty("user.dir"))
+            repeat(8) {
+                val candidate = File(dir, "sample-server/mcp-stdio")
+                if (candidate.isFile) return candidate.absolutePath
+                dir = dir.parentFile ?: return "sample-server/mcp-stdio"
+            }
+            return "sample-server/mcp-stdio"
         }
     }
 }

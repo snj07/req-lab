@@ -1101,6 +1101,85 @@
           "url": "{{mcpTenantUrl}}",
           "mcpTransport": "STREAMABLE_HTTP",
           "mcpHttpMode": "AUTO"
+        },
+        {
+          "name": "MCP Legacy HTTP+SSE",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpLegacyUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "LEGACY_2024_11_05"
+        },
+        {
+          "name": "MCP stdio",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "",
+          "mcpTransport": "STDIO",
+          "mcpHttpMode": "AUTO",
+          "mcpCommand": "{{mcpStdioCommand}}"
+        },
+        {
+          "name": "MCP Sampling mock",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpSamplingMode": "MOCK"
+        },
+        {
+          "name": "MCP Sampling manual",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpSamplingMode": "MANUAL"
+        },
+        {
+          "name": "MCP Sampling LLM",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpSamplingMode": "FORWARD_LLM",
+          "mcpSamplingForwardUrl": "{{llmBaseUrl}}/v1/chat/completions",
+          "mcpSamplingForwardToken": "{{llmApiKey}}",
+          "mcpSamplingMaxTokens": 256
+        },
+        {
+          "name": "MCP Roots",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpRoots": [
+            {
+              "uri": "file:///tmp/reqlab",
+              "name": "tmp"
+            }
+          ]
+        },
+        {
+          "name": "MCP Elicitation auto-accept",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpAutoRespondElicitation": true
+        },
+        {
+          "name": "MCP Elicitation decline",
+          "kind": "MCP",
+          "method": "POST",
+          "url": "{{mcpBaseUrl}}",
+          "mcpTransport": "STREAMABLE_HTTP",
+          "mcpHttpMode": "AUTO",
+          "mcpAutoRespondElicitation": false
         }
       ]
     }

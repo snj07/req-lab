@@ -3,7 +3,11 @@ package com.reqlab.ui.shared.state
 import androidx.compose.runtime.mutableStateListOf
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.McpRoot
+import com.reqlab.core.model.McpSamplingMode
+import com.reqlab.core.model.RequestKind
 import com.reqlab.ui.shared.components.moveRequestToCollection
+import com.reqlab.ui.shared.persistence.ImportExportRepository
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -253,6 +257,45 @@ class AppStateCollectionTest {
         assertEquals("Renamed request", tab.name)
         val node = state.collections.flatMap { it.children }.first { it.id == requestId }
         assertEquals("Renamed request", node.name)
+    }
+
+    @Test
+    fun syncTabToCollectionNode_writes_mcp_config_for_export() {
+        val state = AppState(withDemoData = true)
+        val collectionId = state.collections.first().id
+        state.addMcpConnectionToCollection(collectionId)
+        val tab = state.openTabs.last()
+        tab.mcpConfig = tab.mcpConfig.copy(
+            samplingMode = McpSamplingMode.MANUAL,
+            args = listOf("--keep"),
+            roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")),
+        )
+        assertTrue(state.syncTabToCollectionNode(tab))
+        val node = state.collections.first().children.first { it.id == tab.id }
+        assertEquals(RequestKind.MCP, node.kind)
+        assertEquals(McpSamplingMode.MANUAL, node.mcpConfig!!.samplingMode)
+        assertEquals(listOf("--keep"), node.mcpConfig!!.args)
+        assertEquals("file:///tmp/reqlab", node.mcpConfig!!.roots.single().uri)
+        val exported = ImportExportRepository.exportCollectionToString(state.collections.first())
+        assertTrue(exported.contains("MANUAL"))
+        assertTrue(exported.contains("file:///tmp/reqlab"))
+        assertTrue(exported.contains("--keep"))
+    }
+
+    @Test
+    fun mcp_client_field_change_marks_tab_dirty() {
+        val tab = RequestTabState()
+        tab.kind = RequestKind.MCP
+        tab.markSaved()
+        assertFalse(tab.isDirty)
+        tab.mcpConfig = tab.mcpConfig.copy(autoRespondElicitation = false)
+        tab.markDirty()
+        assertTrue(tab.isDirty)
+        tab.markSaved()
+        assertFalse(tab.isDirty)
+        tab.mcpConfig = tab.mcpConfig.copy(roots = listOf(McpRoot("file:///tmp/reqlab", "tmp")))
+        tab.markDirty()
+        assertTrue(tab.isDirty)
     }
 
     // ── Issue 1: Closing last tab ────────────────────────────────────

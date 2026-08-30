@@ -9,9 +9,9 @@ import com.reqlab.core.network.isSseContentType
 import io.ktor.client.HttpClient
 import io.ktor.client.request.accept
 import io.ktor.client.request.delete
-import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.post
+import io.ktor.client.request.prepareGet
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -26,7 +26,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,6 +34,8 @@ class StreamableHttpTransport(
     private val httpClient: HttpClient,
     private val config: McpConnectionConfig,
     private val scope: CoroutineScope,
+    private val replyClient: HttpClient = httpClient,
+    private val streamClient: HttpClient = httpClient,
 ) : McpTransport {
     private val _incoming = MutableSharedFlow<JsonRpcEnvelope>(extraBufferCapacity = 256)
     override val incoming: SharedFlow<JsonRpcEnvelope> = _incoming
@@ -60,12 +61,15 @@ class StreamableHttpTransport(
 
     override suspend fun send(message: JsonRpcEnvelope) {
         val body = mcpJson.encodeToString(JsonRpcEnvelope.serializer(), message)
-        val response = httpClient.post(config.url) {
+        // Replies must not share the request client's connection while a POST SSE body is open.
+        val client = if (message.isResponse()) replyClient else httpClient
+        client.preparePost(config.url) {
             contentType(ContentType.Application.Json)
             applyMcpHeaders(config.headers, config.auth, config.oauth, sessionId, protocolVersion, lastEventId)
             setBody(body)
+        }.execute { response ->
+            handleResponse(response, isInitialize = message.method == "initialize")
         }
-        handleResponse(response, isInitialize = message.method == "initialize")
     }
 
     override suspend fun close() {
@@ -81,6 +85,12 @@ class StreamableHttpTransport(
             }
         }
         sessionId = null
+        if (replyClient !== httpClient) {
+            runCatching { replyClient.close() }
+        }
+        if (streamClient !== httpClient && streamClient !== replyClient) {
+            runCatching { streamClient.close() }
+        }
     }
 
     private suspend fun handleResponse(response: HttpResponse, isInitialize: Boolean) {
@@ -136,19 +146,20 @@ class StreamableHttpTransport(
         getJob?.cancel()
         getJob = scope.launch {
             try {
-                val response = httpClient.get(config.url) {
+                streamClient.prepareGet(config.url) {
                     accept(ContentType.Text.EventStream)
                     header(HttpHeaders.CacheControl, "no-cache")
                     applyMcpHeaders(config.headers, config.auth, config.oauth, sessionId, protocolVersion, lastEventId)
-                }
-                if (response.status == HttpStatusCode.MethodNotAllowed ||
-                    response.status == HttpStatusCode.NotFound
-                ) {
-                    return@launch
-                }
-                if (response.status == HttpStatusCode.Unauthorized) return@launch
-                if (isSseContentType(response.headers[HttpHeaders.ContentType])) {
-                    drainSse(response)
+                }.execute { response ->
+                    if (response.status == HttpStatusCode.MethodNotAllowed ||
+                        response.status == HttpStatusCode.NotFound ||
+                        response.status == HttpStatusCode.Unauthorized
+                    ) {
+                        return@execute
+                    }
+                    if (isSseContentType(response.headers[HttpHeaders.ContentType])) {
+                        drainSse(response)
+                    }
                 }
             } catch (_: CancellationException) {
             } catch (_: Exception) {

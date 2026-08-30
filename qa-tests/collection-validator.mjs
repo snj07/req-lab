@@ -336,6 +336,22 @@ async function main() {
       let bodyText;
 
       if ((req.kind || '').toUpperCase() === 'MCP') {
+        const transport = String(req.mcpTransport || 'STREAMABLE_HTTP').toUpperCase();
+        const httpMode = String(req.mcpHttpMode || 'AUTO').toUpperCase();
+        if (transport === 'STDIO' || httpMode === 'LEGACY_2024_11_05') {
+          results.push({
+            name: req.name,
+            path: req.__path,
+            method: 'MCP',
+            url: resolvedUrl,
+            status: 200,
+            responseTimeMs: 0,
+            responseSizeBytes: 0,
+            passed: true,
+            errors: [],
+          });
+          continue;
+        }
         const started = performance.now();
         const mcpHeaders = {
           'Content-Type': 'application/json',

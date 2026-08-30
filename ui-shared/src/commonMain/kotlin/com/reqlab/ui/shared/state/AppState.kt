@@ -391,9 +391,24 @@ class RequestTabState(
             formRowsSnapshot,
             urlencodedRowsSnapshot,
             kind.name,
+            mcpClientFingerprint(),
+        ).joinToString("#")
+    }
+
+    /** Compact fingerprint of Client-tab MCP settings for dirty tracking and auto-save. */
+    fun mcpClientFingerprint(): String {
+        val roots = mcpConfig.roots.joinToString(";") { "${it.uri}|${it.name.orEmpty()}" }
+        return listOf(
             mcpConfig.url,
             mcpConfig.transport.name,
             mcpConfig.httpMode.name,
+            mcpConfig.command,
+            mcpConfig.samplingMode.name,
+            mcpConfig.samplingForwardUrl.orEmpty(),
+            mcpConfig.samplingForwardToken.orEmpty(),
+            mcpConfig.samplingMaxTokens?.toString().orEmpty(),
+            mcpConfig.autoRespondElicitation.toString(),
+            roots,
         ).joinToString("#")
     }
 
@@ -575,7 +590,9 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     /** Returns the persistent MCP session for [tabId], creating it on first use. */
     fun getOrCreateMcpSession(tabId: String): McpSessionState =
         mcpSessions.getOrPut(tabId) {
-            McpSessionState(appScope, onConsole = { message, level -> logNetworkEvent(message, level) })
+            McpSessionState(appScope, onConsole = { message, level ->
+                logNetworkEvent(message, level, echoToConsole = false)
+            })
         }
 
     /** Disconnects and forgets the MCP session for [tabId] (called on tab close). */
@@ -1072,12 +1089,13 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     /**
      * Appends a network-level event to the structured Logs tab.
-     * Also echoes to the Console for unified visibility (fixes M-3).
+     * REST traffic also echoes to Console ([echoToConsole] default true). MCP
+     * summaries pass false so Console stays for scripts and app messages.
      */
-    fun logNetworkEvent(message: String, level: LogLevel = LogLevel.INFO) {
+    fun logNetworkEvent(message: String, level: LogLevel = LogLevel.INFO, echoToConsole: Boolean = true) {
         val entry = ConsoleEntry(message, level)
         networkEventLogs.add(0, entry)
-        consoleLogs.add(0, entry)
+        if (echoToConsole) consoleLogs.add(0, entry)
     }
 
     fun notifyCollectionsChanged() {
@@ -1536,6 +1554,10 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
                     userHeaders        = userHeadersSnapshot,
                     preRequestScript   = tab.preRequestScript.ifBlank { null },
                     testScript         = tab.testScript.ifBlank { null },
+                    kind               = tab.kind,
+                    mcpConfig          = tab.mcpConfig.copy(
+                        url = tab.url.ifBlank { tab.mcpConfig.url },
+                    ),
                 )
                 return true
             }

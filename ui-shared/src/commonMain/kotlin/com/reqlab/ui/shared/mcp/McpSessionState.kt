@@ -3,6 +3,11 @@ package com.reqlab.ui.shared.mcp
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.McpConnectionConfig
 import com.reqlab.core.model.McpConnectionState
+import com.reqlab.core.model.McpCreateMessageRequest
+import com.reqlab.core.model.McpCreateMessageResult
+import com.reqlab.core.model.McpElicitAction
+import com.reqlab.core.model.McpElicitRequest
+import com.reqlab.core.model.McpElicitResult
 import com.reqlab.core.model.McpGetPromptResult
 import com.reqlab.core.model.McpHttpMode
 import com.reqlab.core.model.McpInitializeResult
@@ -11,15 +16,20 @@ import com.reqlab.core.model.McpLogEntryKind
 import com.reqlab.core.model.McpPrompt
 import com.reqlab.core.model.McpReadResourceResult
 import com.reqlab.core.model.McpResource
+import com.reqlab.core.model.McpSamplingMode
 import com.reqlab.core.model.McpTool
 import com.reqlab.core.model.McpToolResult
 import com.reqlab.core.model.McpTransportType
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
 import com.reqlab.core.network.mcp.McpClient
+import com.reqlab.core.network.mcp.cancelledMcpSamplingResult
+import com.reqlab.core.network.mcp.emptyMcpSamplingResult
 import com.reqlab.core.network.mcp.mcpStdioSupported
+import com.reqlab.editor.core.JsonMode
 import com.reqlab.ui.shared.state.LogLevel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,11 +89,38 @@ data class McpOperationResult(
     }
 }
 
+/** Longer than sample-server callback wait (60s) so tools/call is not cancelled first. */
+const val MCP_UI_CALL_TIMEOUT_MS = 90_000L
+
+sealed class McpPendingSampling {
+    abstract val request: McpCreateMessageRequest
+    abstract val deferred: CompletableDeferred<McpCreateMessageResult>
+
+    data class ReviewRequest(
+        override val request: McpCreateMessageRequest,
+        override val deferred: CompletableDeferred<McpCreateMessageResult>,
+    ) : McpPendingSampling()
+
+    data class ReviewResult(
+        override val request: McpCreateMessageRequest,
+        override val deferred: CompletableDeferred<McpCreateMessageResult>,
+        val draft: McpCreateMessageResult,
+        val generateError: String? = null,
+        val generating: Boolean = false,
+    ) : McpPendingSampling()
+}
+
+data class McpPendingElicitation(
+    val request: McpElicitRequest,
+    val argsJson: String,
+    val deferred: CompletableDeferred<McpElicitResult>,
+)
+
 class McpSessionState(
     private val scope: CoroutineScope,
-    /** Optional bridge that forwards MCP activity to the global console. */
+    /** Optional bridge that forwards MCP activity summaries to the bottom Logs tab. */
     private val onConsole: ((String, LogLevel) -> Unit)? = null,
-    private val clientFactory: (CoroutineScope) -> McpClient = { McpClient(it) },
+    private val clientFactory: (CoroutineScope) -> McpClient = { McpClient(it, callTimeoutMs = MCP_UI_CALL_TIMEOUT_MS) },
 ) {
     var client: McpClient? = null
         private set
@@ -115,6 +152,10 @@ class McpSessionState(
     val error: StateFlow<String?> = _error
     private val _initializeResult = MutableStateFlow<McpInitializeResult?>(null)
     val initializeResult: StateFlow<McpInitializeResult?> = _initializeResult
+    private val _pendingSampling = MutableStateFlow<McpPendingSampling?>(null)
+    val pendingSampling: StateFlow<McpPendingSampling?> = _pendingSampling
+    private val _pendingElicitation = MutableStateFlow<McpPendingElicitation?>(null)
+    val pendingElicitation: StateFlow<McpPendingElicitation?> = _pendingElicitation
     var confirmStdio: Boolean = false
     /** Cmd/Ctrl+Enter target set by the MCP panel for the active section. */
     var pendingShortcut: (() -> Unit)? = null
@@ -122,6 +163,10 @@ class McpSessionState(
     private var notifJob: Job? = null
     private var callJob: Job? = null
     private var connectedFingerprint: String? = null
+
+    fun clearLogs() {
+        _logs.value = emptyList()
+    }
 
     fun stdioAvailable(): Boolean = mcpStdioSupported
 
@@ -150,6 +195,7 @@ class McpSessionState(
         _connectionState.value = McpConnectionState.CONNECTING
         try {
             val init = created.connect(config, variableLayers)
+            installInteractiveHandlers(created)
             _initializeResult.value = init
             connectedFingerprint = connectionFingerprint(config)
             _connectionState.value = McpConnectionState.CONNECTED
@@ -248,6 +294,7 @@ class McpSessionState(
                 timestampMs = Clock.System.now().toEpochMilliseconds(),
             )
         } finally {
+            failPendingCallbacks()
             _busy.value = false
         }
     }
@@ -286,9 +333,74 @@ class McpSessionState(
     }
 
     fun cancelCall() {
+        failPendingCallbacks()
         callJob?.cancel()
         callJob = null
         _busy.value = false
+    }
+
+    fun approveSamplingGenerate() {
+        val pending = _pendingSampling.value as? McpPendingSampling.ReviewRequest ?: return
+        val url = client?.config?.samplingForwardUrl
+        if (url.isNullOrBlank()) {
+            _pendingSampling.value = McpPendingSampling.ReviewResult(
+                request = pending.request,
+                deferred = pending.deferred,
+                draft = emptyMcpSamplingResult(),
+                generateError = "No LLM URL",
+            )
+            return
+        }
+        _pendingSampling.value = McpPendingSampling.ReviewResult(
+            request = pending.request,
+            deferred = pending.deferred,
+            draft = emptyMcpSamplingResult(),
+            generating = true,
+        )
+        scope.launch {
+            val (draft, err) = try {
+                val generated = client?.generateSampling(pending.request) ?: emptyMcpSamplingResult()
+                generated to null
+            } catch (e: Exception) {
+                emptyMcpSamplingResult() to (e.message ?: e.toString())
+            }
+            val current = _pendingSampling.value
+            if (current is McpPendingSampling.ReviewResult && current.deferred === pending.deferred) {
+                _pendingSampling.value = current.copy(draft = draft, generateError = err, generating = false)
+            }
+        }
+    }
+
+    fun submitSamplingResult(result: McpCreateMessageResult) {
+        val pending = _pendingSampling.value ?: return
+        _pendingSampling.value = null
+        pending.deferred.complete(result)
+    }
+
+    fun cancelSampling() {
+        val pending = _pendingSampling.value ?: return
+        _pendingSampling.value = null
+        pending.deferred.complete(cancelledMcpSamplingResult())
+    }
+
+    fun updatePendingElicitArgs(argsJson: String) {
+        val pending = _pendingElicitation.value ?: return
+        _pendingElicitation.value = pending.copy(argsJson = argsJson)
+    }
+
+    fun submitElicitation(content: JsonObject? = null) {
+        val pending = _pendingElicitation.value ?: return
+        _pendingElicitation.value = null
+        val parsed = content ?: runCatching {
+            mcpPrettyJson.parseToJsonElement(pending.argsJson) as? JsonObject
+        }.getOrNull() ?: JsonObject(emptyMap())
+        pending.deferred.complete(McpElicitResult(action = McpElicitAction.ACCEPT, content = parsed))
+    }
+
+    fun declineElicitation() {
+        val pending = _pendingElicitation.value ?: return
+        _pendingElicitation.value = null
+        pending.deferred.complete(McpElicitResult(action = McpElicitAction.DECLINE))
     }
 
     fun isReconnectNeeded(config: McpConnectionConfig): Boolean =
@@ -300,6 +412,7 @@ class McpSessionState(
         }
 
     suspend fun disconnect() {
+        failPendingCallbacks()
         callJob?.cancel()
         callJob = null
         logJob?.cancel()
@@ -331,6 +444,51 @@ class McpSessionState(
 
     fun sessionId(): String? = client?.sessionId
 
+    private fun installInteractiveHandlers(created: McpClient) {
+        val cfg = created.config
+        if (cfg.samplingMode == McpSamplingMode.MANUAL) {
+            created.handlers.onSampling = { req ->
+                val deferred = CompletableDeferred<McpCreateMessageResult>()
+                _pendingSampling.value = McpPendingSampling.ReviewRequest(req, deferred)
+                try {
+                    deferred.await()
+                } finally {
+                    if (_pendingSampling.value?.deferred === deferred) {
+                        _pendingSampling.value = null
+                    }
+                }
+            }
+        }
+        if (!cfg.autoRespondElicitation) {
+            created.handlers.onElicit = { req ->
+                val deferred = CompletableDeferred<McpElicitResult>()
+                _pendingElicitation.value = McpPendingElicitation(
+                    request = req,
+                    argsJson = mcpDefaultArgsJson(req.requestedSchema),
+                    deferred = deferred,
+                )
+                try {
+                    deferred.await()
+                } finally {
+                    if (_pendingElicitation.value?.deferred === deferred) {
+                        _pendingElicitation.value = null
+                    }
+                }
+            }
+        }
+    }
+
+    private fun failPendingCallbacks() {
+        _pendingSampling.value?.let { pending ->
+            _pendingSampling.value = null
+            pending.deferred.complete(cancelledMcpSamplingResult())
+        }
+        _pendingElicitation.value?.let { pending ->
+            _pendingElicitation.value = null
+            pending.deferred.complete(McpElicitResult(action = McpElicitAction.DECLINE))
+        }
+    }
+
     private fun latestWireJson(): String? =
         client?.lastReceivedPayload?.takeIf { it.isNotBlank() }?.let(::mcpPrettyWireJson)
 
@@ -358,18 +516,7 @@ private fun Map<String, List<String>>.toKeyValueEntries(): List<KeyValueEntry> =
 
 internal val mcpPrettyJson = Json { prettyPrint = true; encodeDefaults = true; ignoreUnknownKeys = true }
 
-/** Pretty-print a JSON-RPC wire frame without re-encoding through MCP data classes. */
-internal val mcpWirePretty = Json {
-    prettyPrint = true
-    encodeDefaults = false
-    explicitNulls = false
-    ignoreUnknownKeys = true
-}
-
-internal fun mcpPrettyWireJson(raw: String): String =
-    runCatching {
-        mcpWirePretty.encodeToString(JsonElement.serializer(), mcpWirePretty.parseToJsonElement(raw))
-    }.getOrDefault(raw)
+internal fun mcpPrettyWireJson(raw: String): String = JsonMode.format(raw)
 
 internal fun mcpDefaultArgsJson(schema: JsonObject): String {
     val properties = schema["properties"] as? JsonObject
@@ -493,6 +640,12 @@ internal fun connectionFingerprint(config: McpConnectionConfig): String =
         config.auth.type.name,
         config.auth.params.entries.sortedBy { it.key }.joinToString { "${it.key}=${it.value}" },
         config.headers.filter { it.enabled && it.key.isNotBlank() }.joinToString { "${it.key}=${it.value}" },
+        config.samplingMode.name,
+        config.samplingForwardUrl.orEmpty(),
+        if (config.samplingForwardToken.isNullOrBlank()) "0" else "1",
+        config.samplingMaxTokens?.toString().orEmpty(),
+        config.autoRespondElicitation.toString(),
+        config.roots.joinToString { "${it.uri}|${it.name.orEmpty()}" },
     ).joinToString("|")
 
 internal fun mcpParseScalar(raw: String, type: String): JsonElement {

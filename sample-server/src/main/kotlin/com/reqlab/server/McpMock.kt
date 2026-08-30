@@ -13,6 +13,9 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
@@ -20,10 +23,20 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal val mcpMockJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
+internal const val MCP_WAIT_FOR_KEY = "_reqlabWaitFor"
+internal const val MCP_CALLBACK_SAMPLE = "srv-sample"
+internal const val MCP_CALLBACK_ELICIT = "srv-elicit"
+internal const val MCP_CALLBACK_ROOTS = "srv-roots"
+internal const val MCP_CALLBACK_PING = "srv-ping"
+internal const val MCP_CALLBACK_TIMEOUT_MS = 60_000L
+
 data class McpMockSession(
     val id: String = UUID.randomUUID().toString(),
     val subscribed: MutableSet<String> = ConcurrentHashMap.newKeySet(),
     var logLevel: String = "info",
+    val lastReplies: ConcurrentHashMap<String, JsonObject> = ConcurrentHashMap(),
+    val callbackReplies: ConcurrentHashMap<String, CompletableDeferred<JsonObject>> = ConcurrentHashMap(),
+    val serverPushes: Channel<McpOutbound> = Channel(Channel.UNLIMITED),
 )
 
 data class McpOutbound(
@@ -60,6 +73,11 @@ object McpMockProtocol {
         val id = obj["id"]
         val params = obj["params"] as? JsonObject
         if (method == null) {
+            val isResponse = obj.containsKey("result") || obj.containsKey("error")
+            if (isResponse && id != null && id !is JsonNull) {
+                completeCallback(session, jsonIdKey(id), obj)
+                return null
+            }
             return if (id != null && id !is JsonNull) rpcError(id, -32600, "Invalid request") else null
         }
         if (id == null || id is JsonNull) {
@@ -124,6 +142,7 @@ object McpMockProtocol {
             tool("trigger_sampling", "Ask the client to sample a message"),
             tool("trigger_elicitation", "Ask the client to fill a form"),
             tool("trigger_roots", "Ask the client for roots/list"),
+            tool("trigger_ping", "Ask the client to answer ping"),
         )
         return if (cursor == "page2") {
             buildJsonObject { put("tools", buildJsonArray {}) }
@@ -173,60 +192,130 @@ object McpMockProtocol {
                 }
                 rpcResult(id, toolText("done"))
             }
-            "trigger_sampling" -> {
-                extraOut += McpOutbound(
-                    buildJsonObject {
-                        put("jsonrpc", "2.0")
-                        put("id", "srv-sample")
-                        put("method", "sampling/createMessage")
-                        put("params", buildJsonObject {
-                            put("messages", buildJsonArray {
-                                add(buildJsonObject {
-                                    put("role", "user")
-                                    put("content", buildJsonObject {
-                                        put("type", "text")
-                                        put("text", "Say hi")
-                                    })
-                                })
-                            })
-                            put("maxTokens", 32)
-                        })
-                    },
-                )
-                rpcResult(id, toolText("sampling requested"))
-            }
-            "trigger_elicitation" -> {
-                extraOut += McpOutbound(
-                    buildJsonObject {
-                        put("jsonrpc", "2.0")
-                        put("id", "srv-elicit")
-                        put("method", "elicitation/create")
-                        put("params", buildJsonObject {
-                            put("message", "What is your name?")
-                            put("requestedSchema", buildJsonObject {
-                                put("type", "object")
-                                put("properties", buildJsonObject {
-                                    put("name", buildJsonObject { put("type", "string") })
+            "trigger_sampling" -> triggerCallback(
+                session = session,
+                extraOut = extraOut,
+                callId = id,
+                callbackId = MCP_CALLBACK_SAMPLE,
+                envelope = buildJsonObject {
+                    put("jsonrpc", "2.0")
+                    put("id", MCP_CALLBACK_SAMPLE)
+                    put("method", "sampling/createMessage")
+                    put("params", buildJsonObject {
+                        put("messages", buildJsonArray {
+                            add(buildJsonObject {
+                                put("role", "user")
+                                put("content", buildJsonObject {
+                                    put("type", "text")
+                                    put("text", "Say hi")
                                 })
                             })
                         })
-                    },
-                )
-                rpcResult(id, toolText("elicitation requested"))
-            }
-            "trigger_roots" -> {
-                extraOut += McpOutbound(
-                    buildJsonObject {
-                        put("jsonrpc", "2.0")
-                        put("id", "srv-roots")
-                        put("method", "roots/list")
-                        put("params", buildJsonObject {})
-                    },
-                )
-                rpcResult(id, toolText("roots requested"))
-            }
+                        put("maxTokens", 32)
+                    })
+                },
+            )
+            "trigger_elicitation" -> triggerCallback(
+                session = session,
+                extraOut = extraOut,
+                callId = id,
+                callbackId = MCP_CALLBACK_ELICIT,
+                envelope = buildJsonObject {
+                    put("jsonrpc", "2.0")
+                    put("id", MCP_CALLBACK_ELICIT)
+                    put("method", "elicitation/create")
+                    put("params", buildJsonObject {
+                        put("message", "What is your name?")
+                        put("requestedSchema", buildJsonObject {
+                            put("type", "object")
+                            put("properties", buildJsonObject {
+                                put("name", buildJsonObject { put("type", "string") })
+                            })
+                        })
+                    })
+                },
+            )
+            "trigger_roots" -> triggerCallback(
+                session = session,
+                extraOut = extraOut,
+                callId = id,
+                callbackId = MCP_CALLBACK_ROOTS,
+                envelope = buildJsonObject {
+                    put("jsonrpc", "2.0")
+                    put("id", MCP_CALLBACK_ROOTS)
+                    put("method", "roots/list")
+                    put("params", buildJsonObject {})
+                },
+            )
+            "trigger_ping" -> triggerCallback(
+                session = session,
+                extraOut = extraOut,
+                callId = id,
+                callbackId = MCP_CALLBACK_PING,
+                envelope = buildJsonObject {
+                    put("jsonrpc", "2.0")
+                    put("id", MCP_CALLBACK_PING)
+                    put("method", "ping")
+                    put("params", buildJsonObject {})
+                },
+            )
             else -> rpcError(id, -32602, "Unknown tool $name")
         }
+    }
+
+    private fun triggerCallback(
+        session: McpMockSession,
+        extraOut: MutableList<McpOutbound>,
+        callId: JsonElement,
+        callbackId: String,
+        envelope: JsonObject,
+    ): JsonObject {
+        session.callbackReplies.getOrPut(callbackId) { CompletableDeferred() }
+        extraOut += McpOutbound(envelope)
+        return waitMarker(callId, callbackId)
+    }
+
+    fun waitMarker(callId: JsonElement, callbackId: String) = buildJsonObject {
+        put("jsonrpc", "2.0")
+        put("id", callId)
+        put(MCP_WAIT_FOR_KEY, callbackId)
+    }
+
+    fun waitForCallbackId(result: JsonObject?): String? =
+        result?.get(MCP_WAIT_FOR_KEY)?.jsonPrimitive?.contentOrNull
+
+    fun completeCallback(session: McpMockSession, id: String?, envelope: JsonObject) {
+        if (id.isNullOrBlank()) return
+        session.lastReplies[id] = envelope
+        session.callbackReplies.getOrPut(id) { CompletableDeferred() }.complete(envelope)
+    }
+
+    suspend fun awaitCallback(
+        session: McpMockSession,
+        id: String,
+        timeoutMs: Long = MCP_CALLBACK_TIMEOUT_MS,
+    ): JsonObject? {
+        session.lastReplies[id]?.let { return it }
+        val deferred = session.callbackReplies.getOrPut(id) { CompletableDeferred() }
+        session.lastReplies[id]?.let { return it }
+        return withTimeoutOrNull(timeoutMs) { deferred.await() }
+    }
+
+    suspend fun resolveWaitResult(session: McpMockSession, result: JsonObject?): JsonObject? {
+        val waitFor = waitForCallbackId(result) ?: return result
+        val callId = result?.get("id") ?: return result
+        val echoed = awaitCallback(session, waitFor)
+        return if (echoed == null) {
+            rpcResult(callId, toolText("Timed out waiting for client reply to $waitFor", isError = true))
+        } else {
+            rpcResult(callId, toolText(echoed.toString()))
+        }
+    }
+
+    fun jsonIdKey(id: JsonElement?): String? {
+        if (id == null || id is JsonNull) return null
+        val primitive = id as? JsonPrimitive ?: return id.toString()
+        return primitive.content
     }
 
     private fun resourcesList() = buildJsonObject {
@@ -311,7 +400,7 @@ object McpMockProtocol {
 
     fun sseEndpointFrame(path: String): String = "event: endpoint\ndata: $path\n\n"
 
-    private fun toolText(text: String, isError: Boolean = false) = buildJsonObject {
+    internal fun toolText(text: String, isError: Boolean = false) = buildJsonObject {
         put("content", buildJsonArray {
             add(buildJsonObject {
                 put("type", "text")

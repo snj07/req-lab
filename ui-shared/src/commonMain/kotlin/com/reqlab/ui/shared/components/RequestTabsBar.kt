@@ -25,7 +25,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -212,12 +211,7 @@ private fun RequestTabChip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (tab.kind == com.reqlab.core.model.RequestKind.MCP) {
-                Icon(
-                    Icons.Default.Hub,
-                    contentDescription = "MCP",
-                    tint = ReqLabColors.Primary,
-                    modifier = Modifier.size(12.dp).testTag("tab-mcp-badge-${tab.id}"),
-                )
+                McpMethodBadge(compact = true, modifier = Modifier.testTag("tab-mcp-badge-${tab.id}"))
             } else {
                 MethodBadge(tab.method, compact = true)
             }

@@ -1,7 +1,12 @@
 package com.reqlab.editor.core
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+
+private const val JSON_UNWRAP_MAX_DEPTH = 8
 
 object JsonMode : LanguageModeProvider {
     override val mode = LanguageMode.JSON
@@ -16,8 +21,32 @@ object JsonMode : LanguageModeProvider {
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     override fun format(text: String): String = try {
         val element = prettyJson.decodeFromString(JsonElement.serializer(), text)
-        prettyJson.encodeToString(JsonElement.serializer(), element)
+        prettyJson.encodeToString(JsonElement.serializer(), unwrapEmbeddedJson(element))
     } catch (_: Throwable) { text }
+
+    /**
+     * Recursively replace string values that are JSON objects/arrays with the parsed value
+     * so Pretty/Format match viewers that expand nested JSON.
+     */
+    internal fun unwrapEmbeddedJson(element: JsonElement, depth: Int = 0): JsonElement {
+        if (depth >= JSON_UNWRAP_MAX_DEPTH) return element
+        return when (element) {
+            is JsonObject -> JsonObject(element.mapValues { (_, value) -> unwrapEmbeddedJson(value, depth + 1) })
+            is JsonArray -> JsonArray(element.map { unwrapEmbeddedJson(it, depth + 1) })
+            is JsonPrimitive -> unwrapJsonString(element, depth)
+        }
+    }
+
+    private fun unwrapJsonString(primitive: JsonPrimitive, depth: Int): JsonElement {
+        if (!primitive.isString) return primitive
+        val trimmed = primitive.content.trim()
+        if (trimmed.isEmpty() || (trimmed[0] != '{' && trimmed[0] != '[')) return primitive
+        val parsed = runCatching { prettyJson.parseToJsonElement(trimmed) }.getOrNull() ?: return primitive
+        return when (parsed) {
+            is JsonObject, is JsonArray -> unwrapEmbeddedJson(parsed, depth + 1)
+            else -> primitive
+        }
+    }
 
     override fun tokenizeLine(line: String, lineNumber: Int, state: Any?): Pair<List<Token>, Any?> {
         val tokens = mutableListOf<Token>()

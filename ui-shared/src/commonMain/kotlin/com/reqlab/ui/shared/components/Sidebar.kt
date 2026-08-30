@@ -1191,6 +1191,20 @@ fun MethodBadge(method: HttpMethodType, compact: Boolean = false) {
     )
 }
 
+@Composable
+fun McpMethodBadge(compact: Boolean = false, modifier: Modifier = Modifier) {
+    Text(
+        text = "MCP",
+        color = ReqLabColors.Primary,
+        fontSize = if (compact) 10.sp else 12.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(ReqLabColors.Primary.copy(alpha = 0.12f))
+            .padding(horizontal = if (compact) 4.dp else 6.dp, vertical = 2.dp),
+    )
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun CollectionTreeNode(
@@ -1417,12 +1431,7 @@ private fun CollectionTreeNode(
                     tint = ReqLabColors.OnSurfaceDim.copy(alpha = 0.4f),
                     modifier = Modifier.size(12.dp),
                 )
-                Icon(
-                    Icons.Default.Hub,
-                    contentDescription = "MCP",
-                    tint = ReqLabColors.Primary,
-                    modifier = Modifier.size(14.dp).testTag("mcp-badge-${node.id}"),
-                )
+                McpMethodBadge(compact = true, modifier = Modifier.testTag("mcp-badge-${node.id}"))
             } else if (node.method != null) {
                 Icon(
                     Icons.Default.DragIndicator,

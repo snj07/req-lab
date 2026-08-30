@@ -3,6 +3,7 @@ package com.reqlab.server
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveText
@@ -16,6 +17,8 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.options
 import io.ktor.server.routing.post
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,7 +54,9 @@ fun Route.mcpAndOAuthRoutes() {
     delete("/mcp") {
         call.applyMcpCors()
         val sid = call.request.header("Mcp-Session-Id")
-        if (sid != null) McpMockProtocol.sessions.remove(sid)
+        if (sid != null) {
+            McpMockProtocol.sessions.remove(sid)?.serverPushes?.close()
+        }
         call.respond(HttpStatusCode.NoContent)
     }
 
@@ -181,8 +186,9 @@ private suspend fun ApplicationCall.handleMcpPost(gate: McpAuthGate) {
     val extra = mutableListOf<McpOutbound>()
     val session = if (stateless) McpMockSession() else McpMockProtocol.requireOrCreate(sessionHeader)
     if (!stateless) McpMockProtocol.sessions[session.id] = session
-    val result = McpMockProtocol.handle(body, session, extra)
-    if (result != null && result["result"] != null) {
+    val handled = McpMockProtocol.handle(body, session, extra)
+    extra.forEach { outbound -> session.serverPushes.trySend(outbound) }
+    if (handled != null && handled["result"] != null) {
         val method = runCatching {
             mcpMockJson.parseToJsonElement(body) as JsonObject
         }.getOrNull()?.get("method")?.let { (it as? JsonPrimitive)?.content }
@@ -192,29 +198,25 @@ private suspend fun ApplicationCall.handleMcpPost(gate: McpAuthGate) {
     }
     val accept = request.header(HttpHeaders.Accept).orEmpty()
     val wantsSse = accept.contains("text/event-stream")
-    if (wantsSse && (extra.isNotEmpty() || (result != null && accept.contains("text/event-stream") && extra.isNotEmpty()))) {
-        respondTextWriter(contentType = ContentType.parse("text/event-stream")) {
-            extra.forEach { outbound ->
-                write(McpMockProtocol.sseFrame(outbound, eventIds.getAndIncrement()))
-                flush()
-            }
-            if (result != null) {
-                write(McpMockProtocol.sseFrame(McpOutbound(result), eventIds.getAndIncrement()))
-                flush()
-            }
-        }
-        return
-    }
     if (wantsSse && extra.isNotEmpty()) {
-        respondTextWriter(contentType = ContentType.parse("text/event-stream")) {
-            extra.forEach { write(McpMockProtocol.sseFrame(it, eventIds.getAndIncrement())); flush() }
-            if (result != null) {
-                write(McpMockProtocol.sseFrame(McpOutbound(result), eventIds.getAndIncrement()))
-                flush()
+        response.header(HttpHeaders.CacheControl, "no-cache")
+        respond(object : OutgoingContent.WriteChannelContent() {
+            override val contentType: ContentType = ContentType.parse("text/event-stream")
+            override suspend fun writeTo(channel: ByteWriteChannel) {
+                extra.forEach { outbound ->
+                    channel.writeStringUtf8(McpMockProtocol.sseFrame(outbound, eventIds.getAndIncrement()))
+                    channel.flush()
+                }
+                val result = McpMockProtocol.resolveWaitResult(session, handled)
+                if (result != null) {
+                    channel.writeStringUtf8(McpMockProtocol.sseFrame(McpOutbound(result), eventIds.getAndIncrement()))
+                    channel.flush()
+                }
             }
-        }
+        })
         return
     }
+    val result = McpMockProtocol.resolveWaitResult(session, handled)
     if (result == null) {
         respond(HttpStatusCode.Accepted)
         return
@@ -224,7 +226,19 @@ private suspend fun ApplicationCall.handleMcpPost(gate: McpAuthGate) {
 
 private suspend fun ApplicationCall.handleMcpGet() {
     applyMcpCors()
-    respond(HttpStatusCode.MethodNotAllowed, "GET SSE optional; not used by this mock")
+    val sessionHeader = request.header("Mcp-Session-Id")
+    val session = McpMockProtocol.session(sessionHeader)
+    if (session == null) {
+        respond(HttpStatusCode.MethodNotAllowed, "GET SSE optional; session required")
+        return
+    }
+    response.header(HttpHeaders.CacheControl, "no-cache")
+    respondTextWriter(contentType = ContentType.parse("text/event-stream")) {
+        for (outbound in session.serverPushes) {
+            write(McpMockProtocol.sseFrame(outbound, eventIds.getAndIncrement()))
+            flush()
+        }
+    }
 }
 
 private suspend fun ApplicationCall.handleLegacySse() {
@@ -250,7 +264,8 @@ private suspend fun ApplicationCall.handleLegacyMessage() {
     val extra = mutableListOf<McpOutbound>()
     val result = McpMockProtocol.handle(receiveText(), session, extra)
     extra.forEach { channel?.send(McpMockProtocol.sseFrame(it, eventIds.getAndIncrement())) }
-    if (result != null) channel?.send(McpMockProtocol.sseFrame(McpOutbound(result), eventIds.getAndIncrement()))
+    val resolved = McpMockProtocol.resolveWaitResult(session, result)
+    if (resolved != null) channel?.send(McpMockProtocol.sseFrame(McpOutbound(resolved), eventIds.getAndIncrement()))
     respond(HttpStatusCode.Accepted)
 }
 
@@ -317,8 +332,30 @@ fun runMcpStdio() {
         val line = reader.readLine() ?: break
         if (line.isBlank()) continue
         val extra = mutableListOf<McpOutbound>()
-        val result = McpMockProtocol.handle(line, session, extra)
+        val handled = McpMockProtocol.handle(line, session, extra)
         extra.forEach { System.out.println(it.envelope.toString()) }
+        System.out.flush()
+        val waitFor = McpMockProtocol.waitForCallbackId(handled)
+        val result = if (waitFor != null) {
+            val replyLine = reader.readLine()
+            if (!replyLine.isNullOrBlank()) {
+                McpMockProtocol.handle(replyLine, session, mutableListOf())
+            }
+            val echoed = session.lastReplies[waitFor]
+            val callId = handled?.get("id")
+            if (callId == null) {
+                null
+            } else if (echoed == null) {
+                McpMockProtocol.rpcResult(
+                    callId,
+                    McpMockProtocol.toolText("Timed out waiting for client reply to $waitFor", isError = true),
+                )
+            } else {
+                McpMockProtocol.rpcResult(callId, McpMockProtocol.toolText(echoed.toString()))
+            }
+        } else {
+            handled
+        }
         if (result != null) System.out.println(result.toString())
         System.out.flush()
     }

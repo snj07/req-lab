@@ -7,9 +7,9 @@ import com.reqlab.core.model.McpHttpMode
 import com.reqlab.core.network.SseParser
 import io.ktor.client.HttpClient
 import io.ktor.client.request.accept
-import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
@@ -73,28 +73,30 @@ class LegacyHttpSseTransport(
     }
 
     private suspend fun openSse() {
-        val response = httpClient.get(config.url) {
+        httpClient.prepareGet(config.url) {
             accept(ContentType.Text.EventStream)
             header(HttpHeaders.CacheControl, "no-cache")
             applyMcpHeaders(config.headers, config.auth, config.oauth, sessionId, protocolVersion, lastEventId)
-        }
-        val channel = response.bodyAsChannel()
-        val parser = SseParser()
-        while (!channel.isClosedForRead) {
-            val line = channel.readUTF8Line() ?: break
-            val event = parser.feedLine(line) ?: continue
-            if (!event.id.isNullOrBlank()) lastEventId = event.id
-            if (event.eventType == "endpoint") {
-                val relative = event.data.trim()
-                val resolved = resolveEndpoint(config.url, relative)
-                postUrl = resolved
-                if (!endpointReady.isCompleted) endpointReady.complete(resolved)
-            } else {
+        }.execute { response ->
+            lastResponseHeaders = response.headers.entries().associate { it.key to it.value }
+            val channel = response.bodyAsChannel()
+            val parser = SseParser()
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                val event = parser.feedLine(line) ?: continue
+                if (!event.id.isNullOrBlank()) lastEventId = event.id
+                if (event.eventType == "endpoint") {
+                    val relative = event.data.trim()
+                    val resolved = resolveEndpoint(config.url, relative)
+                    postUrl = resolved
+                    if (!endpointReady.isCompleted) endpointReady.complete(resolved)
+                } else {
+                    parseJsonRpc(event.data)?.let { _incoming.emit(it) }
+                }
+            }
+            parser.flush()?.let { event ->
                 parseJsonRpc(event.data)?.let { _incoming.emit(it) }
             }
-        }
-        parser.flush()?.let { event ->
-            parseJsonRpc(event.data)?.let { _incoming.emit(it) }
         }
     }
 

@@ -37,11 +37,19 @@ LLM streaming E2E against the embedded sample-server:
 ./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.LlmApiE2ETest
 ```
 
-MCP Streamable HTTP + OAuth E2E:
+MCP Streamable HTTP, legacy HTTP+SSE, stdio, sampling/roots/elicitation, LLM generate, and OAuth E2E:
 
 ```bash
 ./gradlew :qa-tests:jvmTest --tests com.reqlab.qa.McpHttpE2ETest
+./gradlew :ui-desktop:desktopTest --tests com.reqlab.ui.desktop.McpSessionCallbackE2ETest
+./gradlew :ui-desktop:desktopTest --tests com.reqlab.ui.desktop.McpCallbackPaneUiTest
 ```
+
+### MCP fixtures
+
+Import [qa-tests/fixtures/reqlab-test-collection.json](../qa-tests/fixtures/reqlab-test-collection.json) and [qa-tests/fixtures/reqlab-test-environment.json](../qa-tests/fixtures/reqlab-test-environment.json). Folder **MCP (Model Context Protocol)** covers Streamable HTTP (plain + auth + query params), legacy SSE, stdio (`{{mcpStdioCommand}}` = `sample-server`), sampling mock/manual/LLM (`{{llmBaseUrl}}` + `{{llmApiKey}}`), roots, and elicitation accept/decline.
+
+The JS collection validator skips `STDIO` and `LEGACY_2024_11_05`. Kotlin e2e (`:qa-tests:jvmTest --tests com.reqlab.qa.McpHttpE2ETest`) is the protocol source of truth. Product guide: [docs/mcp.md](mcp.md). Mock routes and PATH shim: [DEVELOPMENT.md](../DEVELOPMENT.md).
 
 Run full project checks:
 

@@ -409,5 +409,7 @@ data class McpConnectionConfig(
     val roots: List<McpRoot> = emptyList(),
     val samplingMode: McpSamplingMode = McpSamplingMode.MOCK,
     val samplingForwardUrl: String? = null,
+    val samplingForwardToken: String? = null,
+    val samplingMaxTokens: Int? = null,
     val autoRespondElicitation: Boolean = true,
 )

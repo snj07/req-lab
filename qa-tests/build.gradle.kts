@@ -38,4 +38,5 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     useJUnit()
+    dependsOn(":sample-server:installDist")
 }

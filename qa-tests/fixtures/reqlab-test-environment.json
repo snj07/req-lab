@@ -24,6 +24,8 @@
         "mcpTenantUrl": "http://localhost:8080/mcp?requireTenant=true&tenant=acme",
         "mcpBearerToken": "reqlab-mcp-token",
         "mcpApiKey": "reqlab-key",
-        "mcpJwtToken": "reqlab-mcp-jwt"
+        "mcpJwtToken": "reqlab-mcp-jwt",
+        "mcpLegacyUrl": "http://localhost:8080/mcp/sse",
+        "mcpStdioCommand": "sample-server"
     }
 }

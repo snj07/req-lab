@@ -56,7 +56,7 @@ You can import these sample fixtures from the repo:
 - Collection sample: [qa-tests/fixtures/reqlab-test-collection.json](qa-tests/fixtures/reqlab-test-collection.json)
 - Environment sample: [qa-tests/fixtures/reqlab-test-environment.json](qa-tests/fixtures/reqlab-test-environment.json)
 
-The collection includes an **LLM (OpenAI-compatible)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** to watch a token stream on one POST.
+The collection includes an **LLM (OpenAI-compatible)** folder and an **MCP (Model Context Protocol)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** to watch a token stream, or open an MCP item and Connect. See [docs/mcp.md](docs/mcp.md).
 
 ## Features
 
@@ -69,8 +69,22 @@ The collection includes an **LLM (OpenAI-compatible)** folder. Start the sample 
 - Auth: None, Basic, Bearer Token, API Key, JWT
 - Retry controls and per-request timeout
 - HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`)
-- MCP client: Streamable HTTP, legacy HTTP+SSE, and desktop stdio; tools/resources/prompts; OAuth 2.1
 - Copy request as `curl`
+
+### MCP
+
+ReqLab is an [MCP](https://modelcontextprotocol.io/) client in the same workspace as REST: collections, environments, auth, and a shared Response pane.
+
+![ReqLab MCP tools — connected session, tool list, Form/JSON arguments, JSON-RPC result](docs/images/mcp-tools.png)
+
+- Transports: Streamable HTTP, Auto (legacy fallback), Legacy HTTP+SSE, desktop stdio
+- Tools (Form/JSON), resources (read + subscribe), prompts — results in the shared Response pane
+- Activity JSON-RPC inspector; Logs vs Console
+- Sampling, roots, elicitation on the Client tab
+- Same auth editors as REST (None / Basic / Bearer / API Key / JWT); `{{variables}}` in URL, command, headers, and auth
+- Collection save, import, and export of MCP items
+
+Full guide: [docs/mcp.md](docs/mcp.md)
 
 ### 📬 Response Inspection
 
@@ -192,6 +206,7 @@ Open from the toolbar `Help` icon or via **Settings → Open Help & About**:
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Build, run, and contribute locally |
 | [docs/architecture.md](docs/architecture.md) | Module structure and data flow |
 | [docs/editor-architecture.md](docs/editor-architecture.md) | Code editor internals |
+| [docs/mcp.md](docs/mcp.md) | MCP client: tools, resources, prompts, Activity, sampling |
 | [docs/scripts.md](docs/scripts.md) | Scripting API and variable scopes |
 | [docs/shortcuts.md](docs/shortcuts.md) | Keyboard shortcut reference |
 | [docs/testing.md](docs/testing.md) | Test strategy and coverage matrix |

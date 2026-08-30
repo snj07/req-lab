@@ -43,6 +43,7 @@ internal fun resolveMcpConfig(
         env = config.env.mapValues { r(it.value) },
         workingDir = config.workingDir?.let(::r),
         samplingForwardUrl = config.samplingForwardUrl?.let(::r),
+        samplingForwardToken = config.samplingForwardToken?.let(::r),
     )
 }
 

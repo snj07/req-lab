@@ -34,6 +34,7 @@ import com.reqlab.core.model.McpReadResourceResult
 import com.reqlab.core.model.McpResource
 import com.reqlab.core.model.McpResourceTemplate
 import com.reqlab.core.model.McpRoot
+import com.reqlab.core.model.McpSamplingMode
 import com.reqlab.core.model.McpTool
 import com.reqlab.core.model.McpToolResult
 import com.reqlab.core.model.McpTransportType
@@ -115,7 +116,7 @@ class McpClient(
     ): McpInitializeResult {
         disconnect()
         config = resolveMcpConfig(connection, variableLayers)
-        handlers.onRoots = { config.roots }
+        applyConfigHandlers(config)
         _state.value = McpConnectionState.CONNECTING
         log(McpLogEntryKind.STATE, "Connecting via ${config.transport} ${config.httpMode}")
         try {
@@ -237,6 +238,38 @@ class McpClient(
         notify("notifications/roots/list_changed", null)
     }
 
+    suspend fun generateSampling(request: McpCreateMessageRequest): McpCreateMessageResult {
+        val url = config.samplingForwardUrl?.takeIf { it.isNotBlank() }
+            ?: throw McpProtocolException("No sampling LLM URL")
+        return forwardMcpSampling(
+            httpClient = httpClient,
+            url = url,
+            bearerToken = config.samplingForwardToken,
+            request = request,
+            maxTokensCap = config.samplingMaxTokens,
+        )
+    }
+
+    private fun applyConfigHandlers(cfg: McpConnectionConfig) {
+        handlers.onRoots = { cfg.roots }
+        handlers.onSampling = {
+            when (cfg.samplingMode) {
+                McpSamplingMode.MANUAL -> cancelledMcpSamplingResult()
+                McpSamplingMode.MOCK -> McpCreateMessageResult(
+                    content = com.reqlab.core.model.McpContent(type = "text", text = "mock reply from ReqLab"),
+                )
+                McpSamplingMode.FORWARD_LLM -> generateSampling(it)
+            }
+        }
+        handlers.onElicit = {
+            if (cfg.autoRespondElicitation) {
+                McpElicitResult(action = McpElicitAction.ACCEPT, content = JsonObject(emptyMap()))
+            } else {
+                McpElicitResult(action = McpElicitAction.DECLINE)
+            }
+        }
+    }
+
     private suspend fun handshake(active: McpTransport): McpInitializeResult {
         val params = McpInitializeParams(
             protocolVersion = MCP_PROTOCOL_VERSION,
@@ -266,7 +299,13 @@ class McpClient(
             McpTransportType.STDIO -> stdioFactory(cfg)
             McpTransportType.STREAMABLE_HTTP -> when (cfg.httpMode) {
                 McpHttpMode.LEGACY_2024_11_05 -> LegacyHttpSseTransport(httpClient, cfg, scope)
-                else -> StreamableHttpTransport(httpClient, cfg, scope)
+                else -> StreamableHttpTransport(
+                    httpClient,
+                    cfg,
+                    scope,
+                    replyClient = mcpAuxHttpClient(),
+                    streamClient = mcpAuxHttpClient(),
+                )
             }
         }
     }
@@ -282,10 +321,10 @@ class McpClient(
 
     private suspend fun rpcCall(method: String, params: JsonElement?): JsonRpcEnvelope {
         val active = transport ?: throw McpProtocolException("Not connected")
+        val deferred = CompletableDeferred<JsonRpcEnvelope>()
         val idValue = pendingMutex.withLock {
             val id = nextId++
-            val key = id.toString()
-            pending[key] = CompletableDeferred()
+            pending[id.toString()] = deferred
             id
         }
         val key = idValue.toString()
@@ -298,7 +337,8 @@ class McpClient(
             handshake(active)
             active.send(message)
         }
-        val deferred = pendingMutex.withLock { pending[key] } ?: throw McpProtocolException("Lost pending id $key")
+        // Keep the local deferred: legacy HTTP+SSE (and any transport that delivers on
+        // another coroutine) can complete and remove the map entry during send().
         return try {
             awaitWithWallClockTimeout(deferred, callTimeoutMs) {
                 McpTimeoutException("Timed out waiting for $method")
@@ -328,7 +368,7 @@ class McpClient(
             }
             message.isRequest() -> {
                 log(McpLogEntryKind.RECEIVED, message.method.orEmpty(), encoded, message.method, message.idKey())
-                handleServerRequest(message)
+                scope.launch { handleServerRequest(message) }
             }
             message.isNotification() -> {
                 log(McpLogEntryKind.NOTIFICATION, message.method.orEmpty(), encoded, message.method, null)
@@ -410,7 +450,9 @@ class McpClient(
     }
 }
 
-internal fun defaultMcpHttpClient(): HttpClient = createPlatformHttpClient {
+internal fun defaultMcpHttpClient(): HttpClient = mcpAuxHttpClient()
+
+internal fun mcpAuxHttpClient(): HttpClient = createPlatformHttpClient {
     install(HttpTimeout) {
         requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
         socketTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS

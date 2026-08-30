@@ -20,6 +20,13 @@ dependencies {
 
     // Logging (required by Netty)
     implementation("ch.qos.logback:logback-classic:1.5.13")
+
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.junit4)
+}
+
+tasks.test {
+    useJUnit()
 }
 
 tasks.named<JavaExec>("run") {
@@ -32,4 +39,19 @@ tasks.register("runServer") {
     group = "application"
     description = "Starts the ReqLab sample API server at http://localhost:8080"
     dependsOn("run")
+}
+
+/**
+ * Writes ~/.local/bin/sample-server (macOS/Linux) so the mock is on the login PATH
+ * as an MCP stdio process. The HTTP server is still `./gradlew :sample-server:run`.
+ */
+tasks.register<JavaExec>("installMcpCommand") {
+    group = "application"
+    description = "Installs `sample-server` on PATH as an MCP stdio server"
+    dependsOn("installDist", "classes")
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.reqlab.server.InstallMcpCommandKt")
+    val unixLauncher = layout.projectDirectory.file("mcp-stdio")
+    val windowsLauncher = layout.buildDirectory.file("install/sample-server/bin/sample-server.bat")
+    args(unixLauncher.asFile.absolutePath, windowsLauncher.get().asFile.absolutePath)
 }

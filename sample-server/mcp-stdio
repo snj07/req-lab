@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Launches the ReqLab sample MCP mock over stdio (MCP 2025-06-18).
+# Used by the test collection env var mcpStdioCommand.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BIN="$ROOT/sample-server/build/install/sample-server/bin/sample-server"
+if [[ ! -x "$BIN" ]]; then
+  echo "Building sample-server distribution (once)…" >&2
+  (cd "$ROOT" && ./gradlew :sample-server:installDist -q) >&2
+fi
+exec "$BIN" --stdio "$@"

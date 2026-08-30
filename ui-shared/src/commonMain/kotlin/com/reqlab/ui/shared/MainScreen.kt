@@ -54,6 +54,7 @@ import com.reqlab.ui.shared.components.OperationProgressDialog
 import com.reqlab.ui.shared.components.RealtimePanel
 import com.reqlab.ui.shared.components.RequestEditor
 import com.reqlab.ui.shared.components.McpPanel
+import com.reqlab.ui.shared.components.McpWorkspaceResponse
 import com.reqlab.ui.shared.components.RequestTabsBar
 import com.reqlab.ui.shared.components.ResponseViewer
 import com.reqlab.ui.shared.components.SettingsDialog
@@ -143,7 +144,8 @@ fun MainScreen(state: AppState = remember { AppState() }) {
             // rows triggers auto-save even if bodyContent length is unchanged.
             val formCount = t?.formRows?.size ?: 0
             val urlEncCount = t?.urlencodedRows?.size ?: 0
-            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|BL:$bodyLen|FR:$formCount|UE:$urlEncCount|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}"
+            val mcp = t?.mcpClientFingerprint() ?: ""
+            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|BL:$bodyLen|FR:$formCount|UE:$urlEncCount|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}|$mcp"
         }.drop(1)
             .collect {
                 if (state.settings.autoSaveRequests) {
@@ -383,7 +385,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                                 splitFraction = state.requestResponseSplit,
                                 onSplitChanged = { state.requestResponseSplit = it },
                                 first = { McpPanel(state, tab) },
-                                second = { ResponseViewer(tab) },
+                                second = { McpWorkspaceResponse(state, tab) },
                             )
                         } else {
                             VerticalSplitPane(
@@ -391,7 +393,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                                 splitFraction = state.mainVerticalSplit,
                                 onSplitChanged = { state.mainVerticalSplit = it },
                                 first = { McpPanel(state, tab) },
-                                second = { ResponseViewer(tab) },
+                                second = { McpWorkspaceResponse(state, tab) },
                             )
                         }
                     } else if (state.settings.responseLayout == ResponseLayout.RIGHT) {

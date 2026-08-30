@@ -2,6 +2,7 @@ package com.reqlab.ui.shared.mcp
 
 import com.reqlab.core.model.McpConnectionConfig
 import com.reqlab.core.model.McpConnectionState
+import com.reqlab.core.model.McpSamplingMode
 import com.reqlab.core.model.McpTransportType
 import com.reqlab.core.network.mcp.McpClient
 import com.reqlab.core.network.mcp.NdjsonStdioTransport
@@ -232,6 +233,25 @@ class McpSessionStateTest {
     }
 
     @Test
+    fun pretty_wire_json_unwraps_callback_payload_string() {
+        val raw = """{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"{\"jsonrpc\":\"2.0\",\"id\":\"srv-sample\",\"result\":{\"role\":\"assistant\",\"content\":{\"type\":\"text\",\"text\":\"mock reply from ReqLab\"},\"model\":\"mock\",\"stopReason\":\"endTurn\"}}"}],"isError":false}}"""
+        val pretty = mcpPrettyWireJson(raw)
+        assertTrue(pretty.contains("\"text\": {") || pretty.contains("\"text\":{"), pretty)
+        assertTrue(pretty.contains("\"srv-sample\""), pretty)
+        assertTrue(pretty.contains("mock reply from ReqLab"), pretty)
+        assertTrue(!pretty.contains("\\\"jsonrpc\\\""), pretty)
+    }
+
+    @Test
+    fun pretty_wire_json_unwraps_roots_callback_string() {
+        val raw = """{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"{\"jsonrpc\":\"2.0\",\"id\":\"srv-roots\",\"result\":{\"roots\":[{\"uri\":\"file:///tmp/reqlab\",\"name\":\"tmp\"}]}}"}],"isError":false}}"""
+        val pretty = mcpPrettyWireJson(raw)
+        assertTrue(pretty.contains("\"srv-roots\""), pretty)
+        assertTrue(pretty.contains("file:///tmp/reqlab"), pretty)
+        assertTrue(pretty.contains("\"text\": {") || pretty.contains("\"text\":{"), pretty)
+    }
+
+    @Test
     fun default_args_json_from_schema() {
         val schema = buildJsonObject {
             put("type", "object")
@@ -306,5 +326,89 @@ class McpSessionStateTest {
         assertTrue(!session.isReconnectNeeded(cfg))
         assertTrue(session.isReconnectNeeded(cfg.copy(command = "y")))
         session.disconnect()
+    }
+
+    @Test
+    fun tools_call_timeout_clears_pending_sampling_overlay() = runTest {
+        val inbound = Channel<String>(Channel.UNLIMITED)
+        val written = Channel<String>(Channel.UNLIMITED)
+        val transport = NdjsonStdioTransport(this, inbound, { written.send(it) })
+        val session = McpSessionState(this) { scope ->
+            McpClient(scope, stdioFactory = { transport }, callTimeoutMs = 5_000)
+        }
+        session.confirmStdio = true
+        val connect = async {
+            session.connect(
+                McpConnectionConfig(
+                    transport = McpTransportType.STDIO,
+                    command = "x",
+                    samplingMode = McpSamplingMode.MANUAL,
+                ),
+            )
+        }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"s","version":"1"}}}""")
+        written.receive()
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}}]}}""")
+        connect.await()
+
+        val call = async { session.callSelectedTool("echo", null) }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{"messages":[],"maxTokens":8}}""")
+        withTimeout(5_000) {
+            session.pendingSampling.first { it is McpPendingSampling.ReviewRequest }
+        }
+        inbound.send(
+            """{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"Timed out waiting for client reply to srv-sample"}],"isError":true}}""",
+        )
+        call.await()
+        assertEquals(null, session.pendingSampling.value)
+        val op = session.lastOperation.value
+        assertTrue(op != null && op.isError)
+        assertTrue(op!!.bodyJson.contains("Timed out waiting for client reply"))
+        session.disconnect()
+    }
+
+    @Test
+    fun clear_logs_empties_activity_without_disconnect() = runTest {
+        val inbound = Channel<String>(Channel.UNLIMITED)
+        val written = Channel<String>(Channel.UNLIMITED)
+        val transport = NdjsonStdioTransport(this, inbound, { written.send(it) })
+        val session = McpSessionState(this) { scope ->
+            McpClient(scope, stdioFactory = { transport }, callTimeoutMs = 5_000)
+        }
+        session.confirmStdio = true
+        val job = async {
+            session.connect(McpConnectionConfig(transport = McpTransportType.STDIO, command = "x"))
+        }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"s","version":"1"}}}""")
+        written.receive()
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}}]}}""")
+        job.await()
+        withTimeout(5_000) {
+            session.logs.first { it.isNotEmpty() }
+        }
+        assertTrue(session.logs.value.isNotEmpty())
+        session.clearLogs()
+        assertTrue(session.logs.value.isEmpty())
+        assertEquals(McpConnectionState.CONNECTED, session.connectionState.value)
+        session.disconnect()
+    }
+
+    @Test
+    fun fingerprint_includes_sampling_roots_and_elicitation() {
+        val base = McpConnectionConfig(url = "http://localhost/mcp")
+        assertTrue(connectionFingerprint(base) != connectionFingerprint(base.copy(samplingMode = com.reqlab.core.model.McpSamplingMode.MANUAL)))
+        assertTrue(connectionFingerprint(base) != connectionFingerprint(base.copy(samplingForwardUrl = "http://localhost:8080/v1/chat/completions")))
+        assertTrue(connectionFingerprint(base) != connectionFingerprint(base.copy(samplingForwardToken = "secret")))
+        assertTrue(connectionFingerprint(base) != connectionFingerprint(base.copy(autoRespondElicitation = false)))
+        assertTrue(
+            connectionFingerprint(base) != connectionFingerprint(
+                base.copy(roots = listOf(com.reqlab.core.model.McpRoot("file:///tmp/reqlab", "tmp"))),
+            ),
+        )
     }
 }

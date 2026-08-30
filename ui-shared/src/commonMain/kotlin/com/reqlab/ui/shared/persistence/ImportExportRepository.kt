@@ -21,6 +21,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -86,6 +87,12 @@ data class RequestDto(
     val mcpCommand: String? = null,
     val mcpArgs: List<String> = emptyList(),
     val mcpEnv: Map<String, String> = emptyMap(),
+    val mcpSamplingMode: String? = null,
+    val mcpSamplingForwardUrl: String? = null,
+    val mcpSamplingForwardToken: String? = null,
+    val mcpSamplingMaxTokens: Int? = null,
+    val mcpAutoRespondElicitation: Boolean? = null,
+    val mcpRoots: List<Pair<String, String?>> = emptyList(),
 )
 
 data class ReqLabEnvironmentDto(
@@ -423,6 +430,21 @@ object ImportExportRepository {
                     if (mcp.command.isNotBlank()) put("mcpCommand", mcp.command)
                     if (mcp.args.isNotEmpty()) put("mcpArgs", buildJsonArray { mcp.args.forEach { add(JsonPrimitive(it)) } })
                     if (mcp.env.isNotEmpty()) put("mcpEnv", buildJsonObject { mcp.env.forEach { (k, v) -> put(k, v) } })
+                    put("mcpSamplingMode", mcp.samplingMode.name)
+                    mcp.samplingForwardUrl?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardUrl", it) }
+                    mcp.samplingForwardToken?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardToken", it) }
+                    mcp.samplingMaxTokens?.let { put("mcpSamplingMaxTokens", it) }
+                    put("mcpAutoRespondElicitation", mcp.autoRespondElicitation)
+                    if (mcp.roots.isNotEmpty()) {
+                        put("mcpRoots", buildJsonArray {
+                            mcp.roots.forEach { root ->
+                                add(buildJsonObject {
+                                    put("uri", root.uri)
+                                    root.name?.let { put("name", it) }
+                                })
+                            }
+                        })
+                    }
                 }
             }
         }
@@ -552,6 +574,21 @@ object ImportExportRepository {
             dto.mcpCommand?.takeIf { it.isNotBlank() }?.let { put("mcpCommand", it) }
             if (dto.mcpArgs.isNotEmpty()) put("mcpArgs", buildJsonArray { dto.mcpArgs.forEach { add(JsonPrimitive(it)) } })
             if (dto.mcpEnv.isNotEmpty()) put("mcpEnv", buildJsonObject { dto.mcpEnv.forEach { (k, v) -> put(k, v) } })
+            dto.mcpSamplingMode?.let { put("mcpSamplingMode", it) }
+            dto.mcpSamplingForwardUrl?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardUrl", it) }
+            dto.mcpSamplingForwardToken?.takeIf { it.isNotBlank() }?.let { put("mcpSamplingForwardToken", it) }
+            dto.mcpSamplingMaxTokens?.let { put("mcpSamplingMaxTokens", it) }
+            dto.mcpAutoRespondElicitation?.let { put("mcpAutoRespondElicitation", it) }
+            if (dto.mcpRoots.isNotEmpty()) {
+                put("mcpRoots", buildJsonArray {
+                    dto.mcpRoots.forEach { (uri, name) ->
+                        add(buildJsonObject {
+                            put("uri", uri)
+                            name?.let { put("name", it) }
+                        })
+                    }
+                })
+            }
         }
 
     private fun environmentDtoToJson(dto: ReqLabEnvironmentDto): JsonObject =
@@ -666,6 +703,16 @@ object ImportExportRepository {
             mcpCommand = root["mcpCommand"]?.jsonPrimitive?.contentOrNull,
             mcpArgs = root["mcpArgs"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
             mcpEnv = root["mcpEnv"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
+            mcpSamplingMode = root["mcpSamplingMode"]?.jsonPrimitive?.contentOrNull,
+            mcpSamplingForwardUrl = root["mcpSamplingForwardUrl"]?.jsonPrimitive?.contentOrNull,
+            mcpSamplingForwardToken = root["mcpSamplingForwardToken"]?.jsonPrimitive?.contentOrNull,
+            mcpSamplingMaxTokens = root["mcpSamplingMaxTokens"]?.jsonPrimitive?.intOrNull,
+            mcpAutoRespondElicitation = root["mcpAutoRespondElicitation"]?.jsonPrimitive?.booleanOrNull,
+            mcpRoots = root["mcpRoots"]?.jsonArray?.mapNotNull { el ->
+                val obj = el.jsonObject
+                val uri = obj["uri"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                uri to obj["name"]?.jsonPrimitive?.contentOrNull
+            } ?: emptyList(),
         )
     }
 
@@ -816,6 +863,16 @@ object ImportExportRepository {
                 command = dto.mcpCommand.orEmpty(),
                 args = dto.mcpArgs,
                 env = dto.mcpEnv,
+                samplingMode = runCatching {
+                    com.reqlab.core.model.McpSamplingMode.valueOf(dto.mcpSamplingMode ?: "MOCK")
+                }.getOrDefault(com.reqlab.core.model.McpSamplingMode.MOCK),
+                samplingForwardUrl = dto.mcpSamplingForwardUrl,
+                samplingForwardToken = dto.mcpSamplingForwardToken,
+                samplingMaxTokens = dto.mcpSamplingMaxTokens,
+                autoRespondElicitation = dto.mcpAutoRespondElicitation ?: true,
+                roots = dto.mcpRoots.map { (uri, name) ->
+                    com.reqlab.core.model.McpRoot(uri = uri, name = name)
+                },
             )
         } else null
         return CollectionNode(
