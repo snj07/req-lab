@@ -74,8 +74,10 @@ class StreamableHttpTransport(
 
     override suspend fun close() {
         closed = true
-        getJob?.cancel()
+        val job = getJob
         getJob = null
+        job?.cancel()
+        runCatching { job?.join() }
         val sid = sessionId
         if (!sid.isNullOrBlank()) {
             runCatching {

@@ -44,8 +44,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpTimeoutConfig
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -84,6 +86,10 @@ class McpClient(
     private var nextId = 1L
     private var transport: McpTransport? = null
     private var inboundJob: Job? = null
+    // Isolate GET-SSE / callback jobs so CIO ClosedSelectorException on disconnect
+    // cannot fail the caller's runBlocking (qa E2E). Recreated on each connect.
+    private lateinit var workers: Job
+    private lateinit var workerScope: CoroutineScope
     var config: McpConnectionConfig = McpConnectionConfig()
         private set
     var initializeResult: McpInitializeResult? = null
@@ -109,12 +115,24 @@ class McpClient(
     var lastReceivedPayload: String? = null
         private set
 
+    init {
+        workerScope = newWorkerScope()
+    }
+
+    private fun newWorkerScope(): CoroutineScope {
+        workers = SupervisorJob(scope.coroutineContext[Job])
+        return CoroutineScope(
+            scope.coroutineContext + workers + CoroutineExceptionHandler { _, _ -> },
+        )
+    }
+
     suspend fun connect(
         connection: McpConnectionConfig,
         variableLayers: List<Map<String, String>> = emptyList(),
         oauthRetry: Boolean = true,
     ): McpInitializeResult {
         disconnect()
+        workerScope = newWorkerScope()
         config = resolveMcpConfig(connection, variableLayers)
         applyConfigHandlers(config)
         _state.value = McpConnectionState.CONNECTING
@@ -122,7 +140,7 @@ class McpClient(
         try {
             val created = createTransport(config)
             transport = created
-            inboundJob = scope.launch { created.incoming.collect { routeInbound(it) } }
+            inboundJob = workerScope.launch { created.incoming.collect { routeInbound(it) } }
             created.start()
             val result = handshake(created)
             created.onHandshakeComplete()
@@ -152,6 +170,7 @@ class McpClient(
         failPending("Disconnected")
         inboundJob?.cancel()
         inboundJob = null
+        workers.cancel()
         runCatching { transport?.close() }
         transport = null
         initializeResult = null
@@ -283,10 +302,10 @@ class McpClient(
             log(McpLogEntryKind.STATE, "Auto-detect falling back to legacy HTTP+SSE")
             inboundJob?.cancel()
             runCatching { active.close() }
-            val legacy = LegacyHttpSseTransport(httpClient, config.copy(url = config.url), scope)
+            val legacy = LegacyHttpSseTransport(httpClient, config.copy(url = config.url), workerScope)
             transport = legacy
             legacy.start()
-            inboundJob = scope.launch { legacy.incoming.collect { routeInbound(it) } }
+            inboundJob = workerScope.launch { legacy.incoming.collect { routeInbound(it) } }
             request("initialize", encodeParams(params))
         }
         transport?.protocolVersion = result.protocolVersion.ifBlank { MCP_PROTOCOL_VERSION }
@@ -298,11 +317,11 @@ class McpClient(
         return when (cfg.transport) {
             McpTransportType.STDIO -> stdioFactory(cfg)
             McpTransportType.STREAMABLE_HTTP -> when (cfg.httpMode) {
-                McpHttpMode.LEGACY_2024_11_05 -> LegacyHttpSseTransport(httpClient, cfg, scope)
+                McpHttpMode.LEGACY_2024_11_05 -> LegacyHttpSseTransport(httpClient, cfg, workerScope)
                 else -> StreamableHttpTransport(
                     httpClient,
                     cfg,
-                    scope,
+                    workerScope,
                     replyClient = mcpAuxHttpClient(),
                     streamClient = mcpAuxHttpClient(),
                 )
@@ -368,7 +387,7 @@ class McpClient(
             }
             message.isRequest() -> {
                 log(McpLogEntryKind.RECEIVED, message.method.orEmpty(), encoded, message.method, message.idKey())
-                scope.launch { handleServerRequest(message) }
+                workerScope.launch { handleServerRequest(message) }
             }
             message.isNotification() -> {
                 log(McpLogEntryKind.NOTIFICATION, message.method.orEmpty(), encoded, message.method, null)
