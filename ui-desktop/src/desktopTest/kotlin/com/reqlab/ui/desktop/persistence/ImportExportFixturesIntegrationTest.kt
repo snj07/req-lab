@@ -1,5 +1,6 @@
 package com.reqlab.ui.shared.persistence
 
+import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.McpSamplingMode
 import com.reqlab.core.model.McpTransportType
 import com.reqlab.core.model.RequestKind
@@ -51,6 +52,7 @@ class ImportExportFixturesIntegrationTest {
         assertTrue(root != null)
         assertTrue(root.children.any { it.isFolder && it.name == "HTTP Methods" })
         assertTrue(root.children.any { it.isFolder && it.name == "LLM (OpenAI-compatible)" })
+        assertTrue(root.children.any { it.isFolder && it.name == "SSE" })
         assertTrue(root.children.any { it.isFolder && it.name == "MCP (Model Context Protocol)" })
 
         val env = restored.environments.firstOrNull { it.name == "Local Dev – Sample Server" }
@@ -88,6 +90,24 @@ class ImportExportFixturesIntegrationTest {
         assertNotNull(stdio)
         assertEquals(McpTransportType.STDIO, stdio.mcpConfig!!.transport)
         assertEquals("{{mcpStdioCommand}}", stdio.mcpConfig!!.command)
+    }
+
+    @Test
+    fun imported_sse_folder_has_accept_event_stream_and_stays_http() {
+        val state = AppState(openDefaultTab = false, withDemoData = false)
+        ImportExportRepository.importCollectionFromString(state, collectionFixture.readText())
+        val getEvents = findRequest(state.collections, "SSE GET events")
+        assertNotNull(getEvents)
+        assertEquals(RequestKind.HTTP, getEvents.kind)
+        assertTrue(
+            getEvents.userHeaders.any {
+                it.first.equals("Accept", ignoreCase = true) && it.second.contains("text/event-stream")
+            },
+        )
+        val postEvents = findRequest(state.collections, "SSE POST events")
+        assertNotNull(postEvents)
+        assertEquals(RequestKind.HTTP, postEvents.kind)
+        assertEquals(HttpMethodType.POST, postEvents.method)
     }
 
     private fun findRequest(nodes: List<CollectionNode>, name: String): CollectionNode? {

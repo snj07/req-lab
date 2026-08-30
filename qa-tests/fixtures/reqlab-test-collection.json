@@ -1015,6 +1015,43 @@
       ]
     },
     {
+      "name": "SSE",
+      "folders": [],
+      "requests": [
+        {
+          "name": "SSE GET events",
+          "method": "GET",
+          "url": "{{baseUrl}}/sse",
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"has stream events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0);\n});\nreqlab.test(\"ping event\", function() {\n  reqlab.expect(reqlab.response.streamEvents.join(\"\\n\")).to.include(\"ping-0\");\n});"
+        },
+        {
+          "name": "SSE GET delayed",
+          "method": "GET",
+          "url": "{{baseUrl}}/sse?delayMs=50&count=3",
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"three ping events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.equal(3);\n});\nreqlab.test(\"last ping\", function() {\n  reqlab.expect(reqlab.response.streamEvents.join(\"\\n\")).to.include(\"ping-2\");\n});"
+        },
+        {
+          "name": "SSE POST events",
+          "method": "POST",
+          "url": "{{baseUrl}}/sse",
+          "headers": [
+            { "key": "Accept", "value": "text/event-stream" }
+          ],
+          "body": {
+            "type": "JSON",
+            "content": "{\n  \"message\": \"hello-sse\"\n}"
+          },
+          "testScript": "reqlab.test(\"status is 200\", function() {\n  reqlab.expect(reqlab.response.code).to.equal(200);\n});\nreqlab.test(\"has stream events\", function() {\n  reqlab.expect(reqlab.response.streamEvents.length).to.be.above(0);\n});\nreqlab.test(\"echoes body\", function() {\n  reqlab.expect(reqlab.response.streamEvents.join(\"\\n\")).to.include(\"hello-sse\");\n});"
+        }
+      ]
+    },
+    {
       "name": "MCP (Model Context Protocol)",
       "folders": [],
       "requests": [

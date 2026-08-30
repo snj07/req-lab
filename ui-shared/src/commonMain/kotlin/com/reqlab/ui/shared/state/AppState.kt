@@ -180,6 +180,19 @@ object SystemHeaderRules {
     }
 }
 
+const val SSE_ACCEPT_MEDIA_TYPE = "text/event-stream"
+
+fun isSseAccept(key: String, value: String, enabled: Boolean = true): Boolean =
+    enabled &&
+        key.equals(SystemHeaderRules.ACCEPT, ignoreCase = true) &&
+        value.contains(SSE_ACCEPT_MEDIA_TYPE, ignoreCase = true)
+
+fun RequestTabState.hasSseAccept(): Boolean =
+    headers.any { isSseAccept(it.key, it.value, it.enabled) }
+
+fun CollectionNode.hasSseAccept(): Boolean =
+    userHeaders.any { isSseAccept(it.first, it.second) }
+
 // ── Environment model ───────────────────────────────────────────
 
 class EnvState(
@@ -877,6 +890,18 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         return null
     }
 
+    /** Folder anywhere in the tree (root or nested). */
+    fun findFolder(id: String): CollectionNode? =
+        findNodeById(collections, id)?.takeIf { it.isFolder }
+
+    private fun rootCollectionIdContaining(nodeId: String): String? {
+        for (root in collections) {
+            if (root.id == nodeId) return root.id
+            if (findNodeById(listOf(root), nodeId) != null) return root.id
+        }
+        return null
+    }
+
     private fun findRequestBySignature(
         nodes: List<CollectionNode>,
         name: String,
@@ -1126,7 +1151,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
 
     /** Add a new request node inside the given collection (folder). Opens it as a tab. */
     fun addRequestToCollection(collectionId: String) {
-        val folder = collections.firstOrNull { it.id == collectionId && it.isFolder } ?: return
+        val folder = findFolder(collectionId) ?: return
         val siblingNames = folder.children.map { it.name }.toSet()
         val name = generateUniqueName("New Request", siblingNames)
         val requestId = generateUuid()
@@ -1140,14 +1165,13 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         )
         folder.children.add(node)
         notifyCollectionsChanged()
-        selectedCollectionId = collectionId
+        selectedCollectionId = rootCollectionIdContaining(collectionId) ?: collectionId
         selectedRequestId = requestId
-        // Also open a tab for the new request
         addTab(requestId = requestId, name = name, method = HttpMethodType.GET, url = "")
     }
 
     fun addMcpConnectionToCollection(collectionId: String) {
-        val folder = collections.firstOrNull { it.id == collectionId && it.isFolder } ?: return
+        val folder = findFolder(collectionId) ?: return
         val siblingNames = folder.children.map { it.name }.toSet()
         val name = generateUniqueName("New MCP Connection", siblingNames)
         val requestId = generateUuid()
@@ -1164,15 +1188,37 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         )
         folder.children.add(node)
         notifyCollectionsChanged()
-        selectedCollectionId = collectionId
+        selectedCollectionId = rootCollectionIdContaining(collectionId) ?: collectionId
         selectedRequestId = requestId
         addTab(requestId = requestId, name = name, method = HttpMethodType.POST, url = mcp.url)
+    }
+
+    fun addSseRequestToCollection(collectionId: String) {
+        val folder = findFolder(collectionId) ?: return
+        val siblingNames = folder.children.map { it.name }.toSet()
+        val name = generateUniqueName("New SSE Request", siblingNames)
+        val requestId = generateUuid()
+        val url = "{{baseUrl}}/sse"
+        val node = CollectionNode(
+            id = requestId,
+            requestRef = generateUuid(),
+            name = name,
+            isFolder = false,
+            method = HttpMethodType.GET,
+            url = url,
+            userHeaders = listOf(SystemHeaderRules.ACCEPT to SSE_ACCEPT_MEDIA_TYPE),
+        )
+        folder.children.add(node)
+        notifyCollectionsChanged()
+        selectedCollectionId = rootCollectionIdContaining(collectionId) ?: collectionId
+        selectedRequestId = requestId
+        addTab(requestId = requestId, name = name, method = HttpMethodType.GET, url = url)
     }
 
     /** Create a request in the selected collection, ensuring a default collection exists when needed. */
     fun addTabInSelectedCollection() {
         val collId = selectedCollectionId
-        val folder = if (collId != null) collections.firstOrNull { it.id == collId && it.isFolder } else null
+        val folder = if (collId != null) findFolder(collId) else null
         if (folder != null) {
             addRequestToCollection(folder.id)
         } else {
@@ -1527,6 +1573,13 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
                 val userHeadersSnapshot = tab.headers
                     .filter { it.kind == HeaderKind.USER }
                     .map { it.key to it.value }
+                    .toMutableList()
+                val sseAccept = tab.headers.firstOrNull { isSseAccept(it.key, it.value, it.enabled) }
+                if (sseAccept != null &&
+                    userHeadersSnapshot.none { it.first.equals(SystemHeaderRules.ACCEPT, ignoreCase = true) }
+                ) {
+                    userHeadersSnapshot.add(sseAccept.key to sseAccept.value)
+                }
                 val bodyContentsSnapshot: Map<String, String> =
                     tab.bodyContents.entries.associate { it.key.name to it.value }
                 val formEntriesSnapshot = tab.formRows.map { r ->

@@ -56,7 +56,7 @@ You can import these sample fixtures from the repo:
 - Collection sample: [qa-tests/fixtures/reqlab-test-collection.json](qa-tests/fixtures/reqlab-test-collection.json)
 - Environment sample: [qa-tests/fixtures/reqlab-test-environment.json](qa-tests/fixtures/reqlab-test-environment.json)
 
-The collection includes an **LLM (OpenAI-compatible)** folder and an **MCP (Model Context Protocol)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** to watch a token stream, or open an MCP item and Connect. See [docs/mcp.md](docs/mcp.md).
+The collection includes an **LLM (OpenAI-compatible)** folder, an **SSE** folder, and an **MCP (Model Context Protocol)** folder. Start the sample server, then send **LLM Chat Completions Stream (visible)** or an SSE item to watch events arrive, or open an MCP item and Connect. See [docs/mcp.md](docs/mcp.md).
 
 ## Features
 
@@ -68,7 +68,7 @@ The collection includes an **LLM (OpenAI-compatible)** folder and an **MCP (Mode
 - Body types: JSON, GraphQL, form-data, x-www-form-urlencoded, raw text, binary
 - Auth: None, Basic, Bearer Token, API Key, JWT
 - Retry controls and per-request timeout
-- HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`)
+- HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`). Collection items with `Accept: text/event-stream` show an **SSE** badge in the HTTP method color; folder ⋮ → **New SSE Request**
 - Copy request as `curl`
 
 ### MCP

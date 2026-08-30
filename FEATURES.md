@@ -24,7 +24,7 @@ ReqLab supports end-to-end API testing with:
 - Request body support for JSON, GraphQL, form-style payloads, and raw text
 - Authentication modes: None, Basic, Bearer, API Key, JWT (OAuth2 planned)
 - Retry controls and timeout behavior
-- HTTP streaming for SSE (`text/event-stream`) and NDJSON (OpenAI-style `"stream": true`)
+- HTTP streaming for SSE (`text/event-stream`) and NDJSON (OpenAI-style `"stream": true`). Items with `Accept: text/event-stream` show an **SSE** badge in the HTTP method color; folder ⋮ → **New SSE Request**.
 - **MCP client** for Streamable HTTP (2025-06-18), legacy HTTP+SSE, and desktop stdio. Tools (Form/JSON arguments), resources (read + subscribe), prompts, Activity JSON-RPC inspector, sampling/roots/elicitation, and auth (None, Basic, Bearer, API Key, JWT) match the REST workspace. See [docs/mcp.md](docs/mcp.md).
 - Copy request as `curl`
 

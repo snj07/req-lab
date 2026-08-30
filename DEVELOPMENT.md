@@ -168,6 +168,8 @@ Available endpoints (selected):
 | POST | `/v1/chat/ndjson` | Ollama-style NDJSON chat stream |
 | POST | `/v1/embeddings` | Fixed-length embedding vector |
 | GET | `/v1/chat/slow` | Delayed non-stream chat completion |
+| GET | `/sse` | Finite SSE (`text/event-stream`); `?count=` (default 3), `?delayMs=` |
+| POST | `/sse` | Finite SSE; last event echoes a body snippet; same `count` / `delayMs` |
 | POST | `/mcp` | MCP Streamable HTTP (JSON-RPC) |
 | POST | `/mcp/auth/bearer` | MCP Bearer `reqlab-mcp-token` |
 | POST | `/mcp/auth/basic` | MCP Basic `admin` / `password` |

@@ -270,5 +270,6 @@
   "mcp_elicit_form": "Élicitation",
   "mcp_elicit_accept": "Accepter",
   "mcp_elicit_decline": "Refuser",
-  "new_mcp_connection": "Nouvelle connexion MCP"
+  "new_mcp_connection": "Nouvelle connexion MCP",
+  "new_sse_request": "Nouvelle requête SSE"
 }

@@ -764,4 +764,37 @@ class SampleCollectionE2ETest {
             assertEquals("GET", body["method"]?.jsonPrimitive?.content)
         }
     }
+
+    // =========================================================================
+    // SSE
+    // =========================================================================
+
+    @Test
+    fun sse_get_events() {
+        runBlocking {
+            val r = client.get("$baseUrl/sse") {
+                header("Accept", "text/event-stream")
+            }
+            assertEquals(HttpStatusCode.OK, r.status)
+            assertTrue(r.contentType()?.toString().orEmpty().contains("text/event-stream"))
+            val body = r.bodyAsText()
+            assertTrue("ping-0" in body)
+            assertTrue("data:" in body)
+        }
+    }
+
+    @Test
+    fun sse_post_events() {
+        runBlocking {
+            val r = client.post("$baseUrl/sse") {
+                header("Accept", "text/event-stream")
+                contentType(ContentType.Application.Json)
+                setBody("""{"message":"hello-sse"}""")
+            }
+            assertEquals(HttpStatusCode.OK, r.status)
+            val body = r.bodyAsText()
+            assertTrue("ping-0" in body)
+            assertTrue("hello-sse" in body)
+        }
+    }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -37,6 +38,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -104,6 +106,7 @@ import com.reqlab.ui.shared.state.CollectionNode
 import com.reqlab.ui.shared.state.EnvState
 import com.reqlab.ui.shared.state.HistoryItem
 import com.reqlab.ui.shared.state.LogLevel
+import com.reqlab.ui.shared.state.hasSseAccept
 import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.theme.httpMethodColor
@@ -543,6 +546,14 @@ fun Sidebar(state: AppState) {
                             },
                             onAddRequest = { target ->
                                 state.addRequestToCollection(target.id)
+                                persistWorkspaceAsync()
+                            },
+                            onAddMcpConnection = { target ->
+                                state.addMcpConnectionToCollection(target.id)
+                                persistWorkspaceAsync()
+                            },
+                            onAddSseRequest = { target ->
+                                state.addSseRequestToCollection(target.id)
                                 persistWorkspaceAsync()
                             },
                             onRenameRequest = { target ->
@@ -1177,14 +1188,19 @@ private fun HistoryRow(state: AppState, item: HistoryItem, onClick: () -> Unit) 
 }
 
 @Composable
-fun MethodBadge(method: HttpMethodType, compact: Boolean = false) {
+fun MethodBadge(
+    method: HttpMethodType,
+    compact: Boolean = false,
+    sse: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     val color = httpMethodColor(method)
     Text(
-        text = if (compact) method.name.take(3) else method.name,
+        text = if (sse) "SSE" else if (compact) method.name.take(3) else method.name,
         color = color,
         fontSize = if (compact) 10.sp else 12.sp,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(4.dp))
             .background(color.copy(alpha = 0.12f))
             .padding(horizontal = if (compact) 4.dp else 6.dp, vertical = 2.dp),
@@ -1219,6 +1235,8 @@ private fun CollectionTreeNode(
     onDeleteCollection: (CollectionNode) -> Unit,
     onAddFolder: (CollectionNode) -> Unit,
     onAddRequest: (CollectionNode) -> Unit,
+    onAddMcpConnection: (CollectionNode) -> Unit,
+    onAddSseRequest: (CollectionNode) -> Unit,
     onRenameRequest: (CollectionNode) -> Unit,
     onDeleteRequest: (CollectionNode) -> Unit,
     onMoveRequest: (requestId: String, direction: Int) -> Unit,
@@ -1313,17 +1331,17 @@ private fun CollectionTreeNode(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(6.dp))
                 .alpha(if (isDragSource || isCollectionDragSource) 0.4f else 1f)
                 .bringIntoViewRequester(bringIntoViewRequester)
                 .background(
-                    when {
+                    color = when {
                         isSelectedRequest -> ReqLabColors.SelectedItem
                         isDropCollectionTarget -> ReqLabColors.Primary.copy(alpha = 0.14f)
                         isDragSource || isCollectionDragSource -> ReqLabColors.SurfaceHigh
                         isHovered -> ReqLabColors.HoverOverlay
                         else -> Color.Transparent
-                    }
+                    },
+                    shape = RoundedCornerShape(6.dp),
                 )
                 .onGloballyPositioned { coordinates ->
                     val position = coordinates.positionInRoot()
@@ -1439,7 +1457,14 @@ private fun CollectionTreeNode(
                     tint = ReqLabColors.OnSurfaceDim.copy(alpha = 0.4f),
                     modifier = Modifier.size(12.dp),
                 )
-                MethodBadge(node.method, compact = true)
+                val openTab = state.openTabs.find { it.id == node.id }
+                val sse = openTab?.hasSseAccept() ?: node.hasSseAccept()
+                MethodBadge(
+                    node.method,
+                    compact = true,
+                    sse = sse,
+                    modifier = if (sse) Modifier.testTag("sse-badge-${node.id}") else Modifier,
+                )
             }
             Text(
                 text = node.name,
@@ -1460,6 +1485,15 @@ private fun CollectionTreeNode(
             }
 
             if (isFolderNode || isRequest) {
+            val actionsInteraction = remember { MutableInteractionSource() }
+            Row(
+                modifier = Modifier.clickable(
+                    interactionSource = actionsInteraction,
+                    indication = null,
+                    onClick = { /* consume so the folder row does not toggle */ },
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             if (isCollectionRoot) {
                 IconButton(
                     onClick = { onAddRequest(node) },
@@ -1485,12 +1519,17 @@ private fun CollectionTreeNode(
                         modifier = Modifier.size(14.dp),
                     )
                 }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    scrollState = rememberScrollState(),
+                ) {
                     if (isFolderNode) {
                         DropdownMenuItem(
                             text = { Text(Strings.t("add_folder")) },
                             leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onAddFolder(node) },
+                            modifier = Modifier.testTag("collection-menu-add-folder"),
                         )
                         DropdownMenuItem(
                             text = { Text(Strings.t("expand")) },
@@ -1528,14 +1567,25 @@ private fun CollectionTreeNode(
                             text = { Text(Strings.t("add_request")) },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = { showMenu = false; onAddRequest(node) },
+                            modifier = Modifier.testTag("collection-menu-add-request"),
                         )
                         DropdownMenuItem(
                             text = { Text(Strings.t("new_mcp_connection")) },
                             leadingIcon = { Icon(Icons.Default.Hub, contentDescription = null, modifier = Modifier.size(16.dp)) },
                             onClick = {
                                 showMenu = false
-                                state.addMcpConnectionToCollection(node.id)
+                                onAddMcpConnection(node)
                             },
+                            modifier = Modifier.testTag("collection-menu-new-mcp"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text(Strings.t("new_sse_request")) },
+                            leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            onClick = {
+                                showMenu = false
+                                onAddSseRequest(node)
+                            },
+                            modifier = Modifier.testTag("collection-menu-new-sse"),
                         )
                         if (isCollectionRoot) {
                             DropdownMenuItem(
@@ -1588,6 +1638,7 @@ private fun CollectionTreeNode(
                     }
                 }
             }
+            }
         }
         } // end Row
 
@@ -1631,6 +1682,8 @@ private fun CollectionTreeNode(
                         onDuplicateRequest = onDuplicateRequest,
                         onDeleteCollection = onDeleteCollection,
                         onAddRequest = onAddRequest,
+                        onAddMcpConnection = onAddMcpConnection,
+                        onAddSseRequest = onAddSseRequest,
                         onRenameRequest = onRenameRequest,
                         onDeleteRequest = onDeleteRequest,
                         onAddFolder = onAddFolder,

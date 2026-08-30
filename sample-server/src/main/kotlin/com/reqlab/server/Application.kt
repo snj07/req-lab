@@ -64,6 +64,7 @@ fun main(args: Array<String> = emptyArray()) {
     println("  Listening on  http://localhost:8080")
     println("  WebSocket     ws://localhost:8080/ws")
     println("  LLM mock      POST /v1/chat/completions  (?demo=true for a visible token stream)")
+    println("  SSE            GET/POST /sse")
     println("  MCP           POST /mcp  (OAuth-protected: POST /mcp/secure)")
     println("  MCP legacy    GET  /mcp/sse")
     println("  Press Ctrl+C to stop")
@@ -1184,6 +1185,16 @@ module.exports = api;""",
             call.respond(openAiChatCompletionJson(content = reply, finishReason = "stop"))
         }
 
+        // ── Generic SSE (finite event-stream; not OpenAI chat) ──────────────
+        get("/sse") {
+            call.respondGenericSse(defaultCount = 3)
+        }
+        post("/sse") {
+            val body = runCatching { call.receiveText() }.getOrDefault("")
+            val snippet = body.replace("\r", " ").replace("\n", " ").take(200)
+            call.respondGenericSse(defaultCount = 2, extraLast = "echo:$snippet")
+        }
+
         // ── WebSocket – echo ───────────────────────────────────────────────
         webSocket("/ws") {
             send(Frame.Text("Connected to ReqLab WebSocket echo server. Send any message and it will be echoed."))
@@ -1197,6 +1208,25 @@ module.exports = api;""",
         }
 
         mcpAndOAuthRoutes()
+    }
+}
+
+private suspend fun ApplicationCall.respondGenericSse(defaultCount: Int, extraLast: String? = null) {
+    val count = request.queryParameters["count"]?.toIntOrNull()?.coerceIn(1, 50) ?: defaultCount
+    val delayMs = request.queryParameters["delayMs"]?.toLongOrNull()?.coerceIn(0, 5_000) ?: 0L
+    response.header("Cache-Control", "no-cache")
+    respondTextWriter(contentType = ContentType.parse("text/event-stream")) {
+        repeat(count) { i ->
+            if (delayMs > 0L && i > 0) delay(delayMs)
+            write("data: ping-$i\n\n")
+            flush()
+        }
+        if (!extraLast.isNullOrEmpty()) {
+            write("data: $extraLast\n\n")
+            flush()
+        }
+        write("data: [DONE]\n\n")
+        flush()
     }
 }
 

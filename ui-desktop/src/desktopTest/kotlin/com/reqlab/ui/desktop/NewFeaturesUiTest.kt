@@ -19,7 +19,10 @@ import com.reqlab.core.model.ResponseMetrics
 import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.reqlab.core.model.RequestKind
+import com.reqlab.ui.shared.state.hasSseAccept
 
 class NewFeaturesUiTest {
 
@@ -304,11 +307,78 @@ class NewFeaturesUiTest {
         composeRule.onNodeWithTag("collection-add-$firstCollectionId", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
-        // State updated
         assertTrue(state.collections.first().children.size == before + 1)
-        // UI shows the new node
         val newId = state.collections.first().children.last().id
         composeRule.onNodeWithTag("collection-node-$newId", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun add_request_from_context_menu_adds_node() {
+        val state = AppState(withDemoData = true)
+        val root = state.collections.first()
+        val before = root.children.size
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-${root.id}", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("collection-menu-add-request", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(root.children.size == before + 1)
+        val newId = root.children.last().id
+        composeRule.onNodeWithTag("collection-node-$newId", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun add_mcp_from_context_menu_adds_node_and_opens_tab() {
+        val state = AppState(withDemoData = true)
+        val root = state.collections.first()
+        val before = root.children.size
+        val tabsBefore = state.openTabs.size
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-${root.id}", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("collection-menu-new-mcp", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(root.children.size == before + 1)
+        assertEquals(RequestKind.MCP, root.children.last().kind)
+        assertTrue(state.openTabs.size == tabsBefore + 1)
+        composeRule.onNodeWithTag("collection-node-${root.children.last().id}", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun add_sse_from_context_menu_adds_node_and_opens_tab() {
+        val state = AppState(withDemoData = true)
+        val root = state.collections.first()
+        val before = root.children.size
+        val tabsBefore = state.openTabs.size
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-${root.id}", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("collection-menu-new-sse", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(root.children.size == before + 1)
+        assertTrue(root.children.last().hasSseAccept())
+        assertTrue(state.openTabs.size == tabsBefore + 1)
+        composeRule.onNodeWithTag("collection-node-${root.children.last().id}", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun add_request_from_nested_folder_context_menu() {
+        val state = AppState(withDemoData = true)
+        val root = state.collections.first()
+        val folder = com.reqlab.ui.shared.components.addSubfolderInCollections(state.collections, root.id, "Nested")
+            ?: error("Folder creation failed")
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("collection-actions-${folder.id}", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("collection-menu-add-request", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(folder.children.any { it.name == "New Request" })
+        val created = folder.children.single { it.name == "New Request" }
+        composeRule.onNodeWithTag("collection-node-${created.id}", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
