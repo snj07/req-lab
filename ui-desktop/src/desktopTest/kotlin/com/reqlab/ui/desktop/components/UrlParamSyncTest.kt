@@ -159,6 +159,19 @@ class UrlParamSyncTest {
         assertTrue(tab.url.contains("limit=20"))
     }
 
+    @Test
+    fun `round trip – repeated query keys remain separate and ordered`() {
+        val original = "http://localhost:8080/api/echo-query?x=1&x=2"
+        val tab = RequestTabState().apply { url = original }
+
+        syncParamsFromUrl(tab, original)
+        syncUrlFromParams(tab)
+
+        assertEquals(listOf("x", "x"), tab.params.map { it.key })
+        assertEquals(listOf("1", "2"), tab.params.map { it.value })
+        assertEquals(original, tab.url)
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Regression: params duplication in execution (Bug #1)
     // buildUrlWithParams appends tab.params to a URL that already

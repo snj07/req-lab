@@ -113,10 +113,14 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
             .filter { it.enabled }
             .associate { it.key to it.value }
             .toMutableMap()
+        // Query parameters are an ordered multi-map: repeated keys such as
+        // `tag=kotlin&tag=ktor` are distinct values and must reach the wire.
+        // Do not use associate() here because it silently keeps only the last
+        // row for each key.
         val effectiveQueryParams = tab.params
             .filter { it.enabled }
-            .associate { it.key to it.value }
-            .toMutableMap()
+            .map { KeyValueEntry(it.key, it.value, secret = it.secret) }
+            .toMutableList()
         var effectiveBodyContent = tab.bodyContent
         val requestScopedScriptVars = mutableMapOf<String, String>()
 
@@ -131,7 +135,9 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 globalVariables = state.globalVariables.filter { it.enabled }.associate { it.key to it.value },
                 collectionVariables = state.collectionVariables.toMap(),
                 requestHeaders = effectiveHeaders,
-                requestQueryParams = effectiveQueryParams,
+                // The current script API exposes a map/get-by-name view. Keep its
+                // historical last-value behavior without collapsing the wire list.
+                requestQueryParams = effectiveQueryParams.associate { it.key to it.value },
                 requestBody = tab.bodyContent,
             )
             // M-8: Clean up variables injected by the previous run of this script
@@ -182,7 +188,19 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 effectiveHeaders.putAll(preResult.requestMutations.headers)
             }
             if (preResult.requestMutations.queryParams.isNotEmpty()) {
-                effectiveQueryParams.putAll(preResult.requestMutations.queryParams)
+                preResult.requestMutations.queryParams.forEach { (key, value) ->
+                    // setQueryParam is an upsert-by-name operation. If the original
+                    // request contained repeated values for this key, replace the
+                    // group with the explicitly scripted value.
+                    val firstIndex = effectiveQueryParams.indexOfFirst { it.key == key }
+                    effectiveQueryParams.removeAll { it.key == key }
+                    val replacement = KeyValueEntry(key, value)
+                    if (firstIndex >= 0) {
+                        effectiveQueryParams.add(firstIndex, replacement)
+                    } else {
+                        effectiveQueryParams.add(replacement)
+                    }
+                }
             }
         }
 
@@ -192,7 +210,7 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
             requestScopedVars = requestScopedScriptVars,
         )
         val effectiveUrlForLog = if (effectiveQueryParams.isNotEmpty()) {
-            val qs = effectiveQueryParams.entries.joinToString("&") { "${it.key}=${it.value}" }
+            val qs = effectiveQueryParams.joinToString("&") { "${it.key}=${it.value}" }
             "$resolvedBaseForLog?$qs"
         } else {
             resolvedBaseForLog
@@ -205,7 +223,7 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 name = tab.name,
                 method = effectiveMethod,
                 url = effectiveUrl,
-                queryParams = effectiveQueryParams.map { KeyValueEntry(it.key, it.value) },
+                queryParams = effectiveQueryParams,
                 headers = effectiveHeaders.map { KeyValueEntry(it.key, it.value) },
                 auth = buildAuthConfig(tab),
                 body = buildRequestBody(tab, effectiveBodyContent),
@@ -291,7 +309,7 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                                 globalVariables = state.globalVariables.filter { it.enabled }.associate { it.key to it.value },
                                 collectionVariables = state.collectionVariables.toMap(),
                                 requestHeaders = effectiveHeaders,
-                                requestQueryParams = effectiveQueryParams,
+                                requestQueryParams = effectiveQueryParams.associate { it.key to it.value },
                                 requestBody = effectiveBodyContent,
                                 streamEvents = resp.streamEvents,
                                 assembledText = resp.assembledText ?: tab.liveStreamText.ifBlank { null },

@@ -114,6 +114,35 @@ class KtorApiClientTest {
     }
 
     @Test
+    fun preserves_repeated_query_parameter_values_in_order() = runTest {
+        var capturedValues: List<String>? = null
+        val mockEngine = MockEngine { request ->
+            capturedValues = request.url.parameters.getAll("x")
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(mockEngine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        val request = RequestDefinition(
+            id = "req-repeated-query",
+            name = "Repeated query values",
+            method = HttpMethodType.GET,
+            url = "https://api.test/echo-query",
+            queryParams = listOf(
+                KeyValueEntry("x", "1"),
+                KeyValueEntry("x", "2"),
+            ),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+
+        apiClient.execute(request).toList()
+
+        assertEquals(listOf("1", "2"), capturedValues)
+    }
+
+    @Test
     fun success_response_includes_timing_metrics() = runTest {
         val mockEngine = MockEngine { _ ->
             respond(

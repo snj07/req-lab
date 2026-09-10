@@ -16,6 +16,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.AfterClass
@@ -230,5 +231,43 @@ class QueryParamsDuplicationSampleServerTest {
         assertEquals(1, counts["q"]?.jsonPrimitive?.intOrNull, "q must be sent once. Counts: $counts")
         assertEquals(1, counts["page"]?.jsonPrimitive?.intOrNull, "page must be sent once. Counts: $counts")
         assertEquals(1, counts["limit"]?.jsonPrimitive?.intOrNull, "limit must be sent once. Counts: $counts")
+    }
+
+    /**
+     * Repeated query keys are intentional multi-value parameters, not duplicates
+     * introduced by ReqLab. Every row must survive the UI send path in order.
+     */
+    @Test
+    fun `repeated query parameter values all reach the sample server`() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        tab.url = "http://localhost:$PORT/api/echo-query?x=1&x=2"
+        syncParamsFromUrl(tab, tab.url)
+
+        assertEquals(2, tab.params.size, "Repeated keys must create separate parameter rows")
+        assertEquals(listOf("x", "x"), tab.params.map { it.key })
+        assertEquals(listOf("1", "2"), tab.params.map { it.value })
+
+        runSendRequest(state)
+
+        assertNotNull(tab.response, "Tab should have a response. Error: ${tab.lastError}")
+        assertEquals(200, tab.response!!.statusCode)
+
+        val body = parseBody(tab.response?.bodyText)
+        val counts = assertNotNull(body["paramCounts"]?.jsonObject)
+        assertEquals(
+            2,
+            counts["x"]?.jsonPrimitive?.intOrNull,
+            "Both x values must reach the server. Body: $body",
+        )
+
+        val values = assertNotNull(body["paramValues"]?.jsonObject)
+        assertEquals(
+            listOf("1", "2"),
+            values["x"]?.jsonArray?.map { it.jsonPrimitive.content },
+            "Repeated query values must retain their order. Body: $body",
+        )
     }
 }

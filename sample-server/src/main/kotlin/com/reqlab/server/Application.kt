@@ -348,6 +348,13 @@ fun Application.module() {
                         put(name, params[name] ?: "")
                     }
                 })
+                put("paramValues", buildJsonObject {
+                    params.names().forEach { name ->
+                        put(name, buildJsonArray {
+                            params.getAll(name).orEmpty().forEach { value -> add(value) }
+                        })
+                    }
+                })
             })
         }
 
