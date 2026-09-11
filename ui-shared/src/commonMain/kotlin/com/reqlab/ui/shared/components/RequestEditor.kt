@@ -128,22 +128,9 @@ fun RequestEditor(
  * Plain-list params are NOT URL-decoded here to keep it simple & predictable.
  */
 fun syncParamsFromUrl(tab: RequestTabState, url: String) {
-    val qIdx = url.indexOf('?')
-    val newParams: List<MutableKeyValue> = if (qIdx < 0 || qIdx == url.lastIndex) {
-        emptyList()
-    } else {
-        url.substring(qIdx + 1).split('&').mapNotNull { pair ->
-            if (pair.isBlank()) return@mapNotNull null
-            val eqIdx = pair.indexOf('=')
-            when {
-                eqIdx < 0  -> MutableKeyValue(key = pair,                    value = "")
-                eqIdx == 0 -> MutableKeyValue(key = "",                      value = pair.substring(1))
-                else       -> MutableKeyValue(key = pair.substring(0, eqIdx), value = pair.substring(eqIdx + 1))
-            }
-        }
-    }
+    val parts = splitRequestUrl(url)
     tab.params.clear()
-    tab.params.addAll(newParams)
+    tab.params.addAll(parseQueryPairs(parts.query).map { MutableKeyValue(key = it.first, value = it.second) })
 }
 
 /**
@@ -151,10 +138,40 @@ fun syncParamsFromUrl(tab: RequestTabState, url: String) {
  * Called whenever a param key, value, or enabled-state changes.
  */
 fun syncUrlFromParams(tab: RequestTabState) {
-    val base = tab.url.substringBefore('?')
+    val parts = splitRequestUrl(tab.url)
     val enabled = tab.params.filter { it.enabled && it.key.isNotBlank() }
-    tab.url = if (enabled.isEmpty()) base
-              else enabled.joinToString(separator = "&", prefix = "$base?") { "${it.key}=${it.value}" }
+    val query = enabled.joinToString("&") { "${it.key}=${it.value}" }
+    tab.url = joinRequestUrl(parts.base, query, parts.fragment)
+}
+
+internal data class RequestUrlParts(val base: String, val query: String, val fragment: String)
+
+internal fun splitRequestUrl(url: String): RequestUrlParts {
+    val hashIdx = url.indexOf('#')
+    val withoutFrag = if (hashIdx >= 0) url.substring(0, hashIdx) else url
+    val fragment = if (hashIdx >= 0) url.substring(hashIdx + 1) else ""
+    val qIdx = withoutFrag.indexOf('?')
+    val base = if (qIdx >= 0) withoutFrag.substring(0, qIdx) else withoutFrag
+    val query = if (qIdx >= 0 && qIdx < withoutFrag.lastIndex) withoutFrag.substring(qIdx + 1) else ""
+    return RequestUrlParts(base, query, fragment)
+}
+
+internal fun joinRequestUrl(base: String, query: String, fragment: String): String {
+    val withQuery = if (query.isEmpty()) base else "$base?$query"
+    return if (fragment.isEmpty()) withQuery else "$withQuery#$fragment"
+}
+
+internal fun parseQueryPairs(query: String): List<Pair<String, String>> {
+    if (query.isEmpty()) return emptyList()
+    return query.split('&').mapNotNull { pair ->
+        if (pair.isBlank()) return@mapNotNull null
+        val eqIdx = pair.indexOf('=')
+        when {
+            eqIdx < 0 -> pair to ""
+            eqIdx == 0 -> "" to pair.substring(1)
+            else -> pair.substring(0, eqIdx) to pair.substring(eqIdx + 1)
+        }
+    }
 }
 
 private fun copyToClipboard(text: String) {

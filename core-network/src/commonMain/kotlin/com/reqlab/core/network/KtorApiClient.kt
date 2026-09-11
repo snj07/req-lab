@@ -2,6 +2,7 @@ package com.reqlab.core.network
 
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestDefinition
@@ -26,6 +27,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
@@ -358,19 +360,32 @@ class KtorApiClient(
             }
 
             BodyType.FORM_DATA -> {
-                // Prefer the typed formDataEntries (new structured rows) over the legacy formEntries.
-                val entries = if (body.formDataEntries.isNotEmpty()) {
-                    body.formDataEntries.filter { it.enabled }.map { e ->
-                        KeyValueEntry(e.key, VariableResolver.resolve(e.value, variableLayers))
-                    }
-                } else {
-                    body.formEntries.filter { it.enabled }.map { e ->
-                        e.copy(value = VariableResolver.resolve(e.value, variableLayers))
-                    }
-                }
+                val typed = body.formDataEntries.filter { it.enabled }
                 val multipart = MultiPartFormDataContent(
                     formData {
-                        entries.forEach { entry -> append(entry.key, entry.value) }
+                        if (typed.isNotEmpty()) {
+                            typed.forEach { entry ->
+                                if (entry.type == FormEntryType.FILE) {
+                                    val filename = VariableResolver.resolve(entry.value, variableLayers)
+                                    append(
+                                        entry.key,
+                                        decodeBase64ToByteArray(entry.bytesBase64),
+                                        Headers.build {
+                                            append(
+                                                HttpHeaders.ContentDisposition,
+                                                "filename=\"$filename\"",
+                                            )
+                                        },
+                                    )
+                                } else {
+                                    append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
+                                }
+                            }
+                        } else {
+                            body.formEntries.filter { it.enabled }.forEach { entry ->
+                                append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
+                            }
+                        }
                     }
                 )
                 builder.setBody(multipart)

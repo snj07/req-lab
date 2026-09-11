@@ -16,6 +16,7 @@ import com.reqlab.core.model.McpLogEntryKind
 import com.reqlab.core.model.McpPrompt
 import com.reqlab.core.model.McpReadResourceResult
 import com.reqlab.core.model.McpResource
+import com.reqlab.core.model.McpRoot
 import com.reqlab.core.model.McpSamplingMode
 import com.reqlab.core.model.McpTool
 import com.reqlab.core.model.McpToolResult
@@ -212,7 +213,7 @@ class McpSessionState(
 
     suspend fun callSelectedTool(name: String, arguments: JsonElement?) {
         runCall("tool", name) {
-            val result = client?.callTool(name, arguments) ?: return@runCall null
+            val result = client?.callTool(name, arguments, progressToken = "reqlab-$name") ?: return@runCall null
             _lastToolResult.value = result
             _lastToolName.value = name
             OpBody(latestWireJson() ?: mcpPrettyJson.encodeToString(McpToolResult.serializer(), result), result.isError)
@@ -300,24 +301,36 @@ class McpSessionState(
     }
 
     private suspend fun handleNotification(activeClient: McpClient, notification: com.reqlab.core.model.JsonRpcEnvelope) {
-        if (notification.method != "notifications/resources/updated") return
-        val uri = (notification.params as? JsonObject)?.get("uri")?.jsonPrimitive?.contentOrNull ?: return
-        onConsole?.invoke("MCP resource updated: $uri", LogLevel.INFO)
-        if (uri !in _subscribedUris.value) return
-        runCatching {
-            val result = activeClient.readResource(uri)
-            _lastResourceResult.value = result
-            _lastOperation.value = McpOperationResult(
-                kind = "resource",
-                label = uri,
-                bodyJson = mcpPrettyWireJson(activeClient.lastReceivedPayload.orEmpty())
-                    .ifBlank { mcpPrettyJson.encodeToString(McpReadResourceResult.serializer(), result) },
-                isError = false,
-                headers = activeClient.lastResponseHeaders?.toKeyValueEntries().orEmpty(),
-                elapsedMs = 0,
-                sizeBytes = 0,
-                timestampMs = Clock.System.now().toEpochMilliseconds(),
-            )
+        when (notification.method) {
+            "notifications/resources/updated" -> {
+                val uri = (notification.params as? JsonObject)?.get("uri")?.jsonPrimitive?.contentOrNull ?: return
+                onConsole?.invoke("MCP resource updated: $uri", LogLevel.INFO)
+                if (uri !in _subscribedUris.value) return
+                runCatching {
+                    val result = activeClient.readResource(uri)
+                    _lastResourceResult.value = result
+                    _lastOperation.value = McpOperationResult(
+                        kind = "resource",
+                        label = uri,
+                        bodyJson = mcpPrettyWireJson(activeClient.lastReceivedPayload.orEmpty())
+                            .ifBlank { mcpPrettyJson.encodeToString(McpReadResourceResult.serializer(), result) },
+                        isError = false,
+                        headers = activeClient.lastResponseHeaders?.toKeyValueEntries().orEmpty(),
+                        elapsedMs = 0,
+                        sizeBytes = 0,
+                        timestampMs = Clock.System.now().toEpochMilliseconds(),
+                    )
+                }
+            }
+            "notifications/tools/list_changed" -> {
+                runCatching { _tools.value = activeClient.listTools() }
+            }
+            "notifications/resources/list_changed" -> {
+                runCatching { _resources.value = activeClient.listResources() }
+            }
+            "notifications/prompts/list_changed" -> {
+                runCatching { _prompts.value = activeClient.listPrompts() }
+            }
         }
     }
 
@@ -334,9 +347,20 @@ class McpSessionState(
 
     fun cancelCall() {
         failPendingCallbacks()
-        callJob?.cancel()
+        val active = client
+        val job = callJob
         callJob = null
         _busy.value = false
+        scope.launch {
+            runCatching { active?.cancelInFlight() }
+            job?.cancel()
+        }
+    }
+
+    fun notifyRootsEdited(roots: List<McpRoot>) {
+        val active = client ?: return
+        active.updateRoots(roots)
+        scope.launch { runCatching { active.notifyRootsChanged() } }
     }
 
     fun approveSamplingGenerate() {

@@ -393,6 +393,7 @@ object ImportExportRepository {
                                     put("value", e.value)
                                     put("description", e.description)
                                     put("enabled", e.enabled)
+                                    if (e.bytesBase64.isNotEmpty()) put("bytesBase64", e.bytesBase64)
                                 })
                             }
                         })
@@ -746,7 +747,8 @@ object ImportExportRepository {
         val value = obj["value"]?.jsonPrimitive?.contentOrNull ?: ""
         val description = obj["description"]?.jsonPrimitive?.contentOrNull ?: ""
         val enabled = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true
-        return FormDataEntryState(key = key, type = type, value = value, description = description, enabled = enabled)
+        val bytesBase64 = obj["bytesBase64"]?.jsonPrimitive?.contentOrNull ?: ""
+        return FormDataEntryState(key = key, type = type, value = value, description = description, enabled = enabled, bytesBase64 = bytesBase64)
     }
 
     private fun parseLegacyFormDataContent(content: String?): List<FormDataEntryState> {

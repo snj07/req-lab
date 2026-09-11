@@ -107,12 +107,11 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
         // of truth for query parameters (syncUrlFromParams embeds them for display,
         // but passing both to KtorApiClient would cause each param to be appended
         // twice — once from the parsed URL and once from effectiveQueryParams).
-        var effectiveUrl = tab.url.trim().substringBefore('?')
+        // Fragment is client-only and must not be glued onto a query value.
+        val urlParts = splitRequestUrl(tab.url.trim())
+        var effectiveUrl = urlParts.base
         var effectiveMethod = tab.method
-        val effectiveHeaders = tab.headers
-            .filter { it.enabled }
-            .associate { it.key to it.value }
-            .toMutableMap()
+        val effectiveHeaders = enabledHeadersForSend(tab).toMutableList()
         // Query parameters are an ordered multi-map: repeated keys such as
         // `tag=kotlin&tag=ktor` are distinct values and must reach the wire.
         // Do not use associate() here because it silently keeps only the last
@@ -134,7 +133,7 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 variables = flatVars,
                 globalVariables = state.globalVariables.filter { it.enabled }.associate { it.key to it.value },
                 collectionVariables = state.collectionVariables.toMap(),
-                requestHeaders = effectiveHeaders,
+                requestHeaders = effectiveHeaders.associate { it.key to it.value },
                 // The current script API exposes a map/get-by-name view. Keep its
                 // historical last-value behavior without collapsing the wire list.
                 requestQueryParams = effectiveQueryParams.associate { it.key to it.value },
@@ -174,7 +173,14 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 return@launch
             }
             if (preResult.requestMutations.url != null) {
-                effectiveUrl = preResult.requestMutations.url ?: effectiveUrl
+                val scriptParts = splitRequestUrl(preResult.requestMutations.url!!)
+                effectiveUrl = scriptParts.base
+                if (scriptParts.query.isNotEmpty()) {
+                    effectiveQueryParams.clear()
+                    effectiveQueryParams.addAll(
+                        parseQueryPairs(scriptParts.query).map { KeyValueEntry(it.first, it.second) },
+                    )
+                }
             }
             if (preResult.requestMutations.method != null) {
                 effectiveMethod = HttpMethodType.entries.firstOrNull {
@@ -185,7 +191,16 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 effectiveBodyContent = preResult.requestMutations.body ?: effectiveBodyContent
             }
             if (preResult.requestMutations.headers.isNotEmpty()) {
-                effectiveHeaders.putAll(preResult.requestMutations.headers)
+                preResult.requestMutations.headers.forEach { (key, value) ->
+                    val firstIndex = effectiveHeaders.indexOfFirst { it.key.equals(key, ignoreCase = true) }
+                    effectiveHeaders.removeAll { it.key.equals(key, ignoreCase = true) }
+                    val replacement = KeyValueEntry(key, value)
+                    if (firstIndex >= 0) {
+                        effectiveHeaders.add(firstIndex, replacement)
+                    } else {
+                        effectiveHeaders.add(replacement)
+                    }
+                }
             }
             if (preResult.requestMutations.queryParams.isNotEmpty()) {
                 preResult.requestMutations.queryParams.forEach { (key, value) ->
@@ -224,7 +239,7 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                 method = effectiveMethod,
                 url = effectiveUrl,
                 queryParams = effectiveQueryParams,
-                headers = effectiveHeaders.map { KeyValueEntry(it.key, it.value) },
+                headers = effectiveHeaders,
                 auth = buildAuthConfig(tab),
                 body = buildRequestBody(tab, effectiveBodyContent),
                 createdAtEpochMillis = currentTimeMillis(),
@@ -308,7 +323,7 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
                                 },
                                 globalVariables = state.globalVariables.filter { it.enabled }.associate { it.key to it.value },
                                 collectionVariables = state.collectionVariables.toMap(),
-                                requestHeaders = effectiveHeaders,
+                                requestHeaders = effectiveHeaders.associate { it.key to it.value },
                                 requestQueryParams = effectiveQueryParams.associate { it.key to it.value },
                                 requestBody = effectiveBodyContent,
                                 streamEvents = resp.streamEvents,
@@ -449,7 +464,9 @@ fun buildRequestBody(tab: RequestTabState, effectiveBodyContent: String): Reques
     return when (tab.bodyType) {
         BodyType.FORM_DATA -> {
             val rows = tab.formRows.filter { it.enabled }
-            val formDataEntries = rows.map { com.reqlab.core.model.FormDataEntry(it.key, it.type, it.value, it.description, it.enabled) }
+            val formDataEntries = rows.map {
+                com.reqlab.core.model.FormDataEntry(it.key, it.type, it.value, it.description, it.enabled, it.bytesBase64)
+            }
             val formEntries = rows.map { KeyValueEntry(it.key, it.value) }
             RequestBody(
                 type = BodyType.FORM_DATA,
@@ -560,6 +577,11 @@ fun buildCurlCommand(
     return parts.joinToString(" \\\n  ")
 }
 
+internal fun enabledHeadersForSend(tab: RequestTabState): List<KeyValueEntry> =
+    tab.headers
+        .filter { it.enabled && it.key.isNotBlank() }
+        .map { KeyValueEntry(it.key, it.value, secret = it.secret) }
+
 internal fun resolveUrlForLog(
     url: String,
     variableLayers: List<Map<String, String>>,
@@ -589,7 +611,7 @@ fun buildPythonCommand(
     sb.appendLine("import requests")
     sb.appendLine()
 
-    val headers = buildHeaderMap(tab, variableLayers, removeUnresolved = true)
+    val headers = buildHeaderList(tab, variableLayers, removeUnresolved = true)
     if (headers.isNotEmpty()) {
         sb.appendLine("headers = {")
         headers.forEach { (k, v) -> sb.appendLine("    ${pyStr(k)}: ${pyStr(v)},") }
@@ -628,7 +650,7 @@ fun buildHTTPieCommand(
     val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
     parts += shellQuote(url)
 
-    buildHeaderMap(tab, variableLayers, removeUnresolved = true).forEach { (k, v) -> parts += shellQuote("$k:$v") }
+    buildHeaderList(tab, variableLayers, removeUnresolved = true).forEach { (k, v) -> parts += shellQuote("$k:$v") }
 
     if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
         parts += "--raw"
@@ -648,7 +670,7 @@ fun buildPowerShellCommand(
 
     val sb = StringBuilder()
     val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
-    val headers = buildHeaderMap(tab, variableLayers, removeUnresolved = true)
+    val headers = buildHeaderList(tab, variableLayers, removeUnresolved = true)
 
     if (headers.isNotEmpty()) {
         sb.appendLine("\$headers = @{")
@@ -677,16 +699,16 @@ private fun buildUrlWithParams(
     removeUnresolved: Boolean = false,
 ): String {
     val enabledParams = tab.params.filter { it.enabled && it.key.isNotBlank() }
+    val parts = splitRequestUrl(resolvedBase)
     if (enabledParams.isEmpty()) return resolvedBase
     // Strip any embedded query string from resolvedBase: tab.params is the single
     // source of truth for query parameters (kept in sync by syncParamsFromUrl /
     // syncUrlFromParams). Appending to a URL that already contains those params
     // would duplicate every parameter in the final request URL.
-    val base = resolvedBase.substringBefore('?')
     val qs = enabledParams.joinToString("&") { p ->
         "${VariableResolver.resolve(p.key, variableLayers, removeUnresolved)}=${VariableResolver.resolve(p.value, variableLayers, removeUnresolved)}"
     }
-    return "$base?$qs"
+    return joinRequestUrl(parts.base, qs, parts.fragment)
 }
 
 private fun jsonBodyForCopy(tab: RequestTabState, resolved: String, allowJson5: Boolean): String {
@@ -694,27 +716,27 @@ private fun jsonBodyForCopy(tab: RequestTabState, resolved: String, allowJson5: 
     return Json5.toWireJson(resolved).getOrDefault(resolved)
 }
 
-private fun buildHeaderMap(
+private fun buildHeaderList(
     tab: RequestTabState,
     variableLayers: List<Map<String, String>>,
     removeUnresolved: Boolean = false,
-): Map<String, String> {
+): List<Pair<String, String>> {
     fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved)
-    val map = linkedMapOf<String, String>()
+    val list = mutableListOf<Pair<String, String>>()
     tab.headers.filter { it.enabled && it.key.isNotBlank() }
-        .forEach { map[resolve(it.key)] = resolve(it.value) }
+        .forEach { list += resolve(it.key) to resolve(it.value) }
     when (tab.authType) {
         AuthType.BEARER, AuthType.JWT -> {
             val token = resolve(tab.authToken).trim()
-            if (token.isNotEmpty()) map["Authorization"] = "Bearer $token"
+            if (token.isNotEmpty()) list += "Authorization" to "Bearer $token"
         }
         AuthType.API_KEY -> {
             if (tab.authApiKey.isNotBlank() && tab.authApiValue.isNotBlank())
-                map[resolve(tab.authApiKey)] = resolve(tab.authApiValue)
+                list += resolve(tab.authApiKey) to resolve(tab.authApiValue)
         }
         else -> Unit
     }
-    return map
+    return list
 }
 
 private fun pyStr(s: String): String = "\"${s.replace("\\", "\\\\").replace("\"", "\\\"")}\""

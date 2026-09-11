@@ -270,6 +270,7 @@ object TabsRepository {
                     put("value",       r.value)
                     put("description", r.description)
                     put("enabled",     r.enabled)
+                    put("bytesBase64", r.bytesBase64)
                 })
             }
         }
@@ -281,6 +282,7 @@ object TabsRepository {
             value       = obj["value"]?.jsonPrimitive?.content ?: "",
             description = obj["description"]?.jsonPrimitive?.content ?: "",
             enabled     = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true,
+            bytesBase64 = obj["bytesBase64"]?.jsonPrimitive?.content ?: "",
         )
 
     private fun kvListJson(list: List<MutableKeyValue>): JsonArray =

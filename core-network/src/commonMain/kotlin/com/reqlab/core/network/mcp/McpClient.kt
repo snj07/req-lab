@@ -253,6 +253,16 @@ class McpClient(
         }
     }
 
+    suspend fun cancelInFlight(reason: String? = "cancelled") {
+        val ids = pendingMutex.withLock { pending.keys.toList() }
+        ids.forEach { cancel(it, reason) }
+    }
+
+    fun updateRoots(roots: List<McpRoot>) {
+        config = config.copy(roots = roots)
+        handlers.onRoots = { config.roots }
+    }
+
     suspend fun notifyRootsChanged() {
         notify("notifications/roots/list_changed", null)
     }

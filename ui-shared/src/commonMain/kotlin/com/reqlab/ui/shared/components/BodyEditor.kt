@@ -531,7 +531,11 @@ private fun FormDataRowItem(
         if (showTypeColumn && row.type == FormEntryType.FILE) {
             FilePickerCell(
                 fileName = row.value.ifBlank { null },
-                onFilePicked = { name, _ -> row.value = name; onRowChange() },
+                onFilePicked = { name, b64 ->
+                    row.value = name
+                    row.bytesBase64 = b64
+                    onRowChange()
+                },
                 modifier = Modifier.weight(2f),
             )
         } else {

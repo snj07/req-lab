@@ -391,11 +391,12 @@ private fun ConnectionBar(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusDot(connection)
             Text(
-                when (connection) {
-                    McpConnectionState.CONNECTED -> Strings.t("mcp_connected")
-                    McpConnectionState.CONNECTING -> Strings.t("mcp_connecting")
-                    McpConnectionState.ERROR -> Strings.t("mcp_status_error")
-                    McpConnectionState.DISCONNECTED -> Strings.t("mcp_disconnected")
+                when {
+                    reconnectNeeded -> Strings.t("mcp_reconnect")
+                    connection == McpConnectionState.CONNECTED -> Strings.t("mcp_connected")
+                    connection == McpConnectionState.CONNECTING -> Strings.t("mcp_connecting")
+                    connection == McpConnectionState.ERROR -> Strings.t("mcp_status_error")
+                    else -> Strings.t("mcp_disconnected")
                 },
                 color = ReqLabColors.OnSurface,
                 fontSize = 12.sp,
@@ -1023,6 +1024,11 @@ private fun ClientSection(
 ) {
     val scroll = rememberScrollState()
     val http = tab.mcpConfig.transport == McpTransportType.STREAMABLE_HTTP
+    fun persistRoots(roots: List<McpRoot>) {
+        tab.mcpConfig = tab.mcpConfig.copy(roots = roots)
+        tab.markDirty()
+        if (connected) session.notifyRootsEdited(roots)
+    }
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().verticalScroll(scroll).padding(end = 12.dp),
@@ -1203,8 +1209,7 @@ private fun ClientSection(
                                     onValueChange = { next ->
                                         val roots = tab.mcpConfig.roots.toMutableList()
                                         roots[index] = root.copy(uri = next)
-                                        tab.mcpConfig = tab.mcpConfig.copy(roots = roots)
-                                        tab.markDirty()
+                                        persistRoots(roots)
                                     },
                                     placeholder = Strings.t("mcp_root_uri"),
                                     modifier = Modifier.fillMaxWidth().testTag("mcp-root-uri-$index"),
@@ -1223,8 +1228,7 @@ private fun ClientSection(
                                     onValueChange = { next ->
                                         val roots = tab.mcpConfig.roots.toMutableList()
                                         roots[index] = root.copy(name = next.ifBlank { null })
-                                        tab.mcpConfig = tab.mcpConfig.copy(roots = roots)
-                                        tab.markDirty()
+                                        persistRoots(roots)
                                     },
                                     placeholder = Strings.t("mcp_root_name"),
                                     modifier = Modifier.fillMaxWidth().testTag("mcp-root-name-$index"),
@@ -1232,8 +1236,7 @@ private fun ClientSection(
                             }
                             IconButton(
                                 onClick = {
-                                    tab.mcpConfig = tab.mcpConfig.copy(roots = tab.mcpConfig.roots.filterIndexed { i, _ -> i != index })
-                                    tab.markDirty()
+                                    persistRoots(tab.mcpConfig.roots.filterIndexed { i, _ -> i != index })
                                 },
                                 modifier = Modifier.size(28.dp).testTag("mcp-root-remove-$index"),
                             ) {
@@ -1249,8 +1252,7 @@ private fun ClientSection(
                 }
                 TextButton(
                     onClick = {
-                        tab.mcpConfig = tab.mcpConfig.copy(roots = tab.mcpConfig.roots + McpRoot(uri = "file://", name = ""))
-                        tab.markDirty()
+                        persistRoots(tab.mcpConfig.roots + McpRoot(uri = "file://", name = ""))
                     },
                     modifier = Modifier.testTag("mcp-add-root"),
                 ) {

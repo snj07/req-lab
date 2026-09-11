@@ -202,4 +202,52 @@ class UrlParamSyncTest {
             "page=1 must appear exactly once in the curl command URL; duplication detected:\n$curlCmd",
         )
     }
+
+    @Test
+    fun `syncParamsFromUrl – fragment is not swallowed into the last query value`() {
+        val tab = RequestTabState()
+        syncParamsFromUrl(tab, "http://localhost:8080/api/search?q=hello#section")
+
+        assertEquals(1, tab.params.size)
+        assertEquals("q", tab.params[0].key)
+        assertEquals("hello", tab.params[0].value)
+    }
+
+    @Test
+    fun `syncUrlFromParams – keeps fragment after rewriting query`() {
+        val tab = RequestTabState().apply {
+            url = "http://localhost:8080/api/search?q=hello#section"
+        }
+        syncParamsFromUrl(tab, tab.url)
+        tab.params[0].value = "world"
+        syncUrlFromParams(tab)
+
+        assertEquals("http://localhost:8080/api/search?q=world#section", tab.url)
+    }
+
+    @Test
+    fun `buildCurlCommand – keeps fragment and does not put it in the query value`() {
+        val tab = RequestTabState().apply {
+            url = "http://localhost:8080/api/search?q=hello#section"
+        }
+        syncParamsFromUrl(tab, tab.url)
+        syncUrlFromParams(tab)
+
+        val curlCmd = buildCurlCommand(tab)
+
+        assertTrue(curlCmd.contains("#section"), "Copy-as cURL must keep the fragment:\n$curlCmd")
+        assertTrue(curlCmd.contains("q=hello#section"), "Query then fragment, not hash inside a param value:\n$curlCmd")
+    }
+
+    @Test
+    fun `buildHTTPieCommand – keeps repeated headers`() {
+        val tab = RequestTabState()
+        tab.headers.add(com.reqlab.ui.shared.state.MutableKeyValue("X-Tag", "kotlin"))
+        tab.headers.add(com.reqlab.ui.shared.state.MutableKeyValue("X-Tag", "ktor"))
+
+        val httpie = buildHTTPieCommand(tab)
+
+        assertTrue(httpie.contains("X-Tag:kotlin"), httpie)
+        assertTrue(httpie.contains("X-Tag:ktor"), httpie)
+    }
 }

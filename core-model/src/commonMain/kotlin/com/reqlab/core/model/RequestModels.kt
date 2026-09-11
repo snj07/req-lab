@@ -63,6 +63,8 @@ data class FormDataEntry(
     val value: String,
     val description: String = "",
     val enabled: Boolean = true,
+    /** File-part bytes as Base64; empty for TEXT rows. */
+    val bytesBase64: String = "",
 )
 
 @Serializable

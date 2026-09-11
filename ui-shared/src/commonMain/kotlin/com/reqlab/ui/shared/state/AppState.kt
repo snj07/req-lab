@@ -118,6 +118,7 @@ data class FormDataEntryState(
     val value: String = "",
     val description: String = "",
     val enabled: Boolean = true,
+    val bytesBase64: String = "",
 )
 
 /**
@@ -130,6 +131,7 @@ class MutableFormDataRow(
     value: String = "",
     description: String = "",
     enabled: Boolean = true,
+    bytesBase64: String = "",
     val uid: String = generateUuid(),
 ) {
     var key         by mutableStateOf(key)
@@ -137,6 +139,7 @@ class MutableFormDataRow(
     var value       by mutableStateOf(value)
     var description by mutableStateOf(description)
     var enabled     by mutableStateOf(enabled)
+    var bytesBase64 by mutableStateOf(bytesBase64)
 }
 
 /** Mutable key-value pair used in param / header / variable editors. */
@@ -397,7 +400,7 @@ class RequestTabState(
     private fun currentSnapshot(): String {
         val paramsSnapshot = params.joinToString(";") { p -> "${p.key}|${p.value}|${p.enabled}|${p.secret}" }
         val headersSnapshot = headers.joinToString(";") { h -> "${h.key}|${h.value}|${h.enabled}|${h.secret}|${h.kind}|${h.keyLocked}" }
-        val formRowsSnapshot = formRows.joinToString(";") { r -> "${r.key}|${r.type.name}|${r.value}|${r.description}|${r.enabled}" }
+        val formRowsSnapshot = formRows.joinToString(";") { r -> "${r.key}|${r.type.name}|${r.value}|${r.description}|${r.enabled}|${r.bytesBase64}" }
         val urlencodedRowsSnapshot = urlencodedRows.joinToString(";") { r -> "${r.key}|${r.value}|${r.description}|${r.enabled}" }
         val allBodyContentsSnapshot = bodyContents.entries
             .sortedBy { entry -> entry.key.name }
@@ -856,7 +859,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         if (!node?.formDataEntries.isNullOrEmpty()) {
             tab.formRows.clear()
             node!!.formDataEntries.forEach { e ->
-                tab.formRows.add(MutableFormDataRow(e.key, e.type, e.value, e.description, e.enabled))
+                tab.formRows.add(MutableFormDataRow(e.key, e.type, e.value, e.description, e.enabled, e.bytesBase64))
             }
         }
         if (!node?.urlencodedEntries.isNullOrEmpty()) {
@@ -1604,7 +1607,7 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
                 val bodyContentsSnapshot: Map<String, String> =
                     tab.bodyContents.entries.associate { it.key.name to it.value }
                 val formEntriesSnapshot = tab.formRows.map { r ->
-                    FormDataEntryState(r.key, r.type, r.value, r.description, r.enabled)
+                    FormDataEntryState(r.key, r.type, r.value, r.description, r.enabled, r.bytesBase64)
                 }
                 val urlencodedSnapshot = tab.urlencodedRows.map { r ->
                     FormDataEntryState(r.key, r.type, r.value, r.description, r.enabled)

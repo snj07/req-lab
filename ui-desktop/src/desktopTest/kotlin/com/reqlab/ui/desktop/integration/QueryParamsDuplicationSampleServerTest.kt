@@ -270,4 +270,27 @@ class QueryParamsDuplicationSampleServerTest {
             "Repeated query values must retain their order. Body: $body",
         )
     }
+
+    @Test
+    fun `pre-request setUrl with query replaces params instead of duplicating them`() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+
+        tab.url = "http://localhost:$PORT/api/echo-query?q=orig"
+        syncParamsFromUrl(tab, tab.url)
+        tab.preRequestScript = """
+            reqlab.request.setUrl("http://localhost:$PORT/api/echo-query?fromScript=1")
+        """.trimIndent()
+
+        runSendRequest(state)
+
+        assertNotNull(tab.response, "Tab should have a response. Error: ${tab.lastError}")
+        assertEquals(200, tab.response!!.statusCode)
+
+        val body = parseBody(tab.response?.bodyText)
+        val counts = assertNotNull(body["paramCounts"]?.jsonObject, "Response must contain paramCounts. Body: $body")
+        assertEquals(1, counts["fromScript"]?.jsonPrimitive?.intOrNull, "fromScript must be sent once. Counts: $counts")
+        assertEquals(null, counts["q"]?.jsonPrimitive?.intOrNull, "Original q must not be re-appended onto setUrl. Counts: $counts")
+    }
 }
