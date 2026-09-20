@@ -61,6 +61,13 @@ import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.theme.httpMethodColor
 import kotlin.math.roundToInt
 
+data class CopyFormatOption(
+    val label: String,
+    val available: Boolean,
+    val reason: String? = null,
+    val action: () -> Unit,
+)
+
 /**
  * The top bar of the request editor: method selector, URL field, Send, Save,
  * Retry, and Copy cURL buttons.
@@ -76,8 +83,7 @@ fun RequestBar(
     /** Called when the user clicks the Stop button while a request is in-flight (H-2). */
     onCancel: () -> Unit = {},
     onSave: () -> Unit,
-    /** Each pair is a label (e.g. "cURL (resolved)") and the action to copy that format. */
-    copyFormats: List<Pair<String, () -> Unit>> = emptyList(),
+    copyFormats: List<CopyFormatOption> = emptyList(),
     retryEnabled: Boolean,
     retryCount: Int,
     retryDelayMs: Long,
@@ -271,7 +277,7 @@ private fun SaveButton(isLoading: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<Pair<String, () -> Unit>>) {
+private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<CopyFormatOption>) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     var expanded by remember { mutableStateOf(false) }
@@ -283,7 +289,7 @@ private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<Pair<String, ()
                 .background(if (isHovered) ReqLabColors.SurfaceHigh else ReqLabColors.SurfaceContainer)
                 .hoverable(interactionSource)
                 .clickable(enabled = !isLoading) {
-                    if (copyFormats.size == 1) copyFormats.first().second()
+                    if (copyFormats.size == 1 && copyFormats.first().available) copyFormats.first().action()
                     else if (copyFormats.isNotEmpty()) expanded = true
                     else expanded = true
                 }
@@ -296,10 +302,16 @@ private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<Pair<String, ()
 
         if (copyFormats.isNotEmpty()) {
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                copyFormats.forEach { (label, action) ->
+                copyFormats.forEach { format ->
                     DropdownMenuItem(
-                        text = { Text(label, fontSize = 13.sp) },
-                        onClick = { action(); expanded = false },
+                        text = {
+                            Column {
+                                Text(format.label, fontSize = 13.sp)
+                                format.reason?.let { Text(it, fontSize = 11.sp, color = ReqLabColors.OnSurfaceDim) }
+                            }
+                        },
+                        enabled = format.available,
+                        onClick = { format.action(); expanded = false },
                     )
                 }
             }

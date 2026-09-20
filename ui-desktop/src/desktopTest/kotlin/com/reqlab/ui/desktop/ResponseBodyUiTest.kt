@@ -198,7 +198,19 @@ class ResponseBodyUiTest {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("response-download-button").performClick()
+        // The desktop export opens a modal JFileChooser. Dismiss it on the EDT
+        // so this UI test can exercise the post-dialog focus behavior unattended.
+        val dismissChooser = javax.swing.Timer(100) {
+            java.awt.Window.getWindows().filterIsInstance<javax.swing.JDialog>()
+                .firstOrNull { dialog ->
+                    dialog.isShowing && dialog.contentPane.components.any { it is javax.swing.JFileChooser }
+                }?.dispose()
+        }.apply { start() }
+        try {
+            composeRule.onNodeWithTag("response-download-button").performClick()
+        } finally {
+            dismissChooser.stop()
+        }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("response-input", useUnmergedTree = true).assertIsFocused()

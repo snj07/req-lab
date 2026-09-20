@@ -13,6 +13,11 @@ import androidx.compose.runtime.mutableStateListOf
 import com.reqlab.ui.shared.state.EnvState
 import com.reqlab.ui.shared.state.HistoryItem
 import com.reqlab.ui.shared.state.MutableKeyValue
+import com.reqlab.ui.shared.state.normalizeApiKeyPlacement
+import com.reqlab.ui.shared.state.SystemHeaderRules
+import com.reqlab.ui.shared.components.encodeOrderedQuery
+import com.reqlab.ui.shared.components.splitRequestUrl
+import com.reqlab.ui.shared.components.joinRequestUrl
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -69,6 +74,9 @@ data class RequestDto(
     val preRequestScript: String? = null,
     val testScript: String? = null,
     val userHeaders: List<Pair<String, String>> = emptyList(),
+    /** Null indicates a legacy document where URL/header pairs remain authoritative. */
+    val queryEntries: List<KeyValueEntry>? = null,
+    val headerEntries: List<KeyValueEntry>? = null,
     val bodyType: String? = null,
     val bodyContent: String? = null,
     /** Per-type raw body contents, keyed by BodyType.name (e.g. "JSON", "XML"). */
@@ -81,6 +89,7 @@ data class RequestDto(
     val authToken: String? = null,
     val authApiKey: String? = null,
     val authApiValue: String? = null,
+    val authApiPlacement: String? = null,
     val kind: String? = null,
     val mcpTransport: String? = null,
     val mcpHttpMode: String? = null,
@@ -362,7 +371,7 @@ object ImportExportRepository {
 
     private fun requestNodeToJson(node: CollectionNode): JsonObject? {
         val method = node.method ?: return null
-        val url = node.url ?: ""
+        val url = compatibleUrl(node.url.orEmpty(), node.queryEntries)
         return buildJsonObject {
             node.requestRef?.let { put("requestRef", it) }
             put("name", node.name)
@@ -370,10 +379,19 @@ object ImportExportRepository {
             put("url", url)
             node.preRequestScript?.takeIf { it.isNotBlank() }?.let { put("preRequestScript", it) }
             node.testScript?.takeIf { it.isNotBlank() }?.let { put("testScript", it) }
-            if (node.userHeaders.isNotEmpty()) {
+            val legacyHeaders = legacyHeaderPairs(node.userHeaders, node.headerEntries)
+            if (legacyHeaders.isNotEmpty()) {
                 put("headers", buildJsonArray {
-                    node.userHeaders.forEach { (k, v) -> add(buildJsonObject { put("key", k); put("value", v) }) }
+                    legacyHeaders.forEach { (key, value) ->
+                        add(buildJsonObject { put("key", key); put("value", value) })
+                    }
                 })
+            }
+            node.headerEntries?.let { entries ->
+                put("headerEntries", buildJsonArray { entries.forEach { add(keyValueEntryToJson(it)) } })
+            }
+            node.queryEntries?.let { entries ->
+                put("queryEntries", buildJsonArray { entries.forEach { add(keyValueEntryToJson(it)) } })
             }
             node.bodyType?.let { bt ->
                 put("body", buildJsonObject {
@@ -420,6 +438,7 @@ object ImportExportRepository {
                     node.authToken?.takeIf { it.isNotBlank() }?.let { put("token", it) }
                     node.authApiKey?.takeIf { it.isNotBlank() }?.let { put("apiKey", it) }
                     node.authApiValue?.takeIf { it.isNotBlank() }?.let { put("apiValue", it) }
+                    put("apiPlacement", normalizeApiKeyPlacement(node.authApiPlacement))
                 })
             }
             if (node.kind == com.reqlab.core.model.RequestKind.MCP) {
@@ -515,13 +534,22 @@ object ImportExportRepository {
             dto.requestRef?.let { put("requestRef", it) }
             put("name", dto.name)
             put("method", dto.method)
-            put("url", dto.url)
+            put("url", compatibleUrl(dto.url, dto.queryEntries))
             dto.preRequestScript?.takeIf { it.isNotBlank() }?.let { put("preRequestScript", it) }
             dto.testScript?.takeIf { it.isNotBlank() }?.let { put("testScript", it) }
-            if (dto.userHeaders.isNotEmpty()) {
+            val legacyHeaders = legacyHeaderPairs(dto.userHeaders, dto.headerEntries)
+            if (legacyHeaders.isNotEmpty()) {
                 put("headers", buildJsonArray {
-                    dto.userHeaders.forEach { (k, v) -> add(buildJsonObject { put("key", k); put("value", v) }) }
+                    legacyHeaders.forEach { (key, value) ->
+                        add(buildJsonObject { put("key", key); put("value", value) })
+                    }
                 })
+            }
+            dto.headerEntries?.let { entries ->
+                put("headerEntries", buildJsonArray { entries.forEach { add(keyValueEntryToJson(it)) } })
+            }
+            dto.queryEntries?.let { entries ->
+                put("queryEntries", buildJsonArray { entries.forEach { add(keyValueEntryToJson(it)) } })
             }
             dto.bodyType?.let { bt ->
                 put("body", buildJsonObject {
@@ -567,6 +595,7 @@ object ImportExportRepository {
                     dto.authToken?.takeIf { it.isNotBlank() }?.let { put("token", it) }
                     dto.authApiKey?.takeIf { it.isNotBlank() }?.let { put("apiKey", it) }
                     dto.authApiValue?.takeIf { it.isNotBlank() }?.let { put("apiValue", it) }
+                    put("apiPlacement", normalizeApiKeyPlacement(dto.authApiPlacement))
                 })
             }
             dto.kind?.takeIf { it.equals("MCP", ignoreCase = true) }?.let { put("kind", it) }
@@ -654,12 +683,33 @@ object ImportExportRepository {
         val url = root["url"]?.jsonPrimitive?.contentOrNull ?: ""
         val preRequestScript = normalizeImportedScript(root["preRequestScript"]?.jsonPrimitive?.contentOrNull)
         val testScript = normalizeImportedScript(root["testScript"]?.jsonPrimitive?.contentOrNull)
-        val userHeaders = root["headers"]?.jsonArray?.mapNotNull { el ->
+        val headerRows = root["headers"]?.jsonArray
+        val parsedHeaders = headerRows?.mapNotNull { el ->
             val obj = el.jsonObject
             val k = obj["key"]?.jsonPrimitive?.contentOrNull
             val v = obj["value"]?.jsonPrimitive?.contentOrNull
-            if (k != null && v != null) Pair(k, v) else null
-        } ?: emptyList()
+            if (k != null && v != null) KeyValueEntry(
+                k, v,
+                enabled = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true,
+                secret = obj["secret"]?.jsonPrimitive?.booleanOrNull ?: false,
+            ) else null
+        }
+        val userHeaders = parsedHeaders?.map { it.key to it.value } ?: emptyList()
+        val headerEntries = root["headerEntries"]?.jsonArray?.mapNotNull { el ->
+            val obj = el.jsonObject
+            val key = obj["key"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            KeyValueEntry(key, obj["value"]?.jsonPrimitive?.contentOrNull ?: "",
+                enabled = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true,
+                secret = obj["secret"]?.jsonPrimitive?.booleanOrNull ?: false)
+        }
+        val queryEntries = root["queryEntries"]?.jsonArray?.mapNotNull { el ->
+            val obj = el.jsonObject
+            val k = obj["key"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val v = obj["value"]?.jsonPrimitive?.contentOrNull ?: ""
+            KeyValueEntry(k, v,
+                enabled = obj["enabled"]?.jsonPrimitive?.booleanOrNull ?: true,
+                secret = obj["secret"]?.jsonPrimitive?.booleanOrNull ?: false)
+        }
         val bodyObj = root["body"]?.jsonObject
         val bodyType = bodyObj?.get("type")?.jsonPrimitive?.contentOrNull
         val bodyContent = bodyObj?.get("content")?.jsonPrimitive?.contentOrNull
@@ -687,17 +737,21 @@ object ImportExportRepository {
         val authToken = authObj?.get("token")?.jsonPrimitive?.contentOrNull
         val authApiKey = authObj?.get("apiKey")?.jsonPrimitive?.contentOrNull
         val authApiValue = authObj?.get("apiValue")?.jsonPrimitive?.contentOrNull
+        val authApiPlacement = normalizeApiKeyPlacement(authObj?.get("apiPlacement")?.jsonPrimitive?.contentOrNull)
         return RequestDto(
             requestRef = requestRef,
             name = name, method = method, url = url,
             preRequestScript = preRequestScript, testScript = testScript,
             userHeaders = userHeaders,
+            queryEntries = queryEntries,
+            headerEntries = headerEntries,
             bodyType = bodyType, bodyContent = bodyContent, rawContents = rawContents,
             formDataEntries = formDataEntries,
             urlencodedEntries = urlencodedEntries,
             authType = authType,
             authUsername = authUsername, authPassword = authPassword,
             authToken = authToken, authApiKey = authApiKey, authApiValue = authApiValue,
+            authApiPlacement = authApiPlacement,
             kind = root["kind"]?.jsonPrimitive?.contentOrNull,
             mcpTransport = root["mcpTransport"]?.jsonPrimitive?.contentOrNull,
             mcpHttpMode = root["mcpHttpMode"]?.jsonPrimitive?.contentOrNull,
@@ -849,7 +903,11 @@ object ImportExportRepository {
             val authParams = when (authType) {
                 AuthType.BASIC -> mapOf("username" to dto.authUsername.orEmpty(), "password" to dto.authPassword.orEmpty())
                 AuthType.BEARER, AuthType.JWT -> mapOf("token" to dto.authToken.orEmpty())
-                AuthType.API_KEY -> mapOf("key" to dto.authApiKey.orEmpty(), "value" to dto.authApiValue.orEmpty())
+                AuthType.API_KEY -> mapOf(
+                    "key" to dto.authApiKey.orEmpty(),
+                    "value" to dto.authApiValue.orEmpty(),
+                    "placement" to normalizeApiKeyPlacement(dto.authApiPlacement),
+                )
                 else -> emptyMap()
             }
             com.reqlab.core.model.McpConnectionConfig(
@@ -860,7 +918,7 @@ object ImportExportRepository {
                     com.reqlab.core.model.McpHttpMode.valueOf(dto.mcpHttpMode ?: "AUTO")
                 }.getOrDefault(com.reqlab.core.model.McpHttpMode.AUTO),
                 url = dto.url,
-                headers = dto.userHeaders.map { KeyValueEntry(it.first, it.second) },
+                headers = dto.headerEntries ?: dto.userHeaders.map { KeyValueEntry(it.first, it.second) },
                 auth = AuthConfig(type = authType ?: AuthType.NONE, params = authParams),
                 command = dto.mcpCommand.orEmpty(),
                 args = dto.mcpArgs,
@@ -883,10 +941,12 @@ object ImportExportRepository {
             name = dto.name,
             isFolder = false,
             method = method,
-            url = dto.url,
+            url = compatibleUrl(dto.url, dto.queryEntries),
             preRequestScript = dto.preRequestScript,
             testScript = dto.testScript,
             userHeaders = dto.userHeaders,
+            queryEntries = dto.queryEntries,
+            headerEntries = dto.headerEntries,
             bodyType = bodyType,
             bodyContent = dto.bodyContent,
             bodyContents = dto.rawContents ?: emptyMap(),
@@ -898,6 +958,7 @@ object ImportExportRepository {
             authToken = dto.authToken,
             authApiKey = dto.authApiKey,
             authApiValue = dto.authApiValue,
+            authApiPlacement = normalizeApiKeyPlacement(dto.authApiPlacement),
             kind = kind,
             mcpConfig = mcp,
         )
@@ -906,5 +967,30 @@ object ImportExportRepository {
     private fun environmentDtoToState(dto: ReqLabEnvironmentDto, nameOverride: String): EnvState {
         val variables = dto.variables.map { (k, v) -> MutableKeyValue(k, v, enabled = true, secret = false) }
         return EnvState(name = nameOverride, variables = variables)
+    }
+
+    private fun keyValueEntryToJson(entry: KeyValueEntry): JsonObject = buildJsonObject {
+        put("key", entry.key)
+        put("value", entry.value)
+        put("enabled", entry.enabled)
+        put("secret", entry.secret)
+    }
+
+    private fun legacyHeaderPairs(
+        pairs: List<Pair<String, String>>,
+        entries: List<KeyValueEntry>?,
+    ): List<Pair<String, String>> = pairs.ifEmpty {
+        entries.orEmpty().filter { it.enabled && !SystemHeaderRules.isSystemHeader(it.key) }
+            .map { it.key to it.value }
+    }
+
+    private fun compatibleUrl(url: String, entries: List<KeyValueEntry>?): String {
+        if (entries == null) return url
+        val parts = splitRequestUrl(url)
+        val query = encodeOrderedQuery(
+            entries.filter { it.enabled && it.key.isNotBlank() }.map { it.key to it.value },
+            preserveTemplates = true,
+        )
+        return joinRequestUrl(parts.base, query, parts.fragment)
     }
 }

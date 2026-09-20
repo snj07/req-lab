@@ -20,6 +20,8 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -509,6 +511,22 @@ class KtorApiClientTest {
         assertTrue(!capturedBody.contains("//"), capturedBody)
         assertTrue(capturedBody.contains("\"id\""), capturedBody)
         assertTrue(capturedBody.contains("1"), capturedBody)
+    }
+
+    @Test
+    fun shared_graphql_envelope_encodes_query_operation_and_variables() {
+        val payload = encodeGraphQlEnvelope(
+            GraphQlBody(
+                query = "query Named { user(id: \"{{id}}\") { id } }",
+                operationName = "Named",
+                variablesJson = "{id: \"{{id}}\",}",
+            ),
+            listOf(mapOf("id" to "a+b")),
+        )
+        val parsed = Json.parseToJsonElement(payload).jsonObject
+        assertEquals("query Named { user(id: \"a+b\") { id } }", parsed["query"]?.jsonPrimitive?.content)
+        assertEquals("Named", parsed["operationName"]?.jsonPrimitive?.content)
+        assertEquals("a+b", parsed["variables"]?.jsonObject?.get("id")?.jsonPrimitive?.content)
     }
 
     private fun capturingClient(

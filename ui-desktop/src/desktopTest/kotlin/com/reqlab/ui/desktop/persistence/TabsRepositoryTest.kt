@@ -60,6 +60,7 @@ class TabsRepositoryTest {
         tab.authType = AuthType.API_KEY
         tab.authApiKey = "x-api-key"
         tab.authApiValue = "secret"
+        tab.authApiPlacement = "query"
         tab.preRequestScript = "env.set('k','v')"
         tab.testScript = "test('ok', function() { expect(response.status).to.equal(200) })"
         tab.retryEnabled = true
@@ -88,6 +89,7 @@ class TabsRepositoryTest {
         assertEquals(AuthType.API_KEY, loaded.authType)
         assertEquals("x-api-key", loaded.authApiKey)
         assertEquals("secret", loaded.authApiValue)
+        assertEquals("query", loaded.authApiPlacement)
         assertEquals("env.set('k','v')", loaded.preRequestScript)
         assertEquals("test('ok', function() { expect(response.status).to.equal(200) })", loaded.testScript)
         assertEquals(true, loaded.retryEnabled)
@@ -96,6 +98,28 @@ class TabsRepositoryTest {
         assertEquals(123456789L, loaded.lastSavedTimestamp)
         assertTrue(loaded.headers.any { it.kind == HeaderKind.USER && !it.keyLocked })
         assertTrue(loaded.isDirty)
+    }
+
+    @Test
+    fun same_length_body_and_form_value_edits_roundtrip_without_row_count_change() {
+        val source = AppState()
+        val tab = source.activeTab!!
+        tab.bodyType = BodyType.JSON
+        tab.bodyContent = "before"
+        tab.formRows.add(MutableFormDataRow("field", value = "one"))
+        tab.markSaved()
+        val revision = tab.persistenceRevision
+        tab.bodyContent = "after!"
+        tab.markDirty()
+        tab.formRows.single().value = "two"
+        tab.markDirty()
+        assertEquals(revision + 2, tab.persistenceRevision)
+
+        assertTrue(TabsRepository.save(source))
+        val restored = AppState()
+        TabsRepository.load(restored)
+        assertEquals("after!", restored.activeTab!!.bodyContent)
+        assertEquals("two", restored.activeTab!!.formRows.single().value)
     }
 
     @Test

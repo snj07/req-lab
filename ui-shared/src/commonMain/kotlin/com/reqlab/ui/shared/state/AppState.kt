@@ -2,6 +2,7 @@ package com.reqlab.ui.shared.state
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,6 +11,7 @@ import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.McpConnectionConfig
 import com.reqlab.core.model.RequestKind
 import com.reqlab.editor.core.Json5EditorSupport
@@ -21,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import com.reqlab.ui.shared.mcp.McpSessionState
 import com.reqlab.ui.shared.platform.generateUuid
@@ -58,6 +61,9 @@ enum class WorkspaceMode(val label: String) {
 
 enum class HeaderKind { SYSTEM, USER }
 
+fun normalizeApiKeyPlacement(value: String?): String =
+    if (value.equals("query", ignoreCase = true)) "query" else "header"
+
 // ── Data holders ────────────────────────────────────────────────
 
 data class ConsoleEntry(
@@ -89,6 +95,10 @@ data class CollectionNode(
     val testScript: String? = null,
     // Request configuration populated from collection import
     val userHeaders: List<Pair<String, String>> = emptyList(),
+    /** Authoritative ordered rows. Null means this is a legacy collection. */
+    val queryEntries: List<KeyValueEntry>? = null,
+    /** Authoritative ordered rows. Null means [userHeaders] is the fallback. */
+    val headerEntries: List<KeyValueEntry>? = null,
     val bodyType: BodyType? = null,
     val bodyContent: String? = null,
     /** Per-type raw body contents keyed by [BodyType.name]. */
@@ -103,6 +113,7 @@ data class CollectionNode(
     val authToken: String? = null,
     val authApiKey: String? = null,
     val authApiValue: String? = null,
+    val authApiPlacement: String? = null,
     val requestRef: String? = null,
     val kind: RequestKind = RequestKind.HTTP,
     val mcpConfig: McpConnectionConfig? = null,
@@ -270,6 +281,9 @@ class RequestTabState(
     var method   by mutableStateOf(method)
     var url      by mutableStateOf(url)
     var isDirty  by mutableStateOf(false)
+    /** Cheap observable used by autosave; every user-visible mutation advances it. */
+    var persistenceRevision by mutableLongStateOf(0L)
+        private set
     var lastSavedTimestamp by mutableStateOf<Long?>(null)
     private var savedSnapshot by mutableStateOf("")
 
@@ -316,6 +330,7 @@ class RequestTabState(
     var authToken     by mutableStateOf("")
     var authApiKey    by mutableStateOf("")
     var authApiValue  by mutableStateOf("")
+    var authApiPlacement by mutableStateOf("header")
 
     var preRequestScript by mutableStateOf("")
     var testScript       by mutableStateOf("")
@@ -418,6 +433,7 @@ class RequestTabState(
             authToken,
             authApiKey,
             authApiValue,
+            authApiPlacement,
             preRequestScript,
             testScript,
             retryEnabled.toString(),
@@ -434,12 +450,33 @@ class RequestTabState(
 
     /** Compact fingerprint of Client-tab MCP settings for dirty tracking and auto-save. */
     fun mcpClientFingerprint(): String {
+        val headers = mcpConfig.headers.joinToString(";") {
+            "${it.key}|${it.value}|${it.enabled}|${it.secret}"
+        }
+        val auth = mcpConfig.auth.params.entries.sortedBy { it.key }
+            .joinToString(";") { "${it.key}=${it.value}" }
+        val oauth = mcpConfig.oauth?.let {
+            listOf(
+                it.authServerUrl, it.clientId, it.clientSecret, it.scopes.joinToString(","),
+                it.redirectPort, it.redirectUri, it.useDcr, it.useDiscovery, it.grantType,
+                it.accessToken, it.refreshToken, it.tokenType, it.expiresAtEpochMillis, it.resource,
+            ).joinToString("|")
+        }.orEmpty()
+        val args = mcpConfig.args.joinToString("\u001f")
+        val env = mcpConfig.env.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
         val roots = mcpConfig.roots.joinToString(";") { "${it.uri}|${it.name.orEmpty()}" }
         return listOf(
             mcpConfig.url,
             mcpConfig.transport.name,
             mcpConfig.httpMode.name,
             mcpConfig.command,
+            args,
+            env,
+            mcpConfig.workingDir.orEmpty(),
+            headers,
+            mcpConfig.auth.type.name,
+            auth,
+            oauth,
             mcpConfig.samplingMode.name,
             mcpConfig.samplingForwardUrl.orEmpty(),
             mcpConfig.samplingForwardToken.orEmpty(),
@@ -499,6 +536,7 @@ class RequestTabState(
     }
 
     fun markDirty() {
+        persistenceRevision++
         // For large body content (> 100 KB total across all body types),
         // skip the expensive currentSnapshot() call which serialises the
         // full body into a string — this would be O(n) for multi-MB
@@ -635,6 +673,20 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     /** Disconnects and forgets the MCP session for [tabId] (called on tab close). */
     fun disposeMcpSession(tabId: String) {
         mcpSessions.remove(tabId)?.let { session -> appScope.launch { session.disconnect() } }
+    }
+
+    /** Releases editor caches, active requests, MCP transports, and application work. */
+    fun dispose() {
+        openTabs.forEach { tab ->
+            tab.currentJob?.cancel()
+            tab.disposeBodyViewModels()
+        }
+        val sessions = mcpSessions.values.toList()
+        mcpSessions.clear()
+        appScope.launch {
+            sessions.forEach { session -> runCatching { session.disconnect() } }
+            appScope.cancel()
+        }
     }
 
     // ── bottom panel ──
@@ -843,10 +895,11 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             collectionId = cId,
             folderPath = pathWithoutNode,
         )
-        // Populate params from the URL query string so the Params tab shows them
-        // immediately on first open. CollectionNode has no params field so this is
-        // the only opportunity to seed them before the user opens the Params tab.
-        if (url.contains('?')) syncParamsFromUrl(tab, url)
+        if (node?.queryEntries != null) {
+            tab.params.addAll(node.queryEntries.map { MutableKeyValue(it.key, it.value, it.enabled, it.secret) })
+        } else if (url.contains('?')) {
+            syncParamsFromUrl(tab, url)
+        }
         node?.preRequestScript?.takeIf { it.isNotBlank() }?.let { tab.preRequestScript = it }
         node?.testScript?.takeIf { it.isNotBlank() }?.let { tab.testScript = it }
         // Populate body, headers, and auth from collection node
@@ -874,7 +927,15 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
         node?.authToken?.takeIf { it.isNotBlank() }?.let { tab.authToken = it }
         node?.authApiKey?.takeIf { it.isNotBlank() }?.let { tab.authApiKey = it }
         node?.authApiValue?.takeIf { it.isNotBlank() }?.let { tab.authApiValue = it }
-        node?.userHeaders?.forEach { (k, v) ->
+        tab.authApiPlacement = normalizeApiKeyPlacement(node?.authApiPlacement)
+        node?.headerEntries?.let { entries ->
+            tab.headers.clear()
+            tab.headers.addAll(entries.map { entry ->
+                val system = SystemHeaderRules.isSystemHeader(entry.key)
+                MutableKeyValue(entry.key, entry.value, entry.enabled, entry.secret,
+                    kind = if (system) HeaderKind.SYSTEM else HeaderKind.USER, keyLocked = system)
+            })
+        } ?: node?.userHeaders?.forEach { (k, v) ->
             val existing = tab.headers.find { h -> h.key.equals(k, ignoreCase = true) }
             if (existing != null) existing.value = v
             else tab.headers.add(MutableKeyValue(k, v, kind = HeaderKind.USER))
@@ -1595,9 +1656,11 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
             val node = nodes[index]
             if (!node.isFolder && node.id == tab.id) {
                 val userHeadersSnapshot = tab.headers
-                    .filter { it.kind == HeaderKind.USER }
+                    .filter { it.kind == HeaderKind.USER && it.enabled }
                     .map { it.key to it.value }
                     .toMutableList()
+                val queryEntriesSnapshot = tab.params.map { KeyValueEntry(it.key, it.value, it.enabled, it.secret) }
+                val headerEntriesSnapshot = tab.headers.map { KeyValueEntry(it.key, it.value, it.enabled, it.secret) }
                 val sseAccept = tab.headers.firstOrNull { isSseAccept(it.key, it.value, it.enabled) }
                 if (sseAccept != null &&
                     userHeadersSnapshot.none { it.first.equals(SystemHeaderRules.ACCEPT, ignoreCase = true) }
@@ -1628,7 +1691,10 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
                     authToken          = tab.authToken.ifBlank { null },
                     authApiKey         = tab.authApiKey.ifBlank { null },
                     authApiValue       = tab.authApiValue.ifBlank { null },
+                    authApiPlacement   = normalizeApiKeyPlacement(tab.authApiPlacement),
                     userHeaders        = userHeadersSnapshot,
+                    queryEntries       = queryEntriesSnapshot,
+                    headerEntries      = headerEntriesSnapshot,
                     preRequestScript   = tab.preRequestScript.ifBlank { null },
                     testScript         = tab.testScript.ifBlank { null },
                     kind               = tab.kind,

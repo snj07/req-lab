@@ -1,6 +1,8 @@
 package com.reqlab.ui.desktop.integration
 
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.BodyType
 import com.reqlab.server.module
 import com.reqlab.ui.shared.components.sendRequest
 import com.reqlab.ui.shared.components.syncParamsFromUrl
@@ -292,5 +294,73 @@ class QueryParamsDuplicationSampleServerTest {
         val counts = assertNotNull(body["paramCounts"]?.jsonObject, "Response must contain paramCounts. Body: $body")
         assertEquals(1, counts["fromScript"]?.jsonPrimitive?.intOrNull, "fromScript must be sent once. Counts: $counts")
         assertEquals(null, counts["q"]?.jsonPrimitive?.intOrNull, "Original q must not be re-appended onto setUrl. Counts: $counts")
+    }
+
+    @Test
+    fun `setUrl without query clears old values then setQueryParam adds only the new one`() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+        tab.url = "http://localhost:$PORT/api/echo-query?old=1&old=2"
+        syncParamsFromUrl(tab, tab.url)
+        tab.preRequestScript = """
+            reqlab.request.setQueryParam("discard", "before")
+            reqlab.request.setUrl("http://localhost:$PORT/api/echo-query")
+            reqlab.request.setQueryParam("new", "yes")
+        """.trimIndent()
+        runSendRequest(state)
+        val values = parseBody(tab.response?.bodyText)["paramValues"]!!.jsonObject
+        assertEquals(null, values["old"])
+        assertEquals(null, values["discard"])
+        assertEquals(listOf("yes"), values["new"]!!.jsonArray.map { it.jsonPrimitive.content })
+    }
+
+    @Test
+    fun `encoded literal values and repeated keys reach server exactly once`() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+        tab.url = "http://localhost:$PORT/api/echo-query?x=1&x=2&space=a%20b&plus=a%2Bb&and=a%26b&eq=a%3Db&pct=%25&unicode=%E2%9C%93&empty=#fragment"
+        syncParamsFromUrl(tab, tab.url)
+        runSendRequest(state)
+        val values = parseBody(tab.response?.bodyText)["paramValues"]!!.jsonObject
+        mapOf(
+            "x" to listOf("1", "2"), "space" to listOf("a b"), "plus" to listOf("a+b"),
+            "and" to listOf("a&b"), "eq" to listOf("a=b"), "pct" to listOf("%"),
+            "unicode" to listOf("✓"), "empty" to listOf(""),
+        ).forEach { (key, expected) ->
+            assertEquals(expected, values[key]!!.jsonArray.map { it.jsonPrimitive.content }, "Unexpected $key")
+        }
+    }
+
+    @Test
+    fun `query-position API key is sent in URL not in headers`() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+        tab.url = "http://localhost:$PORT/api/echo-query"
+        tab.authType = AuthType.API_KEY
+        tab.authApiPlacement = "query"
+        tab.authApiKey = "api_key"
+        tab.authApiValue = "a+b &"
+        runSendRequest(state)
+        val response = parseBody(tab.response?.bodyText)
+        val values = response["paramValues"]!!.jsonObject
+        assertEquals(listOf("a+b &"), values["api_key"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("", response["apiKeyHeader"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `normal request tab sends GraphQL query envelope`() {
+        val state = AppState(openDefaultTab = false)
+        state.addTabInSelectedCollection()
+        val tab = state.activeTab!!
+        tab.method = HttpMethodType.POST
+        tab.url = "http://localhost:$PORT/api/graphql"
+        tab.bodyType = BodyType.GRAPHQL
+        tab.bodyContent = "query User { user(id: \"1\") { id name } }"
+        runSendRequest(state)
+        val body = parseBody(tab.response?.bodyText)
+        assertEquals(tab.bodyContent, body["receivedQuery"]?.jsonPrimitive?.content)
     }
 }

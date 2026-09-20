@@ -7,6 +7,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.Job
 import com.reqlab.ui.shared.MainScreen
 import com.reqlab.ui.shared.state.AppState
 import org.junit.Rule
@@ -32,5 +34,14 @@ class CopyFormatsUiTest {
         composeRule.onAllNodesWithText("cURL (raw template)").assertCountEquals(0)
         composeRule.onAllNodesWithText("HTTPie").assertCountEquals(0)
         composeRule.onAllNodesWithText("Python requests").assertCountEquals(0)
+    }
+
+    @Test
+    fun leaving_main_screen_disposes_its_application_scope() {
+        val state = AppState()
+        val show = mutableStateOf(true)
+        composeRule.setContent { if (show.value) MainScreen(state) }
+        composeRule.runOnIdle { show.value = false }
+        composeRule.waitUntil(5_000) { state.appScope.coroutineContext[Job]?.isActive == false }
     }
 }

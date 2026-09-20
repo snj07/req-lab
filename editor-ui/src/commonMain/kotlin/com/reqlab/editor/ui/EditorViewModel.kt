@@ -66,7 +66,6 @@ class EditorViewModel(
     private val provider = languageProvider ?: LanguageRegistry.getProvider(languageMode)
 
     private val idleLexer = IdleLexer(
-        document    = document,
         styleBuffer = styleBuffer,
         provider    = provider,
         onStyled    = {
@@ -102,7 +101,7 @@ class EditorViewModel(
         private set
 
     init {
-        idleLexer.scheduleFrom(0, scope)
+        idleLexer.scheduleFrom(0, lastExternalText, scope)
         // Run initial fold detection synchronously to avoid startup race/flakiness
         // in tests and release CI. This is lightweight for initial payload sizes.
         computeAndApplyFolds()
@@ -136,7 +135,7 @@ class EditorViewModel(
             )
         }
         notifyTextChanged()
-        idleLexer.scheduleFrom(0, scope)
+        idleLexer.scheduleFrom(0, lastExternalText, scope)
         scheduleDiagnostics()
         scope.launch(Dispatchers.Default) {
             mutex.withLock {
@@ -421,7 +420,7 @@ class EditorViewModel(
         // on the preceding characters.
         val editLine      = document.lineAt(f.coerceAtLeast(0))
         val editLineStart = document.lineStart(editLine)
-        idleLexer.scheduleFrom(editLineStart, scope)
+        idleLexer.scheduleFrom(editLineStart, lastExternalText, scope)
         scheduleDiagnostics()
         scheduleFoldRegionsUpdate()
     }
@@ -684,7 +683,7 @@ class EditorViewModel(
         val firstDocLine = displayLineMap.docFromDisplay(firstDisplayLine)
         val firstCharInViewport = document.lineStart(firstDocLine).coerceAtLeast(0)
         if (firstCharInViewport < styleBuffer.endStyled) return
-        idleLexer.scheduleFrom(firstCharInViewport, scope)
+        idleLexer.scheduleFrom(firstCharInViewport, lastExternalText, scope)
     }
 
     private suspend fun scheduleInitialFoldsInternal() {

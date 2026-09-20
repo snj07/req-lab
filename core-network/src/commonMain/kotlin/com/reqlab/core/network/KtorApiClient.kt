@@ -169,7 +169,7 @@ class KtorApiClient(
 
         request.queryParams.filter { it.enabled }.forEach { queryParam ->
             builder.url.parameters.append(
-                queryParam.key,
+                VariableResolver.resolve(queryParam.key, variableLayers),
                 VariableResolver.resolve(queryParam.value, variableLayers)
             )
         }
@@ -224,7 +224,7 @@ class KtorApiClient(
             }
 
             AuthType.API_KEY -> {
-                val key = auth.params["key"].orEmpty()
+                val key = VariableResolver.resolve(auth.params["key"].orEmpty(), variableLayers)
                 val value = VariableResolver.resolve(auth.params["value"].orEmpty(), variableLayers)
                 val placement = auth.params["placement"]?.lowercase() ?: "header"
                 if (placement == "query") {
@@ -324,29 +324,13 @@ class KtorApiClient(
 
             BodyType.GRAPHQL -> {
                 builder.contentType(ContentType.Application.Json)
-                val graphQlBody = body.graphQl
-                val query = VariableResolver.resolve(graphQlBody?.query.orEmpty(), variableLayers)
-                val operationName = graphQlBody?.operationName
-                val variables = graphQlBody?.variablesJson
-                val payload = buildString {
-                    append("{\"query\":")
-                    append(json.encodeToString(String.serializer(), query))
-                    if (!operationName.isNullOrBlank()) {
-                        append(",\"operationName\":")
-                        append(json.encodeToString(String.serializer(), operationName))
-                    }
-                    if (!variables.isNullOrBlank()) {
-                        append(",\"variables\":")
-                        if (allowJson5InJsonBodies) {
-                            val resolvedVars = VariableResolver.resolve(variables, variableLayers)
-                            append(Json5.toWireJson(resolvedVars).getOrElse { throw it })
-                        } else {
-                            append(variables)
-                        }
-                    }
-                    append("}")
-                }
-                builder.setBody(payload)
+                builder.setBody(
+                    encodeGraphQlEnvelope(
+                        body.graphQl ?: com.reqlab.core.model.GraphQlBody(),
+                        variableLayers,
+                        allowJson5InJsonBodies,
+                    )
+                )
             }
 
             BodyType.X_WWW_FORM_URLENCODED -> {
@@ -598,7 +582,7 @@ private fun currentTimeMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 private val base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-private fun ByteArray.encodeBase64(): String {
+fun ByteArray.encodeBase64(): String {
     if (isEmpty()) return ""
     val result = StringBuilder((size + 2) / 3 * 4)
     var index = 0

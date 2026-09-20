@@ -95,6 +95,23 @@ fun AuthEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
             AuthType.API_KEY -> {
                 LabeledTextField(Strings.t("key_upper"), tab.authApiKey, state = state) { tab.authApiKey = it; onDirty() }
                 LabeledTextField(Strings.value, tab.authApiValue, state = state) { tab.authApiValue = it; onDirty() }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Add to", style = MaterialTheme.typography.labelSmall, color = ReqLabColors.OnSurfaceVariant)
+                    listOf("header" to "Header", "query" to "Query").forEach { (placement, label) ->
+                        val selected = tab.authApiPlacement == placement
+                        Text(
+                            label,
+                            color = if (selected) ReqLabColors.Primary else ReqLabColors.OnSurfaceDim,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (selected) ReqLabColors.SelectedItem else Color.Transparent)
+                                .clickable { tab.authApiPlacement = placement; onDirty() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .testTag("api-key-placement-$placement"),
+                        )
+                    }
+                }
             }
             AuthType.OAUTH2 -> {
                 Text(Strings.t("oauth2_coming_soon"), color = ReqLabColors.OnSurfaceDim, style = MaterialTheme.typography.bodySmall)

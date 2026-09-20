@@ -2,6 +2,8 @@ package com.reqlab.ui.desktop.integration
 
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.AuthType
+import com.reqlab.ui.shared.state.MutableFormDataRow
 import com.reqlab.server.module
 import com.reqlab.ui.shared.components.buildCurlCommand
 import com.reqlab.ui.shared.components.buildPowerShellCommand
@@ -328,5 +330,46 @@ class CopyCommandIntegrationTest {
         assertTrue(curl.contains(compact), curl)
         assertTrue(python.contains("\\\"name\\\":\\\"Alice\\\""), python)
         assertTrue(powershell.contains(compact), powershell)
+    }
+
+    @Test
+    fun curl_and_python_copies_execute_graphql_urlencoded_and_text_multipart() {
+        assumeTrue(commandExists("curl"))
+        assumeTrue(pythonRequestsAvailable())
+        val cases = listOf(
+            Triple(BodyType.GRAPHQL, "/api/graphql", "receivedQuery"),
+            Triple(BodyType.X_WWW_FORM_URLENCODED, "/api/urlencoded", "a+b &"),
+            Triple(BodyType.FORM_DATA, "/api/form-data", "a+b &"),
+        )
+        cases.forEach { (bodyType, route, expected) ->
+            val tab = RequestTabState(method = HttpMethodType.POST, url = "http://localhost:$PORT$route").apply {
+                this.bodyType = bodyType
+                syncSystemHeaders()
+                if (bodyType == BodyType.GRAPHQL) bodyContent = "query { user(id: \"1\") { id } }"
+                else if (bodyType == BodyType.X_WWW_FORM_URLENCODED) {
+                    urlencodedRows.add(MutableFormDataRow("text", value = expected))
+                } else formRows.add(MutableFormDataRow("text", value = expected))
+                authType = AuthType.API_KEY
+                authApiPlacement = "query"
+                authApiKey = "api_key"
+                authApiValue = "secret +&"
+            }
+            val curl = buildCurlCommand(tab)
+            assertTrue(curl.contains("api_key=secret%20%2B%26"), curl)
+            val (curlCode, curlOutput) = runShell(curl)
+            assertEquals(0, curlCode, curlOutput)
+            assertTrue(curlOutput.contains(expected), curlOutput)
+
+            val script = buildPythonCommand(tab)
+            val temp = File.createTempFile("reqlab-copy-body", ".py")
+            try {
+                temp.writeText(script)
+                val (pythonCode, pythonOutput) = runShell("python3 ${temp.absolutePath}")
+                assertEquals(0, pythonCode, pythonOutput)
+                assertTrue(pythonOutput.contains(expected), pythonOutput)
+            } finally {
+                temp.delete()
+            }
+        }
     }
 }

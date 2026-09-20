@@ -10,6 +10,7 @@ import com.reqlab.ui.shared.state.HeaderKind
 import com.reqlab.ui.shared.state.MutableFormDataRow
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestTabState
+import com.reqlab.ui.shared.state.normalizeApiKeyPlacement
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -65,6 +66,7 @@ object TabsRepository {
                         put("authToken",    tab.authToken)
                         put("authApiKey",   tab.authApiKey)
                         put("authApiValue", tab.authApiValue)
+                        put("authApiPlacement", normalizeApiKeyPlacement(tab.authApiPlacement))
                         put("preRequestScript", tab.preRequestScript)
                         put("testScript", tab.testScript)
                         put("retryEnabled", tab.retryEnabled)
@@ -72,6 +74,7 @@ object TabsRepository {
                         put("retryDelayMs", tab.retryDelayMs)
                         tab.lastSavedTimestamp?.let { put("lastSavedTimestamp", it) }
                         put("savedSnapshot", tab.savedSnapshotForPersistence())
+                        put("snapshotFormat", 2)
                         put("isDirty",     tab.isDirty)
                         put("params",  kvListJson(tab.params))
                         put("headers", kvListJson(tab.headers))
@@ -210,6 +213,7 @@ object TabsRepository {
                 tab.authToken    = obj["authToken"]?.jsonPrimitive?.content ?: ""
                 tab.authApiKey   = obj["authApiKey"]?.jsonPrimitive?.content ?: ""
                 tab.authApiValue = obj["authApiValue"]?.jsonPrimitive?.content ?: ""
+                tab.authApiPlacement = normalizeApiKeyPlacement(obj["authApiPlacement"]?.jsonPrimitive?.content)
                 tab.preRequestScript = obj["preRequestScript"]?.jsonPrimitive?.content ?: ""
                 tab.testScript = obj["testScript"]?.jsonPrimitive?.content ?: ""
                 tab.retryEnabled = obj["retryEnabled"]?.jsonPrimitive?.booleanOrNull ?: false
@@ -246,9 +250,13 @@ object TabsRepository {
                     tab.urlencodedRows.add(formRowFromJson(el.jsonObject))
                 }
 
+                val legacyDirty = obj["isDirty"]?.jsonPrimitive?.booleanOrNull ?: false
+                val snapshotFormat = obj["snapshotFormat"]?.jsonPrimitive?.intOrNull ?: 1
                 tab.restoreSavedSnapshot(
-                    snapshot = obj["savedSnapshot"]?.jsonPrimitive?.content,
-                    legacyDirtyFlag = obj["isDirty"]?.jsonPrimitive?.booleanOrNull ?: false,
+                    // Old snapshots lacked placement and complete MCP fields.
+                    // Reanchor clean tabs; retain the dirty flag for unsaved ones.
+                    snapshot = if (snapshotFormat >= 2) obj["savedSnapshot"]?.jsonPrimitive?.content else null,
+                    legacyDirtyFlag = legacyDirty,
                 )
 
                 state.openTabs.add(tab)
