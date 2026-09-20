@@ -12,6 +12,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.zIndex
@@ -31,7 +34,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -59,6 +61,11 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -78,19 +85,19 @@ import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setText
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.reqlab.editor.core.InlineEditorError
 import com.reqlab.editor.core.LanguageMode
 import kotlinx.coroutines.Dispatchers
@@ -476,18 +483,17 @@ fun EditorRenderer(
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val density = LocalDensity.current
-            val lineNumStyle = TextStyle(
-                color      = theme.lineNumberFg,
-                fontSize   = 13.sp,
-                lineHeight = 20.sp,
-                fontFamily = FontFamily.Monospace,
-                textAlign  = TextAlign.End,
+            val textMeasurer = rememberTextMeasurer()
+            val lineNumStyle = editorTextStyle(
+                color = theme.lineNumberFg,
+                textAlign = TextAlign.End,
             )
-            // Always allocate for at least 2 digits so the gutter does not shift
+            val firstLineSlot = with(density) { EditorLineHeight.toDp() }.coerceAtLeast(20.dp)
+            // Always allocate for at least 4 digits so the gutter does not shift
             // when crossing the 9→10 line boundary (single-digit to double-digit).
             val gutterDigits = maxOf(viewModel.document.lineCount.toString().length, 4)
             val gutterWidth = remember(gutterDigits) {
-                (gutterDigits * 9 + 40).dp
+                (gutterDigits * 9 + 44).dp
             }
             val foldStartSet = remember(state.version, state.foldVersion) {
                 viewModel.foldRegions.associate { it.startLine - 1 to it }
@@ -607,6 +613,8 @@ fun EditorRenderer(
                         val end   = region.endLine   - 1
                         docLine in (start + 1)..(end - 1)
                     }
+                    val isCurrentLine = cursorHere >= 0
+                    val lineFill = if (isCurrentLine) theme.cursorLine else theme.background
 
                     Row(
                         Modifier
@@ -614,59 +622,87 @@ fun EditorRenderer(
                             .then(if (!wordWrap) Modifier.clipToBounds() else Modifier) // ← ADD
                         ){
 
-                        // ── Gutter ─────────────────────────────────────
+                        // Gutter, fold mark, and LineView share editorTextStyle +
+                        // LINE_PAD_VERT so number, chevron, and text sit in one line box.
                         Row(
                             modifier = Modifier
                                 .width(gutterWidth)
-                                .zIndex(1f) 
-                                .background(theme.background)
-                                .padding(end = 4.dp, top = 1.dp, bottom = 1.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .fillMaxHeight()
+                                .zIndex(1f)
+                                .background(lineFill)
+                                .padding(end = 4.dp, top = LINE_PAD_VERT, bottom = LINE_PAD_VERT),
+                            verticalAlignment = Alignment.Top,
                             horizontalArrangement = Arrangement.End,
                         ) {
-                            // ① Line number (right-aligned, fills available space)
                             val lineNumberTag = if (testTagPrefix.isNotEmpty())
                                 "$testTagPrefix-line-number-$docLine" else ""
-                            Text(
-                                text  = "${docLine + 1}",
-                                style = lineNumStyle,
-                                modifier = if (lineNumberTag.isNotEmpty()) Modifier.testTag(lineNumberTag) else Modifier,
-                            )
+                            val lineLabel = "${docLine + 1}"
+                            val lineNumLayout = remember(lineLabel, lineNumStyle, textMeasurer) {
+                                textMeasurer.measure(
+                                    text = lineLabel,
+                                    style = lineNumStyle,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .width(with(density) { lineNumLayout.size.width.toDp() })
+                                    .height(firstLineSlot)
+                                    .then(
+                                        if (lineNumberTag.isNotEmpty()) Modifier.testTag(lineNumberTag)
+                                        else Modifier
+                                    ),
+                            ) {
+                                Canvas(Modifier.matchParentSize()) {
+                                    val y = (size.height - lineNumLayout.size.height) / 2f
+                                    drawText(lineNumLayout, topLeft = Offset(0f, y))
+                                }
+                            }
 
-                            // ② Fold indicator (or guide spacer) — rightmost column
                             val foldTag = if (testTagPrefix.isNotEmpty())
                                 "$testTagPrefix-fold-indicator-$docLine" else ""
+                            val foldInteraction = remember { MutableInteractionSource() }
+                            val foldHovered by foldInteraction.collectIsHoveredAsState()
                             val foldColumnModifier = Modifier
                                 .padding(start = 4.dp)
-                                .size(16.dp)
+                                .width(20.dp)
+                                .height(firstLineSlot)
                                 .then(
                                     if (isFoldable && foldTag.isNotEmpty()) Modifier.testTag(foldTag)
                                     else Modifier
                                 )
                             Box(
                                 modifier = if (isFoldable) {
-                                    foldColumnModifier.pointerInput(docLine) {
-                                        detectTapGestures {
-                                            focus.requestFocus()
-                                            viewModel.toggleFold(docLine)
+                                    foldColumnModifier
+                                        .hoverable(foldInteraction)
+                                        .semantics {
+                                            contentDescription = if (isFolded) "Expand" else "Collapse"
                                         }
-                                    }
+                                        .pointerInput(docLine) {
+                                            detectTapGestures {
+                                                focus.requestFocus()
+                                                viewModel.toggleFold(docLine)
+                                            }
+                                        }
                                 } else foldColumnModifier,
-                                contentAlignment = Alignment.Center,
                             ) {
                                 if (isFoldable) {
-                                    Text(
-                                        text  = if (isFolded) "▸" else "▾",
-                                        color = if (isFolded) theme.accent else theme.lineNumberFg,
-                                        fontSize = 10.sp,
-                                    )
+                                    val foldColor = when {
+                                        isFolded -> theme.accent
+                                        foldHovered -> theme.foreground
+                                        else -> theme.foldIndicator
+                                    }
+                                    Canvas(modifier = Modifier.matchParentSize()) {
+                                        drawFoldChevron(expanded = !isFolded, color = foldColor)
+                                    }
                                 } else if (inFoldRegion) {
                                     Canvas(modifier = Modifier.matchParentSize()) {
                                         val x = size.width / 2f
                                         drawLine(
                                             color = foldGuideColor,
-                                            start = androidx.compose.ui.geometry.Offset(x, 0f),
-                                            end   = androidx.compose.ui.geometry.Offset(x, size.height),
+                                            start = Offset(x, 0f),
+                                            end   = Offset(x, size.height),
                                             strokeWidth = 1.5f,
                                             pathEffect  = PathEffect.dashPathEffect(floatArrayOf(3f, 3f), 0f),
                                         )
@@ -686,6 +722,7 @@ fun EditorRenderer(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
+                                .background(if (isCurrentLine) theme.cursorLine else Color.Transparent)
                                 .then(if (!wordWrap) Modifier.clipToBounds() else Modifier)
                                 // In no-wrap mode, LineView is only as wide as its text.
                                 // Clicks in the empty area to the RIGHT of a short line
@@ -927,4 +964,26 @@ private fun posToDragOffset(
         ((xInContent / charWidthPx) + 0.5f).toInt().coerceIn(0, lineText.length)
     }
     return lineStart + charOffset
+}
+
+/** Stroke chevron centered in the first-line box (same box as number + LineView glyphs). */
+private fun DrawScope.drawFoldChevron(expanded: Boolean, color: Color) {
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val arm = minOf(size.width, size.height) * 0.22f
+    val path = Path()
+    if (expanded) {
+        path.moveTo(cx - arm, cy - arm * 0.55f)
+        path.lineTo(cx, cy + arm * 0.55f)
+        path.lineTo(cx + arm, cy - arm * 0.55f)
+    } else {
+        path.moveTo(cx - arm * 0.55f, cy - arm)
+        path.lineTo(cx + arm * 0.55f, cy)
+        path.lineTo(cx - arm * 0.55f, cy + arm)
+    }
+    drawPath(
+        path,
+        color,
+        style = Stroke(width = 1.7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+    )
 }

@@ -39,14 +39,13 @@ class DisplayLineMap(docLineCount: Int) {
      * O(log n): return the 0-based doc line corresponding to 0-based [displayLine].
      */
     fun docFromDisplay(displayLine: Int): Int {
-        if (displayLine <= 0) return 0
-        if (displayLine >= totalDisplayLines) return logicalSize - 1
-        // Binary search: find the largest doc line i where prefixSums[i] <= displayLine
+        if (totalDisplayLines <= 0 || displayLine <= 0) return 0
+        val target = if (displayLine >= totalDisplayLines) totalDisplayLines - 1 else displayLine
         var lo = 0
         var hi = logicalSize - 1
         while (lo < hi) {
             val mid = (lo + hi + 1) ushr 1
-            if (prefixSums[mid] <= displayLine) lo = mid else hi = mid - 1
+            if (prefixSums[mid] <= target) lo = mid else hi = mid - 1
         }
         return lo
     }

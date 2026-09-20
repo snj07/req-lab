@@ -16,4 +16,13 @@ data class RetryPolicy(
         val exponential = baseDelayMs * (1L shl (attempt - 1).coerceAtMost(20))
         return exponential.coerceAtMost(maxDelayMs)
     }
+
+    fun isRetryable(throwable: Throwable): Boolean {
+        if (throwable is IllegalArgumentException) return false
+        val name = throwable::class.simpleName.orEmpty()
+        if (name.contains("URLParser", ignoreCase = true)) return false
+        val message = throwable.message.orEmpty()
+        return !message.contains("parse URL", ignoreCase = true) &&
+            !message.contains("illegal url", ignoreCase = true)
+    }
 }

@@ -62,6 +62,92 @@ class KtorApiClientTest {
     }
 
     @Test
+    fun disabled_cookies_do_not_send_cookie_header() = runTest {
+        val cookieHeaders = mutableListOf<String?>()
+        val engine = MockEngine { request ->
+            cookieHeaders += request.headers[HttpHeaders.Cookie]
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        apiClient.execute(
+            RequestDefinition(
+                id = "cookies-disabled",
+                name = "cookies",
+                method = HttpMethodType.GET,
+                url = "https://api.test/cookies",
+                cookies = listOf(
+                    KeyValueEntry("session", "abc", enabled = false),
+                    KeyValueEntry("theme", "dark", enabled = false),
+                ),
+                createdAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L,
+            ),
+        ).toList()
+
+        assertEquals(1, cookieHeaders.size)
+        assertEquals(null, cookieHeaders.single(), "Cookie header must be omitted when no cookie is enabled")
+    }
+
+    @Test
+    fun enabled_cookies_are_sent_and_disabled_ones_are_omitted() = runTest {
+        val cookieHeaders = mutableListOf<String?>()
+        val engine = MockEngine { request ->
+            cookieHeaders += request.headers[HttpHeaders.Cookie]
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        apiClient.execute(
+            RequestDefinition(
+                id = "cookies-mixed",
+                name = "cookies",
+                method = HttpMethodType.GET,
+                url = "https://api.test/cookies",
+                cookies = listOf(
+                    KeyValueEntry("session", "abc", enabled = true),
+                    KeyValueEntry("theme", "dark", enabled = false),
+                ),
+                createdAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L,
+            ),
+        ).toList()
+
+        assertEquals("session=abc", cookieHeaders.single())
+    }
+
+    @Test
+    fun invalid_url_does_not_retry() = runTest {
+        var engineHits = 0
+        val engine = MockEngine {
+            engineHits++
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 3, baseDelayMs = 0L, maxDelayMs = 0L),
+        )
+        val events = apiClient.execute(
+            RequestDefinition(
+                id = "bad-url",
+                name = "bad url",
+                method = HttpMethodType.GET,
+                url = "::::",
+                createdAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L,
+            ),
+        ).toList()
+
+        assertEquals(0, engineHits, "Client-side URL errors must never hit the engine")
+        assertEquals(0, events.count { it is NetworkEvent.RetryScheduled }, "Invalid URL must not be retried")
+        assertTrue(events.last() is NetworkEvent.Failure)
+    }
+
+    @Test
     fun emits_success_event_for_200_response() = runTest {
         val mockEngine = MockEngine { _ ->
             respond(

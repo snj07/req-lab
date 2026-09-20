@@ -60,4 +60,33 @@ class GutterLayoutStabilityTest {
             "Line number x-position shifted after fold icon appeared. before=$xBefore after=$xAfter",
         )
     }
+
+    @Test
+    fun line_number_and_fold_mark_share_vertical_center() {
+        val state = AppState()
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = "{\n  \"a\": {\n    \"b\": 1\n  }\n}"
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+        Thread.sleep(800)
+        composeRule.waitForIdle()
+
+        val number = composeRule
+            .onNodeWithTag("body-editor-line-number-0", useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val fold = composeRule
+            .onNodeWithTag("body-editor-fold-indicator-0", useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val numberMid = (number.top + number.bottom) / 2f
+        val foldMid = (fold.top + fold.bottom) / 2f
+        assertTrue(
+            abs(numberMid - foldMid) <= 1.5f,
+            "Line number and fold mark must share a vertical center. number=$number fold=$fold",
+        )
+    }
 }

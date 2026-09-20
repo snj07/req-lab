@@ -101,7 +101,9 @@ class EditorViewModel(
         private set
 
     init {
-        idleLexer.scheduleFrom(0, lastExternalText, scope)
+        styleFirstPaint()
+        _state.update { it.copy(styleClock = styleBuffer.styleClock) }
+        idleLexer.scheduleFrom(styleBuffer.endStyled, lastExternalText, scope)
         // Run initial fold detection synchronously to avoid startup race/flakiness
         // in tests and release CI. This is lightweight for initial payload sizes.
         computeAndApplyFolds()
@@ -118,6 +120,7 @@ class EditorViewModel(
         document.replaceAll(text)
         styleBuffer.invalidateFrom(0)
         displayLineMap.reset(document.lineCount)
+        styleFirstPaint()
         val capturedSeq = editSequence
         val newVersion = document.version
         val docLen = document.length
@@ -135,7 +138,7 @@ class EditorViewModel(
             )
         }
         notifyTextChanged()
-        idleLexer.scheduleFrom(0, lastExternalText, scope)
+        idleLexer.scheduleFrom(styleBuffer.endStyled, lastExternalText, scope)
         scheduleDiagnostics()
         scope.launch(Dispatchers.Default) {
             mutex.withLock {
@@ -807,9 +810,36 @@ class EditorViewModel(
         return false
     }
 
+    /**
+     * Color the first [FIRST_PAINT_STYLE_CHARS] on the caller thread so the first
+     * frame is not unstyled PLAIN text. IdleLexer continues from [StyleBuffer.endStyled].
+     * Long lines are tokenized only up to the budget so a minified 10 MB body
+     * cannot freeze the UI thread.
+     */
+    private fun styleFirstPaint() {
+        val budget = minOf(FIRST_PAINT_STYLE_CHARS, document.length)
+        if (budget <= styleBuffer.endStyled) return
+        var lexState: Any? = null
+        val lastLine = document.lineAt((budget - 1).coerceAtLeast(0))
+        for (line in 0..lastLine) {
+            val lineStart = document.lineStart(line)
+            if (lineStart >= budget) break
+            val slice = document.lineText(line).take(budget - lineStart)
+            val (tokens, next) = provider.tokenizeLine(slice, line + 1, lexState)
+            lexState = next
+            for (token in tokens) {
+                val from = lineStart + token.startOffset
+                if (from >= budget) break
+                styleBuffer.applyStyle(from, minOf(lineStart + token.endOffset, budget), token.type)
+            }
+        }
+    }
+
     companion object {
         /** Matches LineView.MAX_RENDER_CHARS_PER_LINE — lines longer than this are truncated in the renderer. */
         const val DISPLAY_LINE_LENGTH_LIMIT = 50_000
+        /** Bytes styled synchronously so a large JSON load is not a white flash then color. */
+        const val FIRST_PAINT_STYLE_CHARS = 128_000
         // Keep undo memory bounded for multi-MB documents while still allowing
         // long Cmd+Z/Cmd+Shift+Z chains.
         private const val MAX_UNDO_COMMANDS = 2_000

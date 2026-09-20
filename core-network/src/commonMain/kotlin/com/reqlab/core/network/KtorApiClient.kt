@@ -135,7 +135,7 @@ class KtorApiClient(
                 logger.error("Request failed at attempt $attempt", throwable)
                 interceptors.forEach { interceptor -> interceptor.onFailure(throwable, attempt) }
 
-                if (attempt == retryPolicy.maxAttempts) {
+                if (attempt == retryPolicy.maxAttempts || !retryPolicy.isRetryable(throwable)) {
                     break
                 }
 
@@ -181,11 +181,14 @@ class KtorApiClient(
             }
         }
 
-        if (request.cookies.isNotEmpty()) {
-            builder.header(HttpHeaders.Cookie, request.cookies.filter { it.enabled }
-                .joinToString(separator = "; ") { cookie ->
+        val enabledCookies = request.cookies.filter { it.enabled }
+        if (enabledCookies.isNotEmpty()) {
+            builder.header(
+                HttpHeaders.Cookie,
+                enabledCookies.joinToString(separator = "; ") { cookie ->
                     "${cookie.key}=${VariableResolver.resolve(cookie.value, variableLayers)}"
-                })
+                },
+            )
         }
 
         applyAuth(builder, request, variableLayers)

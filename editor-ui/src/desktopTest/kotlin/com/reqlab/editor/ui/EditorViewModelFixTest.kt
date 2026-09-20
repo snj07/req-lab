@@ -628,3 +628,25 @@ class EditorViewModelFixTest {
         assertEquals(6, mapCursorByLineCol("aaa\nbbbb", 6, "aaa\ncccccc"))
     }
 }
+
+class EditorFirstPaintStyleTest {
+
+    @Test
+    fun json_is_styled_before_the_idle_lexer_runs() {
+        val json = """{"a":1}"""
+        val v = EditorViewModel(json, LanguageMode.JSON)
+        try {
+            assertTrue(
+                v.styleBuffer.endStyled >= json.length,
+                "First paint must style a small JSON document synchronously; endStyled=${v.styleBuffer.endStyled}",
+            )
+            assertEquals(
+                com.reqlab.editor.core.TokenType.PUNCTUATION,
+                v.styleBuffer.styleAt(0),
+                "Opening brace must be a punctuation token on first paint, not unstyled PLAIN",
+            )
+        } finally {
+            v.dispose()
+        }
+    }
+}

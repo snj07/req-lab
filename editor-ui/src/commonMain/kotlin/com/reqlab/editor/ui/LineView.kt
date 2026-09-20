@@ -29,6 +29,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -112,13 +114,7 @@ internal fun LineView(
         )
     }
 
-    val textStyle = remember {
-        TextStyle(
-            fontSize   = 13.sp,
-            lineHeight = 20.sp,
-            fontFamily = FontFamily.Monospace,
-        )
-    }
+    val textStyle = remember { editorTextStyle() }
 
     val measured: TextLayoutResult = remember(annotated, wordWrap, containerWidthPx) {
         // Compose's packed Constraints use 18 bits per dimension: max = (1 shl 18) - 1 = 262_143 px.
@@ -285,6 +281,24 @@ private const val MAX_RENDER_CHARS_PER_LINE = 50_000
 internal val LINE_PAD_START = 8.dp
 internal val LINE_PAD_END = 16.dp
 internal val LINE_PAD_VERT = 1.dp
+internal val EditorFontSize = 13.sp
+internal val EditorLineHeight = 20.sp
+
+/** Shared by LineView, gutter numbers, and fold marks so one row shares one line box. */
+internal fun editorTextStyle(
+    color: Color = Color.Unspecified,
+    textAlign: TextAlign = TextAlign.Unspecified,
+): TextStyle = TextStyle(
+    color = color,
+    fontSize = EditorFontSize,
+    lineHeight = EditorLineHeight,
+    fontFamily = FontFamily.Monospace,
+    textAlign = textAlign,
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.None,
+    ),
+)
 
 /**
  * Compose's Constraints representation caps each dimension at (1 shl 18) − 1 = 262_143 px.

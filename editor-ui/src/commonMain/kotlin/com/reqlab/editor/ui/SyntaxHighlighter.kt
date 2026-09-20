@@ -53,9 +53,9 @@ interface SyntaxHighlighter {
  * to replace this for any specific language.
  */
 class DefaultSyntaxHighlighter(
-    override val mode: LanguageMode,
     private val provider: LanguageModeProvider,
 ) : SyntaxHighlighter {
+    override val mode: LanguageMode get() = provider.mode
 
     override fun highlight(text: String): AnnotatedString {
         if (mode == LanguageMode.PLAIN_TEXT) return AnnotatedString(text)
@@ -95,6 +95,6 @@ class DefaultSyntaxHighlighter(
 internal fun buildDefaultHighlightersFor(vararg modes: LanguageMode): List<SyntaxHighlighter> {
     if (!LanguageRegistry.hasProvider(LanguageMode.PLAIN_TEXT)) LanguageRegistry.registerBuiltins()
     return modes.map { mode ->
-        DefaultSyntaxHighlighter(mode, LanguageRegistry.getProvider(mode))
+        DefaultSyntaxHighlighter(LanguageRegistry.getProvider(mode))
     }
 }

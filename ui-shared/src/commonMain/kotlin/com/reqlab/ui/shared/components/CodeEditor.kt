@@ -77,6 +77,10 @@ internal const val READ_ONLY_FORMAT_OFFLOAD_CHARS = 64_000
 
 internal fun shouldOffloadReadOnlyFormat(length: Int): Boolean = length > READ_ONLY_FORMAT_OFFLOAD_CHARS
 
+/** Large read-only bodies are shown as received; pretty-print is opt-in via the toolbar. */
+internal fun shouldAutoPrettyPrintReadOnly(length: Int): Boolean =
+    !shouldOffloadReadOnlyFormat(length)
+
 // ── Theme Helper ─────────────────────────────────────────────────
 
 @Composable
@@ -174,16 +178,28 @@ fun CodeEditor(
     val viewModel: EditorViewModel = externalViewModel ?: internalViewModel!!
 
     // ── Format / display state ───────────────────────────────
-    var isFormatted by remember { mutableStateOf(isReadOnly) }
+    // Auto-pretty only for small read-only bodies. Large payloads (>64 KB) are
+    // shown as received so we don't paint raw JSON and then swap in a pretty
+    // reprint a few hundred ms later.
+    var isFormatted by remember {
+        mutableStateOf(isReadOnly && shouldAutoPrettyPrintReadOnly(text.length))
+    }
     var offloadedFormatted by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(text, isReadOnly) {
+        if (!isReadOnly) return@LaunchedEffect
+        isFormatted = shouldAutoPrettyPrintReadOnly(text.length)
+        offloadedFormatted = null
+    }
     LaunchedEffect(text, isFormatted, language, allowJson5, isReadOnly) {
         if (!isReadOnly || !isFormatted || !shouldOffloadReadOnlyFormat(text.length)) {
             offloadedFormatted = null
             return@LaunchedEffect
         }
-        offloadedFormatted = withContext(Dispatchers.Default) {
+        offloadedFormatted = null
+        val formatted = withContext(Dispatchers.Default) {
             autoFormat(text, language, allowJson5)
         }
+        offloadedFormatted = formatted
     }
     val displayText = remember(text, isFormatted, language, allowJson5, offloadedFormatted, isReadOnly) {
         when {

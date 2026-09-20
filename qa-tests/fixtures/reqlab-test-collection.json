@@ -561,6 +561,22 @@
       ]
     },
     {
+      "name": "Large Payloads",
+      "folders": [],
+      "requests": [
+        {
+          "name": "GET Large JSON (10mb-sample.json)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/large-json"
+        },
+        {
+          "name": "GET Large XML (5mb.xml)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/large-xml"
+        }
+      ]
+    },
+    {
       "name": "Scripts & Tests",
       "folders": [],
       "requests": [
