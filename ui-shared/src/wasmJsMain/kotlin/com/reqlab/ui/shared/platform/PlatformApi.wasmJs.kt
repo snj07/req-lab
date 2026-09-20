@@ -102,6 +102,8 @@ actual val ioDispatcher: CoroutineDispatcher = Dispatchers.Default
 
 actual val horizontalResizeCursor: PointerIcon = PointerIcon.Default
 actual val verticalResizeCursor: PointerIcon   = PointerIcon.Default
+actual val nwseResizeCursor: PointerIcon = PointerIcon.Default
+actual val neswResizeCursor: PointerIcon = PointerIcon.Default
 
 /**
  * H-5: On wasmJs, PointerIcon cannot be set to CSS cursor strings via the
@@ -117,6 +119,22 @@ actual fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier {
                 when (event.type) {
                     PointerEventType.Enter -> jsSetCanvasCursor(cursorCSS.toJsString())
                     PointerEventType.Exit  -> jsSetCanvasCursor("default".toJsString())
+                    else -> {}
+                }
+            }
+        }
+    }
+}
+
+actual fun Modifier.platformDiagonalResizeCursorStyle(isNwSe: Boolean): Modifier {
+    val cursorCSS = if (isNwSe) "nwse-resize" else "nesw-resize"
+    return this.pointerInput(isNwSe) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                when (event.type) {
+                    PointerEventType.Enter -> jsSetCanvasCursor(cursorCSS.toJsString())
+                    PointerEventType.Exit -> jsSetCanvasCursor("default".toJsString())
                     else -> {}
                 }
             }

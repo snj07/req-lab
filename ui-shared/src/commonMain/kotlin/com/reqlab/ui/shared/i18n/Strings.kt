@@ -45,6 +45,11 @@ object Strings {
     val expandAll: String @Composable @ReadOnlyComposable get() = t("expand_all")
     val noEnvironmentsConfigured: String @Composable @ReadOnlyComposable get() = t("no_environments_configured")
     val createEnvironment: String @Composable @ReadOnlyComposable get() = t("create_environment")
+    val searchEnvironmentVariables: String @Composable @ReadOnlyComposable get() = t("search_environment_variables")
+    val noMatchingVariables: String @Composable @ReadOnlyComposable get() = t("no_matching_variables")
+    val clearSearch: String @Composable @ReadOnlyComposable get() = t("clear_search")
+    val maximizeDialog: String @Composable @ReadOnlyComposable get() = t("maximize_dialog")
+    val restoreDialog: String @Composable @ReadOnlyComposable get() = t("restore_dialog")
     val noRequestSelected: String @Composable @ReadOnlyComposable get() = t("no_request_selected")
     val openRequestToStart: String @Composable @ReadOnlyComposable get() = t("open_request_to_start")
 

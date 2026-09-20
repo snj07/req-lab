@@ -48,6 +48,12 @@ expect val horizontalResizeCursor: PointerIcon
 /** Vertical resize (row-resize) cursor. */
 expect val verticalResizeCursor: PointerIcon
 
+/** Diagonal resize cursor running from north-west to south-east. */
+expect val nwseResizeCursor: PointerIcon
+
+/** Diagonal resize cursor running from north-east to south-west. */
+expect val neswResizeCursor: PointerIcon
+
 /**
  * H-5 fix: Platform-specific modifier that applies the correct CSS resize cursor
  * on web (wasmJs) where PointerIcon.Default cannot be replaced with a CSS cursor type.
@@ -55,6 +61,9 @@ expect val verticalResizeCursor: PointerIcon
  * already map to the correct AWT cursor via [pointerHoverIcon].
  */
 expect fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier
+
+/** Web fallback for diagonal CSS resize cursors; a no-op on desktop. */
+expect fun Modifier.platformDiagonalResizeCursorStyle(isNwSe: Boolean): Modifier
 
 // ── File I/O ────────────────────────────────────────────────────
 

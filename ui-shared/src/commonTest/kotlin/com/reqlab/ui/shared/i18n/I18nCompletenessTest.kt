@@ -30,7 +30,9 @@ class I18nCompletenessTest {
         // Sidebar
         "history", "collections", "environments", "search_requests",
         "no_history", "clear_history", "new_request", "new_folder",
-        "collapse_all", "expand_all",
+        "collapse_all", "expand_all", "search_environment_variables",
+        "environment_variable_result_count", "no_matching_variables", "clear_search",
+        "maximize_dialog", "restore_dialog",
         // Request Editor
         "params", "headers", "body", "auth", "pre_request", "tests",
         "send_request", "enter_url", "url_is_empty",

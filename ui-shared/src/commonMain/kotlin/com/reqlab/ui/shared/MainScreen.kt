@@ -124,6 +124,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
                     "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies" +
+                    "|$environmentDialogWidthDp|$environmentDialogHeightDp" +
                     "|${state.selectedEnvironment?.name ?: ""}"
             }
         }.drop(1)

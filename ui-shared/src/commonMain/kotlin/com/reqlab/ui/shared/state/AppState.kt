@@ -224,6 +224,9 @@ class EnvState(
 
 // ── Settings model ──────────────────────────────────────────────
 
+const val DEFAULT_ENVIRONMENT_DIALOG_WIDTH_DP = 720f
+const val DEFAULT_ENVIRONMENT_DIALOG_HEIGHT_DP = 560f
+
 class AppSettings {
     // General
     var autoSaveRequests     by mutableStateOf(false)
@@ -260,6 +263,10 @@ class AppSettings {
 
     /** When true (default), JSON bodies accept JSON5; Send converts to strict JSON. */
     var allowJson5InJsonBodies by mutableStateOf(true)
+
+    /** Preferred manual size for the environment editor. Viewport clamping is not persisted. */
+    var environmentDialogWidthDp by mutableStateOf(DEFAULT_ENVIRONMENT_DIALOG_WIDTH_DP)
+    var environmentDialogHeightDp by mutableStateOf(DEFAULT_ENVIRONMENT_DIALOG_HEIGHT_DP)
 }
 
 // ── Per-tab state (one per open request tab) ────────────────────
