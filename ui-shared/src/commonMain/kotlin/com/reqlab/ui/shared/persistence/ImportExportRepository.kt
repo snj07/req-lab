@@ -906,7 +906,6 @@ object ImportExportRepository {
                 AuthType.API_KEY -> mapOf(
                     "key" to dto.authApiKey.orEmpty(),
                     "value" to dto.authApiValue.orEmpty(),
-                    "placement" to normalizeApiKeyPlacement(dto.authApiPlacement),
                 )
                 else -> emptyMap()
             }
@@ -919,7 +918,13 @@ object ImportExportRepository {
                 }.getOrDefault(com.reqlab.core.model.McpHttpMode.AUTO),
                 url = dto.url,
                 headers = dto.headerEntries ?: dto.userHeaders.map { KeyValueEntry(it.first, it.second) },
-                auth = AuthConfig(type = authType ?: AuthType.NONE, params = authParams),
+                auth = AuthConfig(
+                    type = authType ?: AuthType.NONE,
+                    params = authParams,
+                    placement = if (authType == AuthType.API_KEY) {
+                        normalizeApiKeyPlacement(dto.authApiPlacement)
+                    } else null,
+                ),
                 command = dto.mcpCommand.orEmpty(),
                 args = dto.mcpArgs,
                 env = dto.mcpEnv,

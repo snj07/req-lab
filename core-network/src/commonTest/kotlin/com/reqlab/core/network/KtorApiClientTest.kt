@@ -1,6 +1,8 @@
 package com.reqlab.core.network
 
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.AuthConfig
+import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.FormDataEntry
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.GraphQlBody
@@ -28,6 +30,36 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class KtorApiClientTest {
+
+    @Test
+    fun explicit_api_key_placement_precedes_legacy_map_and_invalid_defaults_to_header() = runTest {
+        val captures = mutableListOf<Pair<String?, String?>>()
+        val engine = MockEngine { request ->
+            captures += request.url.parameters["api_key"] to request.headers["api_key"]
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        suspend fun execute(auth: AuthConfig) {
+            apiClient.execute(
+                RequestDefinition(
+                    id = "auth-${captures.size}", name = "auth", method = HttpMethodType.GET,
+                    url = "https://api.test/auth", auth = auth,
+                    createdAtEpochMillis = 1L, updatedAtEpochMillis = 1L,
+                ),
+            ).toList()
+        }
+
+        execute(AuthConfig(AuthType.API_KEY, mapOf("key" to "api_key", "value" to "one", "placement" to "query"), placement = "header"))
+        execute(AuthConfig(AuthType.API_KEY, mapOf("key" to "api_key", "value" to "two", "placement" to "query")))
+        execute(AuthConfig(AuthType.API_KEY, mapOf("key" to "api_key", "value" to "three"), placement = "invalid"))
+
+        assertEquals(null to "one", captures[0])
+        assertEquals("two" to null, captures[1])
+        assertEquals(null to "three", captures[2])
+    }
 
     @Test
     fun emits_success_event_for_200_response() = runTest {

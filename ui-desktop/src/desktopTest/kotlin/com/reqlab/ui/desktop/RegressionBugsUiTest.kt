@@ -53,6 +53,22 @@ class RegressionBugsUiTest {
         composeRule.onNodeWithText("two", useUnmergedTree = true).assertIsDisplayed().assertIsFocused()
     }
 
+    @Test
+    fun deleting_first_header_keeps_remaining_row_text_attached_to_its_uid() {
+        val rows = mutableStateListOf(
+            MutableKeyValue("X-First", "one"),
+            MutableKeyValue("X-Second", "two"),
+        )
+        val secondUid = rows[1].uid
+        composeRule.setContent { KeyValueEditor(rows, "header") {} }
+        composeRule.onNodeWithTag("header-row-1-value", useUnmergedTree = true).performClick()
+        composeRule.runOnIdle { rows.removeAt(0) }
+        composeRule.waitForIdle()
+        assertEquals(secondUid, rows.single().uid)
+        composeRule.onNodeWithTag("header-row-0", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("two", useUnmergedTree = true).assertIsDisplayed().assertIsFocused()
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     /**

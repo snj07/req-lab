@@ -6,6 +6,7 @@ import com.reqlab.core.model.BodyType
 import com.reqlab.server.module
 import com.reqlab.ui.shared.components.sendRequest
 import com.reqlab.ui.shared.components.syncParamsFromUrl
+import com.reqlab.ui.shared.persistence.ImportExportRepository
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.MutableKeyValue
 import io.ktor.server.engine.embeddedServer
@@ -347,6 +348,36 @@ class QueryParamsDuplicationSampleServerTest {
         val response = parseBody(tab.response?.bodyText)
         val values = response["paramValues"]!!.jsonObject
         assertEquals(listOf("a+b &"), values["api_key"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("", response["apiKeyHeader"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `Postman query API key survives import open and send`() {
+        val state = AppState(openDefaultTab = false)
+        val postman = """
+            {
+              "info":{"name":"Imported","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+              "item":[{"name":"Query auth","request":{
+                "method":"GET",
+                "url":{"raw":"http://localhost:$PORT/api/echo-query","protocol":"http","host":["localhost"],"port":"$PORT","path":["api","echo-query"]},
+                "auth":{"type":"apikey","apikey":[
+                  {"key":"key","value":"api_key"},
+                  {"key":"value","value":"imported secret"},
+                  {"key":"in","value":"query"}
+                ]}
+              }}]
+            }
+        """.trimIndent()
+        ImportExportRepository.importCollectionFromString(state, postman)
+        val node = state.collections.single().children.single()
+        state.openRequest(node.id, node.name, node.method!!, node.url.orEmpty())
+        assertEquals("query", state.activeTab!!.authApiPlacement)
+
+        runSendRequest(state)
+
+        val response = parseBody(state.activeTab!!.response?.bodyText)
+        val values = response["paramValues"]!!.jsonObject
+        assertEquals(listOf("imported secret"), values["api_key"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertEquals("", response["apiKeyHeader"]!!.jsonPrimitive.content)
     }
 

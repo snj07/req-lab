@@ -70,7 +70,9 @@ data class FormDataEntry(
 @Serializable
 data class AuthConfig(
     val type: AuthType = AuthType.NONE,
-    val params: Map<String, String> = emptyMap()
+    val params: Map<String, String> = emptyMap(),
+    /** Explicit API-key placement. Null keeps legacy params["placement"] readable. */
+    val placement: String? = null,
 )
 
 @Serializable

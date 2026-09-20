@@ -175,7 +175,10 @@ class KtorApiClient(
         }
 
         request.headers.filter { it.enabled }.forEach { header ->
-            builder.header(header.key, VariableResolver.resolve(header.value, variableLayers))
+            val key = VariableResolver.resolve(header.key, variableLayers)
+            if (key.isNotBlank()) {
+                builder.header(key, VariableResolver.resolve(header.value, variableLayers))
+            }
         }
 
         if (request.cookies.isNotEmpty()) {
@@ -226,7 +229,8 @@ class KtorApiClient(
             AuthType.API_KEY -> {
                 val key = VariableResolver.resolve(auth.params["key"].orEmpty(), variableLayers)
                 val value = VariableResolver.resolve(auth.params["value"].orEmpty(), variableLayers)
-                val placement = auth.params["placement"]?.lowercase() ?: "header"
+                val placement = normalizeApiKeyPlacement(auth.placement ?: auth.params["placement"])
+                if (key.isBlank()) return
                 if (placement == "query") {
                     builder.url.parameters.append(key, value)
                 } else {
@@ -242,6 +246,9 @@ class KtorApiClient(
             }
         }
     }
+
+    private fun normalizeApiKeyPlacement(value: String?): String =
+        if (value.equals("query", ignoreCase = true)) "query" else "header"
 
     private suspend fun executeWebSocketRequest(
         request: RequestDefinition,

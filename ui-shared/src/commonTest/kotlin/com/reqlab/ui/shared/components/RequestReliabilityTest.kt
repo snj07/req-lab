@@ -1,11 +1,18 @@
 package com.reqlab.ui.shared.components
 
 import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.AuthConfig
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
+import com.reqlab.core.model.McpConnectionConfig
+import com.reqlab.core.model.McpHttpMode
 import com.reqlab.core.model.McpOAuthConfig
+import com.reqlab.core.model.McpOAuthGrantType
+import com.reqlab.core.model.McpRoot
+import com.reqlab.core.model.McpSamplingMode
+import com.reqlab.core.model.McpTransportType
 import com.reqlab.ui.shared.persistence.ImportExportRepository
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.CollectionNode
@@ -48,6 +55,32 @@ class RequestReliabilityTest {
     }
 
     @Test
+    fun explicit_api_key_placement_is_normalized_with_legacy_fallback() {
+        val tab = RequestTabState().apply {
+            authType = AuthType.API_KEY
+            authApiKey = "api_key"
+            authApiValue = ""
+            authApiPlacement = "QUERY"
+        }
+        val prepared = prepareTabRequest(tab)
+        assertEquals("query", prepared.auth.placement)
+        assertEquals(null, prepared.auth.params["placement"])
+        assertEquals("query", effectiveApiKeyPlacement(prepared.auth))
+        assertEquals(
+            "query",
+            effectiveApiKeyPlacement(
+                com.reqlab.core.model.AuthConfig(
+                    AuthType.API_KEY,
+                    mapOf("key" to "legacy", "placement" to "query"),
+                ),
+            ),
+        )
+
+        tab.authApiPlacement = "some-invalid-value"
+        assertEquals("header", prepareTabRequest(tab).auth.placement)
+    }
+
+    @Test
     fun every_dirty_notification_advances_autosave_revision_and_mcp_headers_affect_dirty() {
         val tab = RequestTabState()
         tab.bodyType = BodyType.JSON
@@ -72,6 +105,74 @@ class RequestReliabilityTest {
         assertEquals(fingerprint, tab.mcpClientFingerprint())
         tab.mcpConfig = a.copy(oauth = a.oauth?.copy(redirectPort = 9001))
         assertTrue(fingerprint != tab.mcpClientFingerprint())
+    }
+
+    @Test
+    fun mcp_fingerprint_changes_for_every_persisted_configuration_field() {
+        val tab = RequestTabState()
+        fun fingerprint(config: McpConnectionConfig): String {
+            tab.mcpConfig = config
+            return tab.mcpClientFingerprint()
+        }
+        fun assertChanged(label: String, original: McpConnectionConfig, changed: McpConnectionConfig) {
+            assertTrue(fingerprint(original) != fingerprint(changed), "Fingerprint omitted $label")
+        }
+
+        val base = McpConnectionConfig()
+        listOf(
+            "transport" to base.copy(transport = McpTransportType.STDIO),
+            "httpMode" to base.copy(httpMode = McpHttpMode.LEGACY_2024_11_05),
+            "url" to base.copy(url = "https://mcp.test"),
+            "command" to base.copy(command = "node"),
+            "args" to base.copy(args = listOf("server.js")),
+            "env" to base.copy(env = mapOf("TOKEN" to "secret")),
+            "workingDir" to base.copy(workingDir = "/tmp/mcp"),
+            "samplingMode" to base.copy(samplingMode = McpSamplingMode.FORWARD_LLM),
+            "samplingForwardUrl" to base.copy(samplingForwardUrl = "https://llm.test"),
+            "samplingForwardToken" to base.copy(samplingForwardToken = "token"),
+            "samplingMaxTokens" to base.copy(samplingMaxTokens = 512),
+            "autoRespondElicitation" to base.copy(autoRespondElicitation = false),
+        ).forEach { (label, changed) -> assertChanged(label, base, changed) }
+
+        val headerBase = base.copy(headers = listOf(KeyValueEntry("X-Key", "value")))
+        listOf(
+            "header key" to headerBase.copy(headers = listOf(KeyValueEntry("X-Other", "value"))),
+            "header value" to headerBase.copy(headers = listOf(KeyValueEntry("X-Key", "other"))),
+            "header enabled" to headerBase.copy(headers = listOf(KeyValueEntry("X-Key", "value", enabled = false))),
+            "header secret" to headerBase.copy(headers = listOf(KeyValueEntry("X-Key", "value", secret = true))),
+        ).forEach { (label, changed) -> assertChanged(label, headerBase, changed) }
+
+        val authBase = base.copy(auth = AuthConfig(AuthType.API_KEY, mapOf("key" to "X-Key"), "header"))
+        listOf(
+            "auth type" to authBase.copy(auth = authBase.auth.copy(type = AuthType.BEARER)),
+            "auth params" to authBase.copy(auth = authBase.auth.copy(params = mapOf("key" to "X-Other"))),
+            "auth placement" to authBase.copy(auth = authBase.auth.copy(placement = "query")),
+        ).forEach { (label, changed) -> assertChanged(label, authBase, changed) }
+
+        val rootBase = base.copy(roots = listOf(McpRoot("file:///one", "one")))
+        assertChanged("root uri", rootBase, rootBase.copy(roots = listOf(McpRoot("file:///two", "one"))))
+        assertChanged("root name", rootBase, rootBase.copy(roots = listOf(McpRoot("file:///one", "two"))))
+
+        val oauth = McpOAuthConfig()
+        val oauthBase = base.copy(oauth = oauth)
+        listOf(
+            "oauth authServerUrl" to oauth.copy(authServerUrl = "https://auth.test"),
+            "oauth clientId" to oauth.copy(clientId = "client"),
+            "oauth clientSecret" to oauth.copy(clientSecret = "secret"),
+            "oauth scopes" to oauth.copy(scopes = listOf("tools:read")),
+            "oauth redirectPort" to oauth.copy(redirectPort = 8100),
+            "oauth redirectUri" to oauth.copy(redirectUri = "http://localhost/callback"),
+            "oauth useDcr" to oauth.copy(useDcr = false),
+            "oauth useDiscovery" to oauth.copy(useDiscovery = false),
+            "oauth grantType" to oauth.copy(grantType = McpOAuthGrantType.CLIENT_CREDENTIALS),
+            "oauth accessToken" to oauth.copy(accessToken = "access"),
+            "oauth refreshToken" to oauth.copy(refreshToken = "refresh"),
+            "oauth tokenType" to oauth.copy(tokenType = "DPoP"),
+            "oauth expiresAtEpochMillis" to oauth.copy(expiresAtEpochMillis = 123L),
+            "oauth resource" to oauth.copy(resource = "https://resource.test"),
+        ).forEach { (label, changed) ->
+            assertChanged(label, oauthBase, oauthBase.copy(oauth = changed))
+        }
     }
 
     @Test

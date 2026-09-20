@@ -12,6 +12,10 @@ import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestTabState
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.AfterClass
 import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
@@ -371,5 +375,27 @@ class CopyCommandIntegrationTest {
                 temp.delete()
             }
         }
+    }
+
+    @Test
+    fun curl_copy_executes_repeated_headers_without_collapsing_them() {
+        assumeTrue(commandExists("curl"))
+        val tab = RequestTabState(
+            method = HttpMethodType.GET,
+            url = "http://localhost:$PORT/api/echo-headers",
+        )
+        tab.headers.clear()
+        tab.headers.add(MutableKeyValue("X-Repeat", "one"))
+        tab.headers.add(MutableKeyValue("X-Repeat", "two"))
+
+        val (exit, output) = runShell(buildCurlCommand(tab))
+
+        assertEquals(0, exit, output)
+        val jsonStart = output.indexOf('{')
+        assertTrue(jsonStart >= 0, output)
+        val values = Json.parseToJsonElement(output.substring(jsonStart)).jsonObject["receivedHeaderValues"]!!.jsonObject
+        val repeated = values.entries.first { it.key.equals("X-Repeat", ignoreCase = true) }
+            .value.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("one", "two"), repeated)
     }
 }

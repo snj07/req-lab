@@ -304,6 +304,7 @@ private fun CopyCurlButton(isLoading: Boolean, copyFormats: List<CopyFormatOptio
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 copyFormats.forEach { format ->
                     DropdownMenuItem(
+                        modifier = Modifier.testTag("copy-format-${format.label.lowercase()}"),
                         text = {
                             Column {
                                 Text(format.label, fontSize = 13.sp)

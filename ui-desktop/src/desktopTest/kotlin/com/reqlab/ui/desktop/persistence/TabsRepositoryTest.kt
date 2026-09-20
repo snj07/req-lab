@@ -11,6 +11,10 @@ import com.reqlab.ui.shared.state.HeaderKind
 import com.reqlab.ui.shared.state.MutableFormDataRow
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestTabState
+import com.reqlab.ui.shared.components.saveRequest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -27,12 +31,14 @@ class TabsRepositoryTest {
     fun before() {
         if (storeFile.exists()) storeFile.delete()
         PlatformStorage.remove("reqlab.tabs")
+        PlatformStorage.remove("reqlab.workspace")
     }
 
     @After
     fun after() {
         if (storeFile.exists()) storeFile.delete()
         PlatformStorage.remove("reqlab.tabs")
+        PlatformStorage.remove("reqlab.workspace")
     }
 
     @Test
@@ -120,6 +126,57 @@ class TabsRepositoryTest {
         TabsRepository.load(restored)
         assertEquals("after!", restored.activeTab!!.bodyContent)
         assertEquals("two", restored.activeTab!!.formRows.single().value)
+    }
+
+    @Test
+    fun explicit_save_persists_clean_snapshot_and_complete_rows_through_close_and_reopen() = runBlocking {
+        val source = AppState(openDefaultTab = false)
+        val request = CollectionNode(
+            id = "saved-request",
+            name = "Saved rows",
+            method = HttpMethodType.GET,
+            url = "https://example.test/path",
+        )
+        source.collections.add(
+            CollectionNode("collection", "Collection", isFolder = true).also { it.children.add(request) },
+        )
+        source.openRequest(request.id, request.name, HttpMethodType.GET, request.url.orEmpty())
+        val tab = source.activeTab!!
+        tab.params.add(MutableKeyValue("x", "1", secret = true))
+        tab.params.add(MutableKeyValue("x", "2"))
+        tab.params.add(MutableKeyValue("off", "3", enabled = false))
+        tab.headers.add(MutableKeyValue("X-Repeat", "one", secret = true, kind = HeaderKind.USER))
+        tab.headers.add(MutableKeyValue("X-Repeat", "two", kind = HeaderKind.USER))
+        tab.headers.add(MutableKeyValue("X-Off", "no", enabled = false, kind = HeaderKind.USER))
+        tab.authType = AuthType.API_KEY
+        tab.authApiKey = "api_key"
+        tab.authApiValue = "secret"
+        tab.authApiPlacement = "query"
+        tab.markDirty()
+
+        val saved = CompletableDeferred<Unit>()
+        saveRequest(this, source, tab) { saved.complete(Unit) }
+        withTimeout(5_000) { saved.await() }
+
+        val restored = AppState(openDefaultTab = false)
+        WorkspaceRepository.load(restored)
+        TabsRepository.load(restored)
+        assertFalse(restored.activeTab!!.isDirty)
+        assertEquals("query", restored.activeTab!!.authApiPlacement)
+
+        restored.closeTab(restored.activeTabIndex)
+        val node = restored.collections.single().children.single()
+        restored.openRequest(node.id, node.name, node.method!!, node.url.orEmpty())
+        val reopened = restored.activeTab!!
+        assertEquals(listOf("1", "2", "3"), reopened.params.map { it.value })
+        assertEquals(listOf(true, true, false), reopened.params.map { it.enabled })
+        assertEquals(listOf(true, false, false), reopened.params.map { it.secret })
+        val repeated = reopened.headers.filter { it.key == "X-Repeat" }
+        assertEquals(listOf("one", "two"), repeated.map { it.value })
+        assertEquals(listOf(true, false), repeated.map { it.secret })
+        assertFalse(reopened.headers.single { it.key == "X-Off" }.enabled)
+        source.disposeAndAwait()
+        restored.disposeAndAwait()
     }
 
     @Test

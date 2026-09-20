@@ -475,6 +475,7 @@ class RequestTabState(
             mcpConfig.workingDir.orEmpty(),
             headers,
             mcpConfig.auth.type.name,
+            normalizeApiKeyPlacement(mcpConfig.auth.placement ?: mcpConfig.auth.params["placement"]),
             auth,
             oauth,
             mcpConfig.samplingMode.name,
@@ -489,6 +490,21 @@ class RequestTabState(
     fun currentSnapshotForPersistence(): String = currentSnapshot()
 
     fun savedSnapshotForPersistence(): String = savedSnapshot
+
+    internal data class SaveCheckpoint(
+        val savedSnapshot: String,
+        val isDirty: Boolean,
+        val lastSavedTimestamp: Long?,
+    )
+
+    internal fun captureSaveCheckpoint(): SaveCheckpoint =
+        SaveCheckpoint(savedSnapshot, isDirty, lastSavedTimestamp)
+
+    internal fun restoreSaveCheckpoint(checkpoint: SaveCheckpoint) {
+        savedSnapshot = checkpoint.savedSnapshot
+        isDirty = checkpoint.isDirty
+        lastSavedTimestamp = checkpoint.lastSavedTimestamp
+    }
 
     fun restoreSavedSnapshot(snapshot: String?, legacyDirtyFlag: Boolean = false) {
         savedSnapshot = when {
@@ -661,32 +677,46 @@ class AppState(openDefaultTab: Boolean = true, withDemoData: Boolean = false) {
     /** Application-lifetime scope for background work that must outlive individual composables. */
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mcpSessions = mutableMapOf<String, McpSessionState>()
+    private var disposalJob: Job? = null
 
     /** Returns the persistent MCP session for [tabId], creating it on first use. */
-    fun getOrCreateMcpSession(tabId: String): McpSessionState =
-        mcpSessions.getOrPut(tabId) {
+    fun getOrCreateMcpSession(tabId: String): McpSessionState {
+        check(disposalJob == null) { "AppState is disposed" }
+        return mcpSessions.getOrPut(tabId) {
             McpSessionState(appScope, onConsole = { message, level ->
                 logNetworkEvent(message, level, echoToConsole = false)
             })
         }
+    }
 
     /** Disconnects and forgets the MCP session for [tabId] (called on tab close). */
     fun disposeMcpSession(tabId: String) {
         mcpSessions.remove(tabId)?.let { session -> appScope.launch { session.disconnect() } }
     }
 
-    /** Releases editor caches, active requests, MCP transports, and application work. */
-    fun dispose() {
+    /**
+     * Releases editor caches, active requests, MCP transports, and application work.
+     * Idempotent: repeated callers receive the same completion [Job].
+     */
+    fun dispose(): Job {
+        disposalJob?.let { return it }
         openTabs.forEach { tab ->
             tab.currentJob?.cancel()
             tab.disposeBodyViewModels()
         }
         val sessions = mcpSessions.values.toList()
         mcpSessions.clear()
-        appScope.launch {
+        val cleanup = appScope.launch {
             sessions.forEach { session -> runCatching { session.disconnect() } }
-            appScope.cancel()
         }
+        disposalJob = cleanup
+        cleanup.invokeOnCompletion { appScope.cancel() }
+        return cleanup
+    }
+
+    /** Awaitable shutdown path used by desktop exit and lifecycle tests. */
+    suspend fun disposeAndAwait() {
+        dispose().join()
     }
 
     // ── bottom panel ──

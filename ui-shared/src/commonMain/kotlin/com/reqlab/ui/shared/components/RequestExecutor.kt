@@ -234,18 +234,14 @@ private fun sendRequestInternal(scope: CoroutineScope, state: AppState, tab: Req
         state.logNetworkEvent("→ $effectiveMethod $effectiveUrlForLog")
 
         try {
-            val request = RequestDefinition(
-                id = tab.id,
-                name = tab.name,
+            val request = prepareTabRequest(
+                tab = tab,
                 method = effectiveMethod,
                 url = effectiveUrl,
                 queryParams = effectiveQueryParams,
                 headers = effectiveHeaders,
-                auth = buildAuthConfig(tab),
-                body = buildRequestBody(tab, effectiveBodyContent),
-                createdAtEpochMillis = currentTimeMillis(),
-                updatedAtEpochMillis = currentTimeMillis(),
-            )
+                bodyContent = effectiveBodyContent,
+            ).toRequestDefinition()
 
             val logger = object : NetworkLogger {
                 override fun debug(message: String) { state.log(message) }
@@ -421,20 +417,26 @@ fun saveRequest(
 ) {
     tab.syncSystemHeaders()
     scope.launch {
-        val ok = withContext(ioDispatcher) { TabsRepository.save(state) }
+        val checkpoint = tab.captureSaveCheckpoint()
+        val collectionSynced = tab.collectionName == null || state.syncTabToCollectionNode(tab)
+        // The clean marker must be part of the persisted tab snapshot. Previously
+        // TabsRepository.save ran first, so an immediate reload restored a dirty tab.
+        tab.markSaved()
+        val tabsSaved = withContext(ioDispatcher) { TabsRepository.save(state) }
+        val workspaceSaved = if (tab.collectionName != null && collectionSynced) {
+            withContext(ioDispatcher) { WorkspaceRepository.save(state) }
+        } else {
+            collectionSynced
+        }
+        val ok = tabsSaved && workspaceSaved
         if (ok) {
-            // Sync edited content back to the CollectionNode so workspace
-            // export always reflects the latest saved state.
-            state.syncTabToCollectionNode(tab)
-            // Also persist the workspace immediately so export is up-to-date
-            // even before the auto-save snapshotFlow fires.
-            if (tab.collectionName != null) {
-                withContext(ioDispatcher) { WorkspaceRepository.save(state) }
-            }
-            tab.markSaved()
             state.log("✓ Request saved: ${tab.name}", LogLevel.SUCCESS)
             onSaved?.invoke()
         } else {
+            tab.restoreSaveCheckpoint(checkpoint.copy(isDirty = true))
+            // Best effort: if tabs were written before workspace failed, put the
+            // original dirty marker back on disk as well as in memory.
+            withContext(ioDispatcher) { TabsRepository.save(state) }
             state.log("✗ Failed to save request: ${tab.name}", LogLevel.ERROR)
             state.showError(
                 title = "Save failed",
@@ -446,16 +448,74 @@ fun saveRequest(
 
 // ── Internal helpers ────────────────────────────────────────────
 
+/**
+ * Canonical tab-to-request projection shared by Send and every Copy As format.
+ * Script mutations are supplied as overrides by Send; Copy uses the tab defaults.
+ */
+internal data class PreparedTabRequest(
+    val id: String,
+    val name: String,
+    val method: HttpMethodType,
+    val url: String,
+    val fragment: String,
+    val queryParams: List<KeyValueEntry>,
+    val headers: List<KeyValueEntry>,
+    val auth: AuthConfig,
+    val body: RequestBody,
+) {
+    fun toRequestDefinition(): RequestDefinition = RequestDefinition(
+        id = id,
+        name = name,
+        method = method,
+        url = url,
+        queryParams = queryParams.filter { it.enabled && it.key.isNotBlank() },
+        headers = headers.filter { it.enabled && it.key.isNotBlank() },
+        auth = auth,
+        body = body,
+        createdAtEpochMillis = currentTimeMillis(),
+        updatedAtEpochMillis = currentTimeMillis(),
+    )
+}
+
+internal fun prepareTabRequest(
+    tab: RequestTabState,
+    method: HttpMethodType = tab.method,
+    url: String = tab.url.trim(),
+    queryParams: List<KeyValueEntry> = tab.params
+        .filter { it.enabled }
+        .map { KeyValueEntry(it.key, it.value, secret = it.secret) },
+    headers: List<KeyValueEntry> = enabledHeadersForSend(tab),
+    bodyContent: String = tab.bodyContent,
+): PreparedTabRequest {
+    val parts = splitRequestUrl(url)
+    return PreparedTabRequest(
+        id = tab.id,
+        name = tab.name,
+        method = method,
+        url = parts.base,
+        fragment = parts.fragment,
+        queryParams = queryParams,
+        headers = headers,
+        auth = buildAuthConfig(tab),
+        body = buildRequestBody(tab, bodyContent),
+    )
+}
+
 fun buildAuthConfig(tab: RequestTabState): AuthConfig {
     val params = when (tab.authType) {
         AuthType.BASIC   -> mapOf("username" to tab.authUsername, "password" to tab.authPassword)
         AuthType.BEARER  -> mapOf("token" to tab.authToken)
         AuthType.JWT     -> mapOf("token" to tab.authToken)
-        AuthType.API_KEY -> mapOf("key" to tab.authApiKey, "value" to tab.authApiValue,
-            "placement" to com.reqlab.ui.shared.state.normalizeApiKeyPlacement(tab.authApiPlacement))
+        AuthType.API_KEY -> mapOf("key" to tab.authApiKey, "value" to tab.authApiValue)
         else             -> emptyMap()
     }
-    return AuthConfig(type = tab.authType, params = params)
+    return AuthConfig(
+        type = tab.authType,
+        params = params,
+        placement = if (tab.authType == AuthType.API_KEY) {
+            com.reqlab.ui.shared.state.normalizeApiKeyPlacement(tab.authApiPlacement)
+        } else null,
+    )
 }
 
 /**
@@ -541,14 +601,13 @@ fun buildCurlCommand(
     variableLayers: List<Map<String, String>> = emptyList(),
     allowJson5: Boolean = true,
 ): String {
-    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
+    val request = prepareTabRequest(tab)
+    val parts = mutableListOf("curl", "-X ${request.method.name}")
 
-    val parts = mutableListOf("curl", "-X ${tab.method.name}")
-
-    copyHeaderList(tab, variableLayers).forEach { (key, value) ->
+    preparedHeaderList(request, variableLayers).forEach { (key, value) ->
         parts += "-H ${shellQuote("$key: $value")}"
     }
-    val body = prepareCopyBody(tab, variableLayers, allowJson5)
+    val body = prepareCopyBody(request.body, variableLayers, allowJson5)
     if (body.multipart != null) {
         body.multipart.forEach { (key, value) -> parts += "--form-string ${shellQuote("$key=$value")}" }
     } else if (body.content != null) {
@@ -556,7 +615,7 @@ fun buildCurlCommand(
     }
 
     // Build URL with inline query params
-    val resolvedUrl = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
+    val resolvedUrl = buildUrlWithParams(request, variableLayers, removeUnresolved = true)
     parts += shellQuote(resolvedUrl)
     return parts.joinToString(" \\\n  ")
 }
@@ -589,13 +648,12 @@ fun buildPythonCommand(
     variableLayers: List<Map<String, String>> = emptyList(),
     allowJson5: Boolean = true,
 ): String {
-    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
-
+    val request = prepareTabRequest(tab)
     val sb = StringBuilder()
     sb.appendLine("import requests")
     sb.appendLine()
 
-    val headers = copyHeaderList(tab, variableLayers)
+    val headers = preparedHeaderList(request, variableLayers)
     if (headers.isNotEmpty()) {
         sb.appendLine("headers = {")
         headers.forEach { (k, v) -> sb.appendLine("    ${pyStr(k)}: ${pyStr(v)},") }
@@ -603,10 +661,10 @@ fun buildPythonCommand(
         sb.appendLine()
     }
 
-    val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
-    val method = tab.method.name.uppercase()
+    val url = buildUrlWithParams(request, variableLayers, removeUnresolved = true)
+    val method = request.method.name.uppercase()
 
-    val body = prepareCopyBody(tab, variableLayers, allowJson5)
+    val body = prepareCopyBody(request.body, variableLayers, allowJson5)
     if (body.multipart != null) {
         sb.appendLine("files = [")
         body.multipart.forEach { (key, value) ->
@@ -633,17 +691,16 @@ fun buildHTTPieCommand(
     variableLayers: List<Map<String, String>> = emptyList(),
     allowJson5: Boolean = true,
 ): String {
-    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
-
+    val request = prepareTabRequest(tab)
     val parts = mutableListOf("http", tab.method.name)
-    val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
+    val url = buildUrlWithParams(request, variableLayers, removeUnresolved = true)
     parts += shellQuote(url)
 
-    buildHeaderList(tab, variableLayers, removeUnresolved = true).forEach { (k, v) -> parts += shellQuote("$k:$v") }
+    preparedHeaderList(request, variableLayers, removeUnresolved = true).forEach { (k, v) -> parts += shellQuote("$k:$v") }
 
-    if (tab.bodyType != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
+    if (request.body.type != com.reqlab.core.model.BodyType.NONE && tab.bodyContent.isNotBlank()) {
         parts += "--raw"
-        parts += shellQuote(jsonBodyForCopy(tab, resolve(tab.bodyContent), allowJson5))
+        parts += shellQuote(prepareCopyBody(request.body, variableLayers, allowJson5).content.orEmpty())
     }
 
     return parts.joinToString(" \\\n  ")
@@ -655,11 +712,10 @@ fun buildPowerShellCommand(
     variableLayers: List<Map<String, String>> = emptyList(),
     allowJson5: Boolean = true,
 ): String {
-    fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved = true)
-
+    val request = prepareTabRequest(tab)
     val sb = StringBuilder()
-    val url = buildUrlWithParams(resolve(tab.url), tab, variableLayers, removeUnresolved = true)
-    val headers = copyHeaderList(tab, variableLayers)
+    val url = buildUrlWithParams(request, variableLayers, removeUnresolved = true)
+    val headers = preparedHeaderList(request, variableLayers)
 
     if (headers.isNotEmpty()) {
         sb.appendLine("\$headers = @{")
@@ -668,10 +724,10 @@ fun buildPowerShellCommand(
         sb.appendLine()
     }
 
-    sb.append("Invoke-WebRequest -Uri '${url.replace("'", "''")}' -Method ${tab.method.name}")
+    sb.append("Invoke-WebRequest -Uri '${url.replace("'", "''")}' -Method ${request.method.name}")
     if (headers.isNotEmpty()) sb.append(" -Headers \$headers")
 
-    val body = prepareCopyBody(tab, variableLayers, allowJson5)
+    val body = prepareCopyBody(request.body, variableLayers, allowJson5)
     if (body.multipart != null) {
         val fields = body.multipart.joinToString("; ") { (key, value) ->
             "'${key.replace("'", "''")}'='${value.replace("'", "''")}'"
@@ -687,32 +743,31 @@ fun buildPowerShellCommand(
 // ── Curl / format helpers ────────────────────────────────────────────
 
 private fun buildUrlWithParams(
-    resolvedBase: String,
-    tab: RequestTabState,
+    request: PreparedTabRequest,
     variableLayers: List<Map<String, String>>,
     removeUnresolved: Boolean = false,
 ): String {
-    val enabledParams = tab.params.filter { it.enabled && it.key.isNotBlank() }
-    val parts = splitRequestUrl(resolvedBase)
-    val queryEntries = enabledParams.map { p ->
+    val queryEntries = request.queryParams.filter { it.enabled && it.key.isNotBlank() }.map { p ->
         VariableResolver.resolve(p.key, variableLayers, removeUnresolved) to
             VariableResolver.resolve(p.value, variableLayers, removeUnresolved)
     }.toMutableList()
-    if (tab.authType == AuthType.API_KEY && tab.authApiPlacement == "query" && tab.authApiKey.isNotBlank()) {
-        queryEntries += VariableResolver.resolve(tab.authApiKey, variableLayers, removeUnresolved) to
-            VariableResolver.resolve(tab.authApiValue, variableLayers, removeUnresolved)
+    val auth = request.auth
+    if (auth.type == AuthType.API_KEY && effectiveApiKeyPlacement(auth) == "query") {
+        val key = VariableResolver.resolve(auth.params["key"].orEmpty(), variableLayers, removeUnresolved)
+        if (key.isNotBlank()) {
+            queryEntries += key to VariableResolver.resolve(
+                auth.params["value"].orEmpty(), variableLayers, removeUnresolved,
+            )
+        }
     }
     // Strip any embedded query string from resolvedBase: tab.params is the single
     // source of truth for query parameters (kept in sync by syncParamsFromUrl /
     // syncUrlFromParams). Appending to a URL that already contains those params
     // would duplicate every parameter in the final request URL.
     val qs = encodeOrderedQuery(queryEntries, preserveTemplates = !removeUnresolved)
-    return joinRequestUrl(parts.base, qs, parts.fragment)
-}
-
-private fun jsonBodyForCopy(tab: RequestTabState, resolved: String, allowJson5: Boolean): String {
-    if (!allowJson5 || tab.bodyType != BodyType.JSON || resolved.isBlank()) return resolved
-    return Json5.toWireJson(resolved).getOrDefault(resolved)
+    val resolvedBase = VariableResolver.resolve(request.url, variableLayers, removeUnresolved)
+    val resolvedFragment = VariableResolver.resolve(request.fragment, variableLayers, removeUnresolved)
+    return joinRequestUrl(resolvedBase, qs, resolvedFragment)
 }
 
 private data class PreparedCopyBody(
@@ -721,12 +776,11 @@ private data class PreparedCopyBody(
 )
 
 private fun prepareCopyBody(
-    tab: RequestTabState,
+    body: RequestBody,
     variableLayers: List<Map<String, String>>,
     allowJson5: Boolean,
 ): PreparedCopyBody {
     fun resolve(value: String) = VariableResolver.resolve(value, variableLayers, removeUnresolved = true)
-    val body = buildRequestBody(tab, tab.bodyContent)
     return when (body.type) {
         BodyType.NONE -> PreparedCopyBody()
         BodyType.BINARY -> error("Embedded binary has no reusable file path")
@@ -740,10 +794,14 @@ private fun prepareCopyBody(
             PreparedCopyBody(multipart = entries)
         }
         BodyType.X_WWW_FORM_URLENCODED -> PreparedCopyBody(content =
-            encodeOrderedQuery(body.formEntries.filter { it.enabled }.map { resolve(it.key) to resolve(it.value) }))
+            encodeOrderedQuery(body.formEntries.filter { it.enabled }.map { it.key to resolve(it.value) }))
         BodyType.GRAPHQL -> PreparedCopyBody(content =
             encodeGraphQlEnvelope(body.graphQl ?: GraphQlBody(), variableLayers, allowJson5))
-        else -> PreparedCopyBody(content = body.content?.let { jsonBodyForCopy(tab, resolve(it), allowJson5) })
+        else -> PreparedCopyBody(content = body.content?.let { content ->
+            if (allowJson5 && body.type == BodyType.JSON && content.isNotBlank()) {
+                Json5.toWireJson(resolve(content)).getOrDefault(resolve(content))
+            } else resolve(content)
+        })
     }
 }
 
@@ -751,38 +809,48 @@ internal fun copyHeaderList(
     tab: RequestTabState,
     variableLayers: List<Map<String, String>>,
     omitMultipartContentType: Boolean = true,
-): List<Pair<String, String>> = buildHeaderList(tab, variableLayers, removeUnresolved = true)
-    .filterNot { (key, _) ->
-        omitMultipartContentType && tab.bodyType == BodyType.FORM_DATA && key.equals("Content-Type", ignoreCase = true)
-    }
+): List<Pair<String, String>> = preparedHeaderList(
+    prepareTabRequest(tab), variableLayers, removeUnresolved = true,
+    omitMultipartContentType = omitMultipartContentType,
+)
 
-private fun buildHeaderList(
-    tab: RequestTabState,
+private fun preparedHeaderList(
+    request: PreparedTabRequest,
     variableLayers: List<Map<String, String>>,
-    removeUnresolved: Boolean = false,
+    removeUnresolved: Boolean = true,
+    omitMultipartContentType: Boolean = true,
 ): List<Pair<String, String>> {
     fun resolve(s: String) = VariableResolver.resolve(s, variableLayers, removeUnresolved)
     val list = mutableListOf<Pair<String, String>>()
-    tab.headers.filter { it.enabled && it.key.isNotBlank() }
+    request.headers.filter { it.enabled && it.key.isNotBlank() }
         .forEach { list += resolve(it.key) to resolve(it.value) }
-    when (tab.authType) {
+    val auth = request.auth
+    when (auth.type) {
         AuthType.BASIC -> {
-            val encoded = "${resolve(tab.authUsername)}:${resolve(tab.authPassword)}"
+            val encoded = "${resolve(auth.params["username"].orEmpty())}:${resolve(auth.params["password"].orEmpty())}"
                 .encodeToByteArray().encodeBase64()
             list += "Authorization" to "Basic $encoded"
         }
         AuthType.BEARER, AuthType.JWT -> {
-            val token = resolve(tab.authToken).trim()
+            val token = resolve(auth.params["token"].orEmpty()).trim()
             if (token.isNotEmpty()) list += "Authorization" to "Bearer $token"
         }
         AuthType.API_KEY -> {
-            if (tab.authApiPlacement != "query" && tab.authApiKey.isNotBlank() && tab.authApiValue.isNotBlank())
-                list += resolve(tab.authApiKey) to resolve(tab.authApiValue)
+            if (effectiveApiKeyPlacement(auth) != "query") {
+                val key = resolve(auth.params["key"].orEmpty())
+                if (key.isNotBlank()) list += key to resolve(auth.params["value"].orEmpty())
+            }
         }
         else -> Unit
     }
-    return list
+    return list.filterNot { (key, _) ->
+        omitMultipartContentType && request.body.type == BodyType.FORM_DATA &&
+            key.equals("Content-Type", ignoreCase = true)
+    }
 }
+
+internal fun effectiveApiKeyPlacement(auth: AuthConfig): String =
+    com.reqlab.ui.shared.state.normalizeApiKeyPlacement(auth.placement ?: auth.params["placement"])
 
 private fun pyStr(s: String): String = "\"" + s
     .replace("\\", "\\\\")

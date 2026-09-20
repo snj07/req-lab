@@ -393,6 +393,11 @@ fun Application.module() {
             call.respond(buildJsonObject {
                 put("message", "Received headers echoed below")
                 put("receivedHeaders", headers)
+                put("receivedHeaderValues", buildJsonObject {
+                    call.request.headers.entries().forEach { (key, values) ->
+                        put(key, buildJsonArray { values.forEach { value -> add(value) } })
+                    }
+                })
             })
         }
 

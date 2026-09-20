@@ -10,12 +10,12 @@ object WorkspaceRepository {
 
     private const val STORAGE_KEY = "reqlab.workspace"
 
-    fun save(state: AppState) {
+    fun save(state: AppState): Boolean =
         runCatching {
             val json = ImportExportRepository.exportWorkspaceToString(state)
             PlatformStorage.putString(STORAGE_KEY, json)
-        }
-    }
+            true
+        }.getOrDefault(false)
 
     fun load(state: AppState) {
         runCatching {
