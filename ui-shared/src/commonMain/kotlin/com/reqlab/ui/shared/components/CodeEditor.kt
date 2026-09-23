@@ -29,9 +29,11 @@ import androidx.compose.material.icons.filled.WrapText
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -176,6 +179,7 @@ fun CodeEditor(
     // Only dispose the VM we created; external VMs are owned by RequestTabState.
     DisposableEffect(internalViewModel) { onDispose { internalViewModel?.dispose() } }
     val viewModel: EditorViewModel = externalViewModel ?: internalViewModel!!
+    val editorState by viewModel.state.collectAsState()
 
     // ── Format / display state ───────────────────────────────
     // Auto-pretty only for small read-only bodies. Large payloads (>64 KB) are
@@ -221,7 +225,10 @@ fun CodeEditor(
     var wordWrap by remember { mutableStateOf(true) }
     var showSearch by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var replaceQuery by remember { mutableStateOf("") }
     var activeMatchIndex by remember { mutableIntStateOf(0) }
+    var showGoToLine by remember { mutableStateOf(false) }
+    var goToLineText by remember { mutableStateOf("") }
     val editorFocus = remember { FocusRequester() }
     // Bump a tick from click handlers; requestFocus in LaunchedEffect so it is
     // not nested inside IconButton/performClick (deadlocks desktop tests).
@@ -281,12 +288,40 @@ fun CodeEditor(
         modifier = modifier
             .testTag(testTagPrefix)
             .onPreviewKeyEvent { event ->
-                if (!enableSearch) return@onPreviewKeyEvent false
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val isMeta = event.isMetaPressed || event.isCtrlPressed
-                if (isMeta && event.key == Key.F) {
+                if (enableSearch && isMeta && event.key == Key.F) {
                     toggleSearch()
                     true
+                } else if (isMeta && event.key == Key.G) {
+                    showGoToLine = !showGoToLine
+                    if (!showGoToLine) restoreEditorFocus()
+                    true
+                } else if (event.key == Key.F3) {
+                    if (!showSearch && enableSearch) showSearch = true
+                    if (searchMatches.isNotEmpty()) {
+                        activeMatchIndex = if (event.isShiftPressed) {
+                            (activeMatchIndex - 1 + searchMatches.size) % searchMatches.size
+                        } else {
+                            (activeMatchIndex + 1) % searchMatches.size
+                        }
+                    }
+                    true
+                } else if (event.key == Key.Escape) {
+                    when {
+                        showSearch -> {
+                            showSearch = false
+                            searchQuery = ""
+                            restoreEditorFocus()
+                            true
+                        }
+                        showGoToLine -> {
+                            showGoToLine = false
+                            restoreEditorFocus()
+                            true
+                        }
+                        else -> false
+                    }
                 } else {
                     false
                 }
@@ -350,6 +385,9 @@ fun CodeEditor(
             CodeEditorSearchBar(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it; activeMatchIndex = 0 },
+                replaceQuery = replaceQuery,
+                onReplaceQueryChange = { replaceQuery = it },
+                showReplace = !isReadOnly,
                 matchCount = searchMatches.size,
                 activeIndex = activeMatchIndex,
                 onNext = {
@@ -362,8 +400,45 @@ fun CodeEditor(
                         activeMatchIndex = (activeMatchIndex - 1 + searchMatches.size) % searchMatches.size
                     }
                 },
+                onReplace = {
+                    val match = searchMatches.getOrNull(activeMatchIndex) ?: return@CodeEditorSearchBar
+                    val line = match.lineIndex.coerceIn(0, viewModel.document.lineCount - 1)
+                    val start = viewModel.document.lineStart(line) + match.startOffset
+                    viewModel.replaceRange(start, start + (match.endOffset - match.startOffset), replaceQuery)
+                },
+                onReplaceAll = {
+                    viewModel.replaceAllMatches(searchQuery, replaceQuery)
+                    activeMatchIndex = 0
+                },
                 onClose = { showSearch = false; searchQuery = ""; restoreEditorFocus() },
                 testTagPrefix = testTagPrefix,
+            )
+        }
+
+        if (showGoToLine) {
+            CodeEditorGoToLineBar(
+                value = goToLineText,
+                onValueChange = { goToLineText = it.filter { ch -> ch.isDigit() }.take(8) },
+                onGo = {
+                    goToLineText.toIntOrNull()?.let { viewModel.goToLine(it) }
+                    showGoToLine = false
+                    restoreEditorFocus()
+                },
+                onClose = { showGoToLine = false; restoreEditorFocus() },
+                testTagPrefix = testTagPrefix,
+            )
+        }
+
+        if (editorState.hasLineTruncation) {
+            Text(
+                text = "A line exceeds 50,000 characters and is truncated in the view.",
+                color = ReqLabColors.OnSurfaceDim,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ReqLabColors.SurfaceContainer)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .testTag("$testTagPrefix-truncation-banner"),
             )
         }
 
@@ -388,6 +463,37 @@ fun CodeEditor(
             lineVariableSpans = lineVariableSpans,
             focusRequester = editorFocus,
         )
+
+        val cursorLine = viewModel.document.lineAt(
+            editorState.cursorOffset.coerceIn(0, viewModel.document.length),
+        )
+        val cursorCol = editorState.cursorOffset -
+            viewModel.document.lineStart(cursorLine)
+        val statusDiag = editorState.diagnostics.firstOrNull { it.line - 1 == cursorLine }?.message
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ReqLabColors.SurfaceContainer)
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+                .testTag("$testTagPrefix-status"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "Ln ${cursorLine + 1}, Col ${cursorCol + 1}",
+                color = ReqLabColors.OnSurfaceDim,
+                fontSize = 11.sp,
+            )
+            if (!statusDiag.isNullOrEmpty()) {
+                Text(
+                    text = statusDiag,
+                    color = ReqLabColors.Error,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
     }
 }
 
@@ -546,22 +652,42 @@ private fun ToolbarBtn(
 private fun CodeEditorSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
+    replaceQuery: String,
+    onReplaceQueryChange: (String) -> Unit,
+    showReplace: Boolean,
     matchCount: Int,
     activeIndex: Int,
     onNext: () -> Unit,
     onPrev: () -> Unit,
+    onReplace: () -> Unit,
+    onReplaceAll: () -> Unit,
     onClose: () -> Unit,
     testTagPrefix: String,
 ) {
     val searchFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(ReqLabColors.SurfaceContainer)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
             .testTag("$testTagPrefix-search-bar"),
+    ) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.key == Key.Enter -> {
+                        if (event.isShiftPressed) onPrev() else onNext()
+                        true
+                    }
+                    event.key == Key.Escape -> { onClose(); true }
+                    else -> false
+                }
+            },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -630,5 +756,118 @@ private fun CodeEditorSearchBar(
         }
     }
 
+    if (showReplace) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            BasicTextField(
+                value = replaceQuery,
+                onValueChange = onReplaceQueryChange,
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = ReqLabColors.OnSurface,
+                    fontSize = 12.sp,
+                    fontFamily = CodeFontFamily,
+                ),
+                cursorBrush = SolidColor(ReqLabColors.Primary),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(ReqLabColors.Background)
+                    .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .testTag("$testTagPrefix-search-replace-input"),
+                decorationBox = { inner ->
+                    Box {
+                        if (replaceQuery.isEmpty()) {
+                            Text(
+                                "Replace",
+                                color = ReqLabColors.OnSurfaceDim,
+                                fontSize = 12.sp,
+                                fontFamily = CodeFontFamily,
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+            TextButton(
+                onClick = onReplace,
+                enabled = query.isNotEmpty(),
+                modifier = Modifier.testTag("$testTagPrefix-search-replace"),
+            ) { Text("Replace", fontSize = 12.sp) }
+            TextButton(
+                onClick = onReplaceAll,
+                enabled = query.isNotEmpty(),
+                modifier = Modifier.testTag("$testTagPrefix-search-replace-all"),
+            ) { Text("All", fontSize = 12.sp) }
+        }
+    }
+
+    Box(Modifier.fillMaxWidth().height(1.dp).background(ReqLabColors.Border))
+    }
+}
+
+@Composable
+private fun CodeEditorGoToLineBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onGo: () -> Unit,
+    onClose: () -> Unit,
+    testTagPrefix: String,
+) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(ReqLabColors.SurfaceContainer)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .testTag("$testTagPrefix-goto-bar")
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.key == Key.Enter -> { onGo(); true }
+                    event.key == Key.Escape -> { onClose(); true }
+                    else -> false
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("Go to line", color = ReqLabColors.OnSurfaceDim, fontSize = 11.sp)
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = ReqLabColors.OnSurface,
+                fontSize = 12.sp,
+                fontFamily = CodeFontFamily,
+            ),
+            cursorBrush = SolidColor(ReqLabColors.Primary),
+            modifier = Modifier
+                .widthIn(min = 72.dp, max = 120.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(ReqLabColors.Background)
+                .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .focusRequester(focus)
+                .testTag("$testTagPrefix-goto-input"),
+        )
+        TextButton(onClick = onGo, modifier = Modifier.testTag("$testTagPrefix-goto-go")) {
+            Text("Go", fontSize = 12.sp)
+        }
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.size(24.dp).focusProperties { canFocus = false },
+        ) {
+            Icon(Icons.Default.Close, "Close go to line", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+        }
+    }
     Box(Modifier.fillMaxWidth().height(1.dp).background(ReqLabColors.Border))
 }

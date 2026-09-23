@@ -34,9 +34,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.ScrollState
@@ -98,7 +101,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reqlab.editor.core.InlineEditorError
+import com.reqlab.editor.core.InlineErrorSeverity
 import com.reqlab.editor.core.LanguageMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -366,6 +371,12 @@ fun EditorRenderer(
                         true
                     }
                     meta && event.key == Key.A -> { viewModel.selectAll(); true }
+                    meta && shift && event.key == Key.D -> { viewModel.duplicateLine(); true }
+                    meta && event.key == Key.L -> { viewModel.selectLine(); true }
+                    meta && (event.key == Key.Slash || event.utf16CodePoint == '/'.code) -> {
+                        viewModel.toggleComment(); true
+                    }
+                    meta && event.key == Key.Y -> { viewModel.redo(); true }
                     meta && shift && event.key == Key.Z -> { viewModel.redo(); true }
                     meta && event.key == Key.Z -> { viewModel.undo(); true }
                     meta && event.key == Key.C -> {
@@ -402,14 +413,24 @@ fun EditorRenderer(
                         true
                     }
                     
-                    event.isAltPressed && event.key == Key.DirectionLeft  -> { viewModel.moveCursorWordLeft(shift); true }
-                    event.isAltPressed && event.key == Key.DirectionRight -> { viewModel.moveCursorWordRight(shift); true }
-                    event.key == Key.DirectionLeft  -> { if (meta) viewModel.moveCursorToLineStart(shift) else viewModel.moveCursorLeft(shift); true }
-                    event.key == Key.DirectionRight -> { if (meta) viewModel.moveCursorToLineEnd(shift) else viewModel.moveCursorRight(shift); true }
-                    event.key == Key.DirectionUp    -> { if (meta) viewModel.moveCursorToDocStart(shift) else viewModel.moveCursorUp(shift); true }
-                    event.key == Key.DirectionDown  -> { if (meta) viewModel.moveCursorToDocEnd(shift) else viewModel.moveCursorDown(shift); true }
-                    event.key == Key.MoveHome       -> { viewModel.moveCursorToLineStart(shift); true }
-                    event.key == Key.MoveEnd        -> { viewModel.moveCursorToLineEnd(shift); true }
+                    event.isAltPressed && event.key == Key.DirectionUp && !event.isMetaPressed && !event.isCtrlPressed -> {
+                        viewModel.moveLine(down = false); true
+                    }
+                    event.isAltPressed && event.key == Key.DirectionDown && !event.isMetaPressed && !event.isCtrlPressed -> {
+                        viewModel.moveLine(down = true); true
+                    }
+                    (event.isAltPressed || (event.isCtrlPressed && !event.isMetaPressed)) && event.key == Key.DirectionLeft -> {
+                        viewModel.moveCursorWordLeft(shift); true
+                    }
+                    (event.isAltPressed || (event.isCtrlPressed && !event.isMetaPressed)) && event.key == Key.DirectionRight -> {
+                        viewModel.moveCursorWordRight(shift); true
+                    }
+                    event.key == Key.DirectionLeft  -> { if (event.isMetaPressed) viewModel.moveCursorToLineStart(shift) else viewModel.moveCursorLeft(shift); true }
+                    event.key == Key.DirectionRight -> { if (event.isMetaPressed) viewModel.moveCursorToLineEnd(shift) else viewModel.moveCursorRight(shift); true }
+                    event.key == Key.DirectionUp    -> { if (event.isMetaPressed) viewModel.moveCursorToDocStart(shift) else viewModel.moveCursorUp(shift); true }
+                    event.key == Key.DirectionDown  -> { if (event.isMetaPressed) viewModel.moveCursorToDocEnd(shift) else viewModel.moveCursorDown(shift); true }
+                    event.key == Key.MoveHome       -> { if (meta) viewModel.moveCursorToDocStart(shift) else viewModel.moveCursorToLineStart(shift); true }
+                    event.key == Key.MoveEnd        -> { if (meta) viewModel.moveCursorToDocEnd(shift) else viewModel.moveCursorToLineEnd(shift); true }
                     event.key == Key.PageUp         -> { viewModel.moveCursorPageUp(extendSelection = shift); true }
                     event.key == Key.PageDown       -> { viewModel.moveCursorPageDown(extendSelection = shift); true }
                     event.key == Key.Backspace -> {
@@ -497,6 +518,9 @@ fun EditorRenderer(
             }
             val foldStartSet = remember(state.version, state.foldVersion) {
                 viewModel.foldRegions.associate { it.startLine - 1 to it }
+            }
+            val bracketPair = remember(state.cursorOffset, state.version) {
+                matchingBracketOffsets(viewModel.getFullText(), state.cursorOffset)
             }
             val contentWidthPx = (
                 with(density) { maxWidth.toPx() } -
@@ -615,6 +639,10 @@ fun EditorRenderer(
                     }
                     val isCurrentLine = cursorHere >= 0
                     val lineFill = if (isCurrentLine) theme.cursorLine else theme.background
+                    val lineDiags = state.diagnostics.filter { it.line - 1 == docLine }
+                    val diagMsg = lineDiags.firstOrNull()?.message
+                    val diagInteraction = remember { MutableInteractionSource() }
+                    val diagHovered by diagInteraction.collectIsHoveredAsState()
 
                     Row(
                         Modifier
@@ -624,11 +652,15 @@ fun EditorRenderer(
 
                         // Gutter, fold mark, and LineView share editorTextStyle +
                         // LINE_PAD_VERT so number, chevron, and text sit in one line box.
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .width(gutterWidth)
                                 .fillMaxHeight()
-                                .zIndex(1f)
+                                .zIndex(2f),
+                        ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
                                 .background(lineFill)
                                 .padding(end = 4.dp, top = LINE_PAD_VERT, bottom = LINE_PAD_VERT),
                             verticalAlignment = Alignment.Top,
@@ -708,7 +740,48 @@ fun EditorRenderer(
                                         )
                                     }
                                 }
+                                if (lineDiags.isNotEmpty()) {
+                                    val sevColor = if (lineDiags.any { it.severity == InlineErrorSeverity.ERROR }) {
+                                        theme.errorUnderline
+                                    } else {
+                                        theme.warningUnderline
+                                    }
+                                    val diagTag = if (testTagPrefix.isNotEmpty())
+                                        "$testTagPrefix-diag-$docLine" else ""
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(1.dp)
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(sevColor)
+                                            .hoverable(diagInteraction)
+                                            .semantics { contentDescription = diagMsg ?: "Diagnostic" }
+                                            .then(if (diagTag.isNotEmpty()) Modifier.testTag(diagTag) else Modifier),
+                                    )
+                                }
                             }
+                        }
+                        if (diagHovered && !diagMsg.isNullOrEmpty()) {
+                            Text(
+                                text = diagMsg,
+                                color = theme.foreground,
+                                fontSize = 11.sp,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .offset(y = firstLineSlot)
+                                    .zIndex(8f)
+                                    .background(theme.background, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                                    .widthIn(max = 280.dp)
+                                    .wrapContentWidth(unbounded = true, align = Alignment.Start)
+                                    .then(
+                                        if (testTagPrefix.isNotEmpty())
+                                            Modifier.testTag("$testTagPrefix-diag-tooltip-$docLine")
+                                        else Modifier
+                                    ),
+                            )
+                        }
                         }
 
                         // ── Vertical divider ───────────────────────────
@@ -776,6 +849,7 @@ fun EditorRenderer(
                                 // all others get -1f so the Canvas skips the cursor draw.
                                 cursorVisible    = if (cursorHere >= 0) cursorBlinkAlpha else -1f,
                                 variableSpans    = varSpans,
+                                bracketPair      = bracketPair,
                                 onLayoutMeasured = { lr -> layoutResultCache[displayLine] = lr },
                                 modifier         = Modifier
                                     .then(
@@ -852,6 +926,26 @@ fun EditorRenderer(
                 offset           = DpOffset.Zero,
             ) {
                 DropdownMenuItem(
+                    text    = { Text("Undo") },
+                    enabled = !isReadOnly && viewModel.canUndo(),
+                    onClick = {
+                        contextMenuVisible = false
+                        viewModel.undo()
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-undo") else Modifier,
+                )
+                DropdownMenuItem(
+                    text    = { Text("Redo") },
+                    enabled = !isReadOnly && viewModel.canRedo(),
+                    onClick = {
+                        contextMenuVisible = false
+                        viewModel.redo()
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-redo") else Modifier,
+                )
+                DropdownMenuItem(
                     text    = { Text("Copy") },
                     enabled = hasSelection,
                     onClick = {
@@ -899,6 +993,26 @@ fun EditorRenderer(
                     },
                     modifier = if (testTagPrefix.isNotEmpty())
                         Modifier.testTag("$testTagPrefix-context-selectall") else Modifier,
+                )
+                DropdownMenuItem(
+                    text    = { Text("Duplicate Line") },
+                    enabled = !isReadOnly,
+                    onClick = {
+                        contextMenuVisible = false
+                        viewModel.duplicateLine()
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-duplicate") else Modifier,
+                )
+                DropdownMenuItem(
+                    text    = { Text("Toggle Comment") },
+                    enabled = !isReadOnly,
+                    onClick = {
+                        contextMenuVisible = false
+                        viewModel.toggleComment()
+                    },
+                    modifier = if (testTagPrefix.isNotEmpty())
+                        Modifier.testTag("$testTagPrefix-context-comment") else Modifier,
                 )
             }
             } // end context-menu anchor Box

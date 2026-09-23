@@ -29,21 +29,28 @@ These shortcuts apply inside any `CodeEditor` instance (request body, pre-reques
 | Shortcut | Action |
 |---|---|
 | `←` / `→` / `↑` / `↓` | Move cursor by character/line |
-| `Home` / `End` | Move to start/end of current display line |
+| `Home` / `End` | Move to start/end of current line |
 | `⌘+Home` / `Ctrl+Home` | Move to document start |
 | `⌘+End` / `Ctrl+End` | Move to document end |
+| `⌘+↑` / `⌘+↓` | Move to document start/end (macOS) |
 | `PgUp` / `PgDn` | Scroll by one viewport height |
-| `Ctrl+←` / `Ctrl+→` | Jump to previous/next word boundary |
+| `⌥+←` / `⌥+→` | Jump to previous/next word (macOS) |
+| `Ctrl+←` / `Ctrl+→` | Jump to previous/next word (Windows/Linux) |
+| `⌘+G` / `Ctrl+G` | Go to line |
 
 ### Editing
 
 | Shortcut | Action |
 |---|---|
 | `Enter` | Insert newline with auto-indent matching current line's leading whitespace |
-| `Tab` | Insert 4 spaces |
-| `Shift+Tab` | Remove up to 4 leading spaces from the current line |
+| `Tab` | Insert 2 spaces |
+| `Shift+Tab` | Remove up to 2 leading spaces from the current line |
 | `Backspace` | Delete character before cursor (or active selection) |
 | `Delete` | Delete character after cursor |
+| `⌘+Shift+D` / `Ctrl+Shift+D` | Duplicate current line |
+| `⌥+↑` / `⌥+↓` | Move current line up / down |
+| `⌘+/` / `Ctrl+/` | Toggle line comment (`//` or `<!-- -->`) |
+| `⌘+L` / `Ctrl+L` | Select current line |
 
 ### Selection
 
@@ -52,6 +59,15 @@ These shortcuts apply inside any `CodeEditor` instance (request body, pre-reques
 | `Shift + any navigation key` | Extend selection in that direction |
 | `⌘+A` / `Ctrl+A` | Select all |
 | Double-click | Select word under cursor |
+
+### Find
+
+| Shortcut | Action |
+|---|---|
+| `⌘+F` / `Ctrl+F` | Toggle find (and replace when the editor is editable) |
+| `Enter` / `F3` | Next match |
+| `Shift+Enter` / `Shift+F3` | Previous match |
+| `Esc` | Close find / go-to-line |
 
 ### Clipboard
 
@@ -66,6 +82,6 @@ These shortcuts apply inside any `CodeEditor` instance (request body, pre-reques
 | Shortcut | Action |
 |---|---|
 | `⌘+Z` / `Ctrl+Z` | Undo |
-| `⌘+Shift+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
+| `⌘+Shift+Z` / `Ctrl+Shift+Z` / `⌘+Y` / `Ctrl+Y` | Redo |
 
 > Read-only editors (e.g. the response body viewer) support `⌘+C` and `⌘+A` but ignore all other editing keys.

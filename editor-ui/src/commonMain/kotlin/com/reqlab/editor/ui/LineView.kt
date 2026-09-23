@@ -82,6 +82,8 @@ internal fun LineView(
      * Applied on top of the syntax highlighting so `{{token}}` text is always visually distinct.
      */
     variableSpans: List<Pair<IntRange, Color>> = emptyList(),
+    /** Matching bracket pair as absolute document offsets, or null. */
+    bracketPair: Pair<Int, Int>? = null,
     modifier: Modifier = Modifier,
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -233,6 +235,35 @@ internal fun LineView(
             if (showSelection) {
                 val path = measured.getPathForRange(lineSelStart, lineSelEnd)
                 drawPath(path, color = primary.copy(alpha = 0.28f))
+            }
+
+            val guides = indentGuideColumns(lineText)
+            if (guides.isNotEmpty() && renderLen > 0) {
+                val h = size.height
+                for (col in guides) {
+                    if (col > renderLen) break
+                    val x = measured.getHorizontalPosition(col, true)
+                    drawLine(
+                        color = theme.indentGuide,
+                        start = Offset(x, 0f),
+                        end = Offset(x, h),
+                        strokeWidth = 1f,
+                    )
+                }
+            }
+
+            if (bracketPair != null) {
+                for (abs in listOf(bracketPair.first, bracketPair.second)) {
+                    val col = abs - lineStartOffset
+                    if (col in 0 until renderLen) {
+                        val box = measured.getBoundingBox(col)
+                        drawRect(
+                            color = primary.copy(alpha = 0.22f),
+                            topLeft = Offset(box.left, box.top),
+                            size = androidx.compose.ui.geometry.Size(box.width.coerceAtLeast(1f), box.height),
+                        )
+                    }
+                }
             }
 
             drawText(measured, topLeft = Offset.Zero)

@@ -413,6 +413,14 @@ class EditorViewModel(
                 // Bump foldVersion only when arrow positions actually changed so the
                 // renderer re-reads foldRegions.
                 foldVersion = if (foldRegionsChanged) it.foldVersion + 1 else it.foldVersion,
+                hasLineTruncation = run {
+                    val lineLen = document.lineText(document.lineAt(f.coerceIn(0, document.length))).length
+                    when {
+                        lineLen > DISPLAY_LINE_LENGTH_LIMIT -> true
+                        it.hasLineTruncation -> computeHasLineTruncation()
+                        else -> false
+                    }
+                },
             )
         }
 
@@ -680,6 +688,200 @@ class EditorViewModel(
                 cursorOffset = it.cursorOffset.coerceIn(0, document.length),
             )
         }
+    }
+
+    fun canUndo(): Boolean = undoStack.isNotEmpty()
+    fun canRedo(): Boolean = redoStack.isNotEmpty()
+
+    fun goToLine(oneBased: Int) {
+        if (document.lineCount <= 0) return
+        val line = (oneBased - 1).coerceIn(0, document.lineCount - 1)
+        moveCursorTo(document.lineStart(line))
+    }
+
+    fun replaceRange(from: Int, to: Int, replacement: String) {
+        val oldLen = lastExternalText.length
+        val f = from.coerceIn(0, oldLen)
+        val t = to.coerceIn(f, oldLen)
+        if (f == t && replacement.isEmpty()) return
+        editSequence++
+        applyReplace(
+            from = f,
+            to = t,
+            insertText = replacement,
+            cursorBefore = _state.value.cursorOffset.coerceIn(0, oldLen),
+            cursorAfter = f + replacement.length,
+            recordHistory = true,
+            clearRedo = true,
+        )
+    }
+
+    fun replaceAllMatches(query: String, replacement: String, ignoreCase: Boolean = true) {
+        if (query.isEmpty()) return
+        val next = replaceAllOccurrences(lastExternalText, query, replacement, ignoreCase)
+        if (next == lastExternalText) return
+        replaceDocument(next)
+    }
+
+    fun duplicateLine() {
+        val st = _state.value
+        val oldLen = lastExternalText.length
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
+        val line = document.lineAt(cursor)
+        val start = document.lineStart(line)
+        val text = document.lineText(line)
+        val col = cursor - start
+        val lineEnd = start + text.length
+        editSequence++
+        if (lineEnd < oldLen) {
+            applyReplace(
+                from = lineEnd + 1,
+                to = lineEnd + 1,
+                insertText = "$text\n",
+                cursorBefore = cursor,
+                cursorAfter = lineEnd + 1 + col.coerceAtMost(text.length),
+                recordHistory = true,
+                clearRedo = true,
+            )
+        } else {
+            applyReplace(
+                from = lineEnd,
+                to = lineEnd,
+                insertText = "\n$text",
+                cursorBefore = cursor,
+                cursorAfter = lineEnd + 1 + col.coerceAtMost(text.length),
+                recordHistory = true,
+                clearRedo = true,
+            )
+        }
+    }
+
+    fun moveLine(down: Boolean) {
+        val st = _state.value
+        val oldLen = lastExternalText.length
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
+        val line = document.lineAt(cursor)
+        val other = if (down) line + 1 else line - 1
+        if (other < 0 || other >= document.lineCount) return
+        val col = cursor - document.lineStart(line)
+        val a = minOf(line, other)
+        val b = maxOf(line, other)
+        val aStart = document.lineStart(a)
+        val aText = document.lineText(a)
+        val bText = document.lineText(b)
+        val bEnd = document.lineStart(b) + bText.length
+        val newBlock = "$bText\n$aText"
+        val cursorAfter = if (down) {
+            aStart + bText.length + 1 + col.coerceAtMost(aText.length)
+        } else {
+            aStart + col.coerceAtMost(bText.length)
+        }
+        editSequence++
+        applyReplace(
+            from = aStart,
+            to = bEnd,
+            insertText = newBlock,
+            cursorBefore = cursor,
+            cursorAfter = cursorAfter,
+            recordHistory = true,
+            clearRedo = true,
+        )
+    }
+
+    fun selectLine() {
+        val st = _state.value
+        val oldLen = lastExternalText.length
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
+        val line = document.lineAt(cursor)
+        val start = document.lineStart(line)
+        val end = start + document.lineText(line).length
+        val selEnd = if (end < oldLen) end + 1 else end
+        _state.update {
+            it.copy(selectionStart = start, selectionEnd = selEnd, cursorOffset = selEnd)
+        }
+    }
+
+    fun toggleComment() {
+        val st = _state.value
+        val oldLen = lastExternalText.length
+        val cursor = st.cursorOffset.coerceIn(0, oldLen)
+        val (fromLine, toLine) = selectedLineRange()
+        val start = document.lineStart(fromLine)
+        val end = document.lineStart(toLine) + document.lineText(toLine).length
+        val lines = (fromLine..toLine).map { document.lineText(it) }
+        val xml = languageMode == LanguageMode.XML || languageMode == LanguageMode.HTML
+        val commented = if (xml) lines.all { isXmlCommented(it) } else lines.all { isSlashCommented(it) }
+        val next = lines.map { line ->
+            if (xml) {
+                if (commented) uncommentXml(line) else commentXml(line)
+            } else {
+                if (commented) uncommentSlash(line) else commentSlash(line)
+            }
+        }
+        val newBlock = next.joinToString("\n")
+        val rel = (document.lineAt(cursor) - fromLine).coerceIn(0, next.lastIndex)
+        val col = cursor - document.lineStart(document.lineAt(cursor))
+        var offsetInBlock = 0
+        for (i in 0 until rel) offsetInBlock += next[i].length + 1
+        val cursorAfter = start + offsetInBlock + col.coerceAtMost(next[rel].length)
+        editSequence++
+        applyReplace(
+            from = start,
+            to = end,
+            insertText = newBlock,
+            cursorBefore = cursor,
+            cursorAfter = cursorAfter,
+            recordHistory = true,
+            clearRedo = true,
+        )
+    }
+
+    private fun selectedLineRange(): Pair<Int, Int> {
+        val st = _state.value
+        val oldLen = lastExternalText.length
+        if (st.selectionStart >= 0 && st.selectionEnd > st.selectionStart) {
+            val a = document.lineAt(st.selectionStart.coerceIn(0, oldLen))
+            val b = document.lineAt((st.selectionEnd - 1).coerceIn(0, oldLen))
+            return minOf(a, b) to maxOf(a, b)
+        }
+        val line = document.lineAt(st.cursorOffset.coerceIn(0, oldLen))
+        return line to line
+    }
+
+    private fun isSlashCommented(line: String): Boolean =
+        line.trimStart().startsWith("//")
+
+    private fun commentSlash(line: String): String {
+        val indent = line.takeWhile { it == ' ' || it == '\t' }
+        return "$indent// ${line.drop(indent.length)}"
+    }
+
+    private fun uncommentSlash(line: String): String {
+        val indent = line.takeWhile { it == ' ' || it == '\t' }
+        val rest = line.drop(indent.length)
+        return indent + when {
+            rest.startsWith("// ") -> rest.drop(3)
+            rest.startsWith("//") -> rest.drop(2)
+            else -> rest
+        }
+    }
+
+    private fun isXmlCommented(line: String): Boolean {
+        val t = line.trim()
+        return t.startsWith("<!--") && t.endsWith("-->")
+    }
+
+    private fun commentXml(line: String): String {
+        val indent = line.takeWhile { it == ' ' || it == '\t' }
+        return "$indent<!-- ${line.drop(indent.length)} -->"
+    }
+
+    private fun uncommentXml(line: String): String {
+        val indent = line.takeWhile { it == ' ' || it == '\t' }
+        var body = line.trim()
+        if (body.startsWith("<!--")) body = body.removePrefix("<!--").trimStart()
+        if (body.endsWith("-->")) body = body.removeSuffix("-->").trimEnd()
+        return indent + body
     }
 
     fun onVisibleRangeChanged(firstDisplayLine: Int, lastDisplayLine: Int) {
