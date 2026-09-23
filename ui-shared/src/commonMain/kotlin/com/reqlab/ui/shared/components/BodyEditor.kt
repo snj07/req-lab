@@ -306,6 +306,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                             enableWordWrap = true,
                             enableCopy = true,
                             enableDownload = false,
+                            showCursorPosition = state.settings.showEditorPositionIndicator,
                             allowJson5 = allowJson5 && language == SyntaxLanguage.JSON,
                             placeholder = when (tab.bodyType) {
                                 BodyType.JSON       -> "{\n  \n}"

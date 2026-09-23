@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.platform.LocalDensity
@@ -56,7 +57,7 @@ internal fun LineView(
     selStart: Int,
     selEnd: Int,
     diagnostics: List<InlineEditorError>,
-    onTap: (absoluteOffset: Int, extendSelection: Boolean) -> Unit,
+    onTap: (absoluteOffset: Int, extendSelection: Boolean, trailingWhitespace: Boolean) -> Unit,
     onDragTo: ((absoluteOffset: Int) -> Unit)? = null,
     // onWordSelect = { abs ->
     //     viewModel.selectWordAt(abs)
@@ -180,11 +181,15 @@ internal fun LineView(
                     val charOff0 = if (down.position.x < padStartPx) 0
                         else offsetInLayout(layout, toLayout(down.position))
                     val absOff0 = lineStartOffset + charOff0
+                    val layoutPosition = toLayout(down.position)
+                    val visualLine = layout.getLineForVerticalPosition(layoutPosition.y)
+                    val lineEnd = layout.getLineEnd(visualLine, visibleEnd = true)
+                    val isTrailingWhitespace = layoutPosition.x > layout.getCursorRect(lineEnd).left
 
                     // Immediately place cursor on first press — no delay.
                     // If a double-click follows, onWordSelect will override this placement.
                     val shiftHeld = currentEvent.keyboardModifiers.isShiftPressed
-                    onTap(absOff0, shiftHeld)
+                    onTap(absOff0, shiftHeld, isTrailingWhitespace)
                     down.consume()
 
                     val lineHeightPx = with(density) { lineHeightDp.toPx() } + padTopPx * 2f
@@ -258,9 +263,18 @@ internal fun LineView(
                     if (col in 0 until renderLen) {
                         val box = measured.getBoundingBox(col)
                         drawRect(
-                            color = primary.copy(alpha = 0.22f),
+                            color = theme.bracketMatchBackground,
                             topLeft = Offset(box.left, box.top),
                             size = androidx.compose.ui.geometry.Size(box.width.coerceAtLeast(1f), box.height),
+                        )
+                        drawRect(
+                            color = theme.bracketMatchBorder,
+                            topLeft = Offset(box.left + 0.5f, box.top + 0.5f),
+                            size = androidx.compose.ui.geometry.Size(
+                                (box.width - 1f).coerceAtLeast(1f),
+                                (box.height - 1f).coerceAtLeast(1f),
+                            ),
+                            style = Stroke(width = 1f),
                         )
                     }
                 }

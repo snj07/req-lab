@@ -132,7 +132,7 @@ NONE, BASIC, BEARER, API_KEY, OAUTH2, JWT
 | Module | Responsibility |
 |---|---|
 | `editor-core` | `DocumentModel` (gap-buffer text storage), `DisplayLineMap` (fold/wrap mapping), `StyleBuffer` (token colour cache), `FoldingModel`, `LanguageRegistry`, per-language providers (`JsonMode`, `XmlMode`, `JavaScriptMode`, `GraphQLMode`, `HtmlMode`, `PlainTextMode`), `InlineEditorError` |
-| `editor-ui` | `EditorViewModel` (document state coordinator), `EditorRenderer` (Compose LazyColumn renderer), `LineView` (single visible line composable), `IdleLexer` (background incremental tokenizer), `SyntaxHighlighter`, `SyntaxHighlighterRegistry`, `EditorTheme` |
+| `editor-ui` | `EditorViewModel` (document state coordinator), `EditorRenderer` (Compose LazyColumn renderer), `LineView` (single visible line composable), `IdleLexer` (background incremental tokenizer), `SyntaxHighlighter`, `SyntaxHighlighterRegistry`, `EditorTheme`, `BracketMatch` (caret pair + indent-guide columns) |
 
 ### Presentation Layer — `ui-shared`
 
@@ -308,7 +308,7 @@ Summary:
 
 - `editor-core` provides the pure-Kotlin document model (gap-buffer, fold map, style buffer, incremental lexer tokens).
 - `editor-ui` provides the Compose renderer (`EditorRenderer`) driven by `EditorViewModel`.
-- `ui-shared/CodeEditor.kt` is the public composable used by `BodyEditor`, `ScriptEditor`, and `ResponseViewer`.
+- `ui-shared/CodeEditor.kt` is the public composable used by `BodyEditor`, `ScriptEditor`, and `ResponseViewer` (toolbar, find/replace, go-to-line, status strip).
 - The gutter (line numbers + fold indicators) and content column share a single `LazyColumn` — synchronised scrolling with zero extra complexity.
 
 ---

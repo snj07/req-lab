@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -99,7 +100,9 @@ private fun editorTheme(): EditorTheme {
         selectionBg      = p.selectedItem,
         cursorLine       = p.surfaceVariant,
         foldIndicator    = p.onSurfaceDim,
-        indentGuide      = p.borderLight,
+        indentGuide      = p.editorIndentGuide,
+        bracketMatchBackground = p.editorBracketMatchBackground,
+        bracketMatchBorder = p.editorBracketMatchBorder,
         errorUnderline   = p.error,
         warningUnderline = p.tertiary,
         accent           = p.primary,
@@ -124,6 +127,7 @@ private fun editorTheme(): EditorTheme {
  * @param enableWordWrap Show the word-wrap toggle.
  * @param enableCopy    Show copy-to-clipboard button.
  * @param enableDownload Show download-to-file button.
+ * @param showCursorPosition Show the line and column indicator below the editor.
  * @param onDownload    Callback for the download action.
  * @param placeholder   Placeholder text shown when the editor is empty.
  * @param testTagPrefix Prefix for Compose test tags.
@@ -142,6 +146,7 @@ fun CodeEditor(
     enableWordWrap: Boolean = true,
     enableCopy: Boolean = true,
     enableDownload: Boolean = false,
+    showCursorPosition: Boolean = true,
     onDownload: (() -> Unit)? = null,
     placeholder: String = "",
     testTagPrefix: String = "code-editor",
@@ -470,28 +475,58 @@ fun CodeEditor(
         val cursorCol = editorState.cursorOffset -
             viewModel.document.lineStart(cursorLine)
         val statusDiag = editorState.diagnostics.firstOrNull { it.line - 1 == cursorLine }?.message
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(ReqLabColors.SurfaceContainer)
-                .padding(horizontal = 8.dp, vertical = 3.dp)
-                .testTag("$testTagPrefix-status"),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = "Ln ${cursorLine + 1}, Col ${cursorCol + 1}",
-                color = ReqLabColors.OnSurfaceDim,
-                fontSize = 11.sp,
-            )
-            if (!statusDiag.isNullOrEmpty()) {
-                Text(
-                    text = statusDiag,
-                    color = ReqLabColors.Error,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    modifier = Modifier.padding(start = 8.dp),
+        // A quiet footer separates editor content from metadata without creating
+        // the heavy, square status band that previously competed with the pane.
+        // Diagnostics remain available even when the optional position indicator
+        // is hidden in Settings.
+        if (showCursorPosition || !statusDiag.isNullOrEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .background(ReqLabColors.Surface)
+                    .testTag("$testTagPrefix-status"),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(ReqLabColors.Border),
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showCursorPosition) {
+                        Text(
+                            text = "Ln ${cursorLine + 1}, Col ${cursorCol + 1}",
+                            color = ReqLabColors.OnSurfaceVariant,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ReqLabColors.SurfaceContainer)
+                                .border(1.dp, ReqLabColors.BorderLight, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .testTag("$testTagPrefix-position-indicator"),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (!statusDiag.isNullOrEmpty()) {
+                        Text(
+                            text = statusDiag,
+                            color = ReqLabColors.Error,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .widthIn(max = 280.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ReqLabColors.Error.copy(alpha = 0.10f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
             }
         }
     }

@@ -14,6 +14,11 @@ data class AppColorPalette(
     val surfaceHigh: Color,
     val border: Color,
     val borderLight: Color,
+    /** Visible-but-subtle guides for code indentation and folded regions. */
+    val editorIndentGuide: Color,
+    /** Fill and outline for the matching bracket pair in code editors. */
+    val editorBracketMatchBackground: Color,
+    val editorBracketMatchBorder: Color,
 
     val primary: Color,
     val primaryContainer: Color,
@@ -57,6 +62,9 @@ val DarkAppColors = AppColorPalette(
     surfaceHigh       = Color(0xFF30314D),
     border            = Color(0xFF383952),
     borderLight       = Color(0xFF45466A),
+    editorIndentGuide = Color(0xFF45466A),
+    editorBracketMatchBackground = Color(0x383D4580),
+    editorBracketMatchBorder = Color(0xCC7B8DEF),
 
     primary           = Color(0xFF7B8DEF),
     primaryContainer  = Color(0xFF3D4580),
@@ -101,6 +109,9 @@ val LightAppColors = AppColorPalette(
     surfaceHigh       = Color(0xFFDDE4EE),   // soft cool divider
     border            = Color(0xFFCED6E3),   // light, airy border
     borderLight       = Color(0xFFE2E8F2),   // near-invisible separator
+    editorIndentGuide = Color(0xFF94A3B8),   // visible slate guide; quieter than text
+    editorBracketMatchBackground = Color(0x0F4B6BF5), // barely-there blue wash; keeps punctuation crisp
+    editorBracketMatchBorder = Color(0x604B6BF5),     // quiet outline for the matched delimiter
 
     // Primary — vivid but not heavy, sky-leaning blue
     primary           = Color(0xFF4B6BF5),   // bright periwinkle-blue

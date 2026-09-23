@@ -84,4 +84,4 @@ These shortcuts apply inside any `CodeEditor` instance (request body, pre-reques
 | `⌘+Z` / `Ctrl+Z` | Undo |
 | `⌘+Shift+Z` / `Ctrl+Shift+Z` / `⌘+Y` / `Ctrl+Y` | Redo |
 
-> Read-only editors (e.g. the response body viewer) support `⌘+C` and `⌘+A` but ignore all other editing keys.
+> Read-only editors (e.g. the response body viewer) support copy, select-all, find, go-to-line, and folding, but ignore editing keys (insert, cut, paste, undo, replace, line ops).

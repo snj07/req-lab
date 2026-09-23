@@ -54,6 +54,7 @@ Editor engine micro-tests (15 test classes).
 Editor renderer/ViewModel logic and regression tests.
 - `DiagnosticsAndFoldUpdateTest` — diagnostic overlay rendering, fold version consistency
 - `EditorViewModelFixTest` — ViewModel command sequencing, state emission correctness
+- `EditorCoreUxTest` — replace-all, go-to-line, line ops, bracket match, indent guides, truncation flag
 - `PerformanceIssueReproTest` — regression guards for previously found performance problems
 
 ### `ui-shared`
@@ -122,6 +123,7 @@ Compose Desktop UI automation, regression, integration, and persistence tests (5
 - `EditorV2RegressionTest` — V2 editor architecture regression suite
 - `EditorNoWrapRegressionTest` — no-wrap mode invariants
 - `EditorKnownIssuesBugTest` — known-issue guards preventing regressions
+- `EditorCoreUxUiTest` — find/replace bar, F3, go-to-line, status strip, truncation banner
 - `GutterLayoutStabilityTest` — gutter width stability across content/fold changes
 - `LargeTextEditorUiTest` — large document load/render, no jank
 - `LargePayloadSaveUiTest` — large body save + reload correctness
@@ -253,8 +255,8 @@ Implemented and tested:
 - i18n completeness: all string keys present in every supported locale; locale switching
 - Syntax highlighting: JSON, XML/HTML, GraphQL, JavaScript token colorization
 - Code folding: brace-based, tag-based, comment-based region detection and fold state management
-- Editor operations: GapBuffer insert/delete, DocumentModel line mapping, cursor/selection, undo/redo, display-line reflow, folding
-- Editor ViewModel: command sequencing, state emission, diagnostic overlays
+- Editor operations: GapBuffer insert/delete, DocumentModel line mapping, cursor/selection, undo/redo, display-line reflow, folding, find/replace, line ops, bracket match
+- Editor ViewModel: command sequencing, state emission, diagnostic overlays, go-to-line
 - Editor UI regressions: large-paste scroll, no-wrap mode, gutter stability, known-issue guards
 - Network client factory wiring (desktop-side initialization)
 - Sidebar collection helpers and performance under large collections

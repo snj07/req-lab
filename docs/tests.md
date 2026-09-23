@@ -85,7 +85,7 @@ Run full project checks:
 - Environment editor, global variables, variable popup UI
 - Tab management, history sidebar sync, copy command formats (cURL/Kotlin/JS)
 - Import/Export: Postman v2/v2.1 collections, environments, SAP ByDesign fixtures
-- Editor engine: GapBuffer, DocumentModel, cursor/selection, undo/redo, folding, display-line reflow
+- Editor engine: GapBuffer, DocumentModel, cursor/selection, undo/redo, folding, display-line reflow, find/replace, line ops
 - Editor ViewModel, syntax highlighting, code folding, i18n completeness — all in `ui-shared`
 - Desktop shell, response viewer raw/pretty/tree tabs, body table UX
 - Integration tests: `RequestFlowsIntegrationTest`, `SettingsImpactIntegrationTest`, `RequestSettingsPersistenceWorkflowIntegrationTest`, `HistorySidebarSyncIntegrationTest`, `CopyCommandIntegrationTest`

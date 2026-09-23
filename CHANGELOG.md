@@ -4,6 +4,21 @@ All notable changes to ReqLab are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Editor find/replace**: `Cmd/Ctrl+F` opens find; editable editors also get Replace and Replace All (one undo). `F3` / `Shift+F3` step matches; `Esc` closes the bar.
+- **Go to line** (`Cmd/Ctrl+G`) and a status strip with `Ln X, Col Y` plus the diagnostic on the current line.
+- **Line operations**: duplicate (`Cmd/Ctrl+Shift+D`), move (`Alt+↑/↓`), toggle comment (`Cmd/Ctrl+/`), select line (`Cmd/Ctrl+L`). Context menu includes Duplicate and Toggle comment.
+- **Bracket match** and 2-space indent guides in the editor canvas. Diagnostic ticks in the gutter with hover tooltips. Truncation banner when a line exceeds 50,000 characters.
+
+### Changed
+
+- Tab inserts **2 spaces** (and Shift+Tab removes 2), matching JSON format. On Windows/Linux, `Ctrl+←/→` jumps by word; on macOS, `⌘+←/→` still goes to line start/end.
+
+---
+
 ## [1.18.0] — 2026-08-29
 
 ### Added

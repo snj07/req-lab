@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.NetworkCheck
@@ -81,6 +82,7 @@ import com.reqlab.ui.shared.platform.saveFileForExport
 
 private enum class SettingsSection(val icon: ImageVector) {
     GENERAL(Icons.Default.Settings),
+    EDITOR(Icons.Default.FormatAlignLeft),
     THEME(Icons.Default.LightMode),
     LANGUAGE(Icons.Default.Language),
     NETWORK(Icons.Default.NetworkCheck),
@@ -92,6 +94,7 @@ private enum class SettingsSection(val icon: ImageVector) {
 @Composable
 private fun settingsSectionLabel(section: SettingsSection): String = when (section) {
     SettingsSection.GENERAL -> Strings.general
+    SettingsSection.EDITOR -> Strings.t("editor")
     SettingsSection.THEME -> Strings.theme
     SettingsSection.LANGUAGE -> Strings.language
     SettingsSection.NETWORK -> Strings.network
@@ -171,7 +174,8 @@ fun SettingsDialog(state: AppState) {
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(if (isActive) ReqLabColors.SelectedItem else Color.Transparent)
                                 .clickable { selectedSection = section }
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                                .testTag("settings-section-${section.name.lowercase()}"),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -212,6 +216,7 @@ fun SettingsDialog(state: AppState) {
 
                     when (selectedSection) {
                         SettingsSection.GENERAL  -> GeneralSettings(settings)
+                        SettingsSection.EDITOR   -> EditorSettings(settings)
                         SettingsSection.THEME    -> ThemeSettings(settings)
                         SettingsSection.LANGUAGE -> LanguageSettings(settings)
                         SettingsSection.NETWORK  -> NetworkSettings(settings)
@@ -297,6 +302,17 @@ private fun GeneralSettings(s: AppSettings) {
         selected = s.responseLayout,
         onSelected = { s.responseLayout = it },
         tagPrefix = "response-layout",
+    )
+}
+
+@Composable
+private fun EditorSettings(s: AppSettings) {
+    SettingToggle(
+        label = Strings.t("show_editor_position_indicator"),
+        description = Strings.t("settings_editor_position_indicator_desc"),
+        checked = s.showEditorPositionIndicator,
+        onCheckedChange = { s.showEditorPositionIndicator = it },
+        tag = "editor-position-indicator-toggle",
     )
 }
 

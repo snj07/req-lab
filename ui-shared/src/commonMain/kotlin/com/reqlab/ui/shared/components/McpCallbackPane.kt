@@ -60,7 +60,7 @@ fun McpWorkspaceResponse(state: AppState, tab: RequestTabState) {
     when {
         sampling != null -> McpSamplingCallbackPane(session, sampling!!)
         elicit != null -> McpElicitationCallbackPane(state, session, elicit!!)
-        else -> ResponseViewer(tab)
+        else -> ResponseViewer(tab, showCursorPosition = state.settings.showEditorPositionIndicator)
     }
 }
 

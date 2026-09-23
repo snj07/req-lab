@@ -264,6 +264,9 @@ class AppSettings {
     /** When true (default), JSON bodies accept JSON5; Send converts to strict JSON. */
     var allowJson5InJsonBodies by mutableStateOf(true)
 
+    /** Shows the compact line and column indicator in request and response editors. */
+    var showEditorPositionIndicator by mutableStateOf(false)
+
     /** Preferred manual size for the environment editor. Viewport clamping is not persisted. */
     var environmentDialogWidthDp by mutableStateOf(DEFAULT_ENVIRONMENT_DIALOG_WIDTH_DP)
     var environmentDialogHeightDp by mutableStateOf(DEFAULT_ENVIRONMENT_DIALOG_HEIGHT_DP)

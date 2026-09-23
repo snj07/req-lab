@@ -34,6 +34,18 @@ internal fun matchingBracketOffsets(
     return found to idx
 }
 
+/**
+ * A click in trailing editor whitespace deliberately suppresses the pair at the
+ * resulting end-of-line cursor position. This avoids highlighting a closing
+ * bracket merely because it happens to precede otherwise empty space.
+ */
+internal fun bracketMatchForCursor(
+    text: String,
+    cursor: Int,
+    suppressAtCursor: Int? = null,
+): Pair<Int, Int>? =
+    if (suppressAtCursor == cursor) null else matchingBracketOffsets(text, cursor)
+
 private fun isBracket(ch: Char) = ch in BRACKET_OPEN || ch in BRACKET_CLOSE
 
 private fun scanBracket(

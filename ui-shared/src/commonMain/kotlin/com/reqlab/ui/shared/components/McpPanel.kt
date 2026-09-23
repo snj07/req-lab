@@ -908,6 +908,7 @@ internal fun SchemaArgsEditor(
                     language = SyntaxLanguage.JSON,
                     modifier = Modifier.fillMaxSize(),
                     enableDownload = false,
+                    showCursorPosition = state.settings.showEditorPositionIndicator,
                     testTagPrefix = testTagPrefix,
                 )
             }

@@ -113,11 +113,13 @@ fun RequestEditor(
                     script          = tab.preRequestScript,
                     onScriptChanged = { tab.preRequestScript = it; markDirty() },
                     title           = "Pre-request Script",
+                    showCursorPosition = state.settings.showEditorPositionIndicator,
                 )
                 RequestEditorTab.TESTS       -> ScriptEditor(
                     script          = tab.testScript,
                     onScriptChanged = { tab.testScript = it; markDirty() },
                     title           = "Post-request Script",
+                    showCursorPosition = state.settings.showEditorPositionIndicator,
                 )
             }
         }

@@ -93,6 +93,12 @@ class EditorCoreUxTest {
     }
 
     @Test
+    fun trailing_whitespace_click_suppresses_bracket_match_at_cursor() {
+        assertNull(bracketMatchForCursor("{}", cursor = 1, suppressAtCursor = 1))
+        assertEquals(0 to 1, bracketMatchForCursor("{}", cursor = 1, suppressAtCursor = 0))
+    }
+
+    @Test
     fun indent_guide_columns_every_two_spaces() {
         assertEquals(listOf(2), indentGuideColumns("    x"))
         assertEquals(emptyList(), indentGuideColumns(" x"))

@@ -18,6 +18,7 @@ import com.reqlab.ui.shared.theme.ReqLabColors
  * @param script         current script content
  * @param onScriptChanged callback for changes
  * @param title          human-readable label (e.g. "Pre-request Script")
+ * @param showCursorPosition whether to show the shared editor position indicator
  */
 @kotlinx.serialization.ExperimentalSerializationApi
 @Composable
@@ -25,6 +26,7 @@ fun ScriptEditor(
     script: String,
     onScriptChanged: (String) -> Unit,
     title: String,
+    showCursorPosition: Boolean = true,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         Text(
@@ -46,6 +48,7 @@ fun ScriptEditor(
             enableWordWrap = true,
             enableCopy = true,
             enableDownload = false,
+            showCursorPosition = showCursorPosition,
             placeholder = if (title.contains("Pre-request", ignoreCase = true))
                 PRE_REQUEST_HINT else TEST_HINT,
             testTagPrefix = "script-editor",

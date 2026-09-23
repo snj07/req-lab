@@ -50,6 +50,7 @@ object SettingsRepository {
         settings.scriptPrefix = PlatformStorage.getString(PREFIX + "scriptPrefix") ?: settings.scriptPrefix
         settings.selectedEnvName = PlatformStorage.getString(PREFIX + "selectedEnvName") ?: settings.selectedEnvName
         settings.allowJson5InJsonBodies = getBool("allowJson5InJsonBodies", settings.allowJson5InJsonBodies)
+        settings.showEditorPositionIndicator = getBool("showEditorPositionIndicator", settings.showEditorPositionIndicator)
         settings.environmentDialogWidthDp = getPositiveFloat(
             "environmentDialogWidthDp", DEFAULT_ENVIRONMENT_DIALOG_WIDTH_DP,
         )
@@ -79,6 +80,7 @@ object SettingsRepository {
         PlatformStorage.putString(PREFIX + "scriptPrefix", settings.scriptPrefix)
         PlatformStorage.putString(PREFIX + "selectedEnvName", settings.selectedEnvName)
         putBool("allowJson5InJsonBodies", settings.allowJson5InJsonBodies)
+        putBool("showEditorPositionIndicator", settings.showEditorPositionIndicator)
         putFloat("environmentDialogWidthDp", settings.environmentDialogWidthDp)
         putFloat("environmentDialogHeightDp", settings.environmentDialogHeightDp)
     }

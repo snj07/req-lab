@@ -31,6 +31,7 @@ class SettingsRepositoryTest {
         "settings.scriptPrefix",
         "settings.selectedEnvName",
         "settings.allowJson5InJsonBodies",
+        "settings.showEditorPositionIndicator",
         "settings.environmentDialogWidthDp",
         "settings.environmentDialogHeightDp",
     )
@@ -66,6 +67,7 @@ class SettingsRepositoryTest {
         assertEquals("", settings.httpProxy)
         assertEquals("", settings.httpsProxy)
         assertTrue(settings.allowJson5InJsonBodies)
+        assertFalse(settings.showEditorPositionIndicator)
         assertEquals(720f, settings.environmentDialogWidthDp)
         assertEquals(560f, settings.environmentDialogHeightDp)
     }
@@ -90,6 +92,7 @@ class SettingsRepositoryTest {
             httpsProxy          = "https://proxy.example.com:8443"
             scriptPrefix        = "api"
             allowJson5InJsonBodies = false
+            showEditorPositionIndicator = false
             environmentDialogWidthDp = 840f
             environmentDialogHeightDp = 620f
         }
@@ -114,6 +117,7 @@ class SettingsRepositoryTest {
         assertEquals("https://proxy.example.com:8443", loaded.httpsProxy)
         assertEquals("api", loaded.scriptPrefix)
         assertFalse(loaded.allowJson5InJsonBodies)
+        assertFalse(loaded.showEditorPositionIndicator)
         assertEquals(840f, loaded.environmentDialogWidthDp)
         assertEquals(620f, loaded.environmentDialogHeightDp)
     }
@@ -214,6 +218,18 @@ class SettingsRepositoryTest {
         val on = AppSettings()
         SettingsRepository.load(on)
         assertTrue(on.allowJson5InJsonBodies)
+    }
+
+    @Test
+    fun editor_position_indicator_defaults_off_and_round_trips() {
+        val defaults = AppSettings()
+        SettingsRepository.load(defaults)
+        assertFalse(defaults.showEditorPositionIndicator)
+
+        SettingsRepository.save(AppSettings().apply { showEditorPositionIndicator = true })
+        val shown = AppSettings()
+        SettingsRepository.load(shown)
+        assertTrue(shown.showEditorPositionIndicator)
     }
 
     @Test

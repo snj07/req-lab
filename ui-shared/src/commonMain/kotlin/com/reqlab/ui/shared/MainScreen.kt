@@ -123,7 +123,7 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies" +
+                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies|$showEditorPositionIndicator" +
                     "|$environmentDialogWidthDp|$environmentDialogHeightDp" +
                     "|${state.selectedEnvironment?.name ?: ""}"
             }
@@ -408,7 +408,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                             },
                             second = {
                                 key(tab.id) {
-                                    ResponseViewer(tab)
+                                    ResponseViewer(tab, showCursorPosition = state.settings.showEditorPositionIndicator)
                                 }
                             },
                         )
@@ -430,7 +430,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                             },
                             second = {
                                 key(tab.id) {
-                                    ResponseViewer(tab)
+                                    ResponseViewer(tab, showCursorPosition = state.settings.showEditorPositionIndicator)
                                 }
                             },
                         )

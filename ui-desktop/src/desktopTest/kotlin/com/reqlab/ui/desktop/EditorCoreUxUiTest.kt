@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.ResponseDefinition
+import com.reqlab.core.model.ResponseMetrics
 import com.reqlab.ui.shared.MainScreen
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.RequestEditorTab
@@ -33,10 +35,50 @@ class EditorCoreUxUiTest {
     }
 
     @Test
-    fun status_bar_shows_line_and_column() {
-        composeRule.setContent { MainScreen(openJsonBody("{\n  \"a\": 1\n}")) }
+    fun position_indicator_is_shown_when_enabled() {
+        val state = openJsonBody("{\n  \"a\": 1\n}")
+        composeRule.runOnUiThread { state.settings.showEditorPositionIndicator = true }
+        composeRule.setContent { MainScreen(state) }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("body-editor-status", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("body-editor-position-indicator", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun position_indicator_is_hidden_by_default_for_request_and_response() {
+        val state = openJsonBody("{\n  \"a\": 1\n}")
+        composeRule.runOnUiThread {
+            state.activeTab?.response = ResponseDefinition(
+                requestId = state.activeTab!!.id,
+                statusCode = 200,
+                statusText = "OK",
+                headers = emptyList(),
+                cookies = emptyList(),
+                bodyText = "{\"ok\":true}",
+                contentType = "application/json",
+                executedAtEpochMillis = 0L,
+                metrics = ResponseMetrics(
+                    statusCode = 200,
+                    responseTimeMs = 1,
+                    responseSizeBytes = 11,
+                    dnsMs = -1,
+                    connectMs = -1,
+                    tlsMs = -1,
+                    serverMs = -1,
+                    downloadMs = -1,
+                    ttfbMs = -1,
+                    timeToFirstTokenMs = -1,
+                    timeToLastTokenMs = -1,
+                ),
+            )
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body-editor-position-indicator", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("response-position-indicator", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("body-editor-status", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("response-status", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

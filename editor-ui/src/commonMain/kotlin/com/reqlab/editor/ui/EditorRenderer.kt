@@ -519,8 +519,13 @@ fun EditorRenderer(
             val foldStartSet = remember(state.version, state.foldVersion) {
                 viewModel.foldRegions.associate { it.startLine - 1 to it }
             }
-            val bracketPair = remember(state.cursorOffset, state.version) {
-                matchingBracketOffsets(viewModel.getFullText(), state.cursorOffset)
+            var suppressBracketAtCursor by remember { mutableStateOf<Int?>(null) }
+            val bracketPair = remember(state.cursorOffset, state.version, suppressBracketAtCursor) {
+                bracketMatchForCursor(
+                    text = viewModel.getFullText(),
+                    cursor = state.cursorOffset,
+                    suppressAtCursor = suppressBracketAtCursor,
+                )
             }
             val contentWidthPx = (
                 with(density) { maxWidth.toPx() } -
@@ -824,9 +829,10 @@ fun EditorRenderer(
                                 selStart         = state.selectionStart,
                                 selEnd           = state.selectionEnd,
                                 diagnostics      = state.diagnostics.filter { it.line - 1 == docLine },
-                                onTap            = { abs, extend ->
+                                onTap            = { abs, extend, trailingWhitespace ->
                                     focus.requestFocus()
                                     viewModel.moveCursorTo(abs, extendSelection = extend)
+                                    suppressBracketAtCursor = if (trailingWhitespace) abs else null
                                     onPrimaryTapOffset?.invoke(abs)
                                 },
                                 onDragTo         = { abs ->
