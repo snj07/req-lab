@@ -31,6 +31,9 @@ class SettingsRepositoryTest {
         "settings.scriptPrefix",
         "settings.selectedEnvName",
         "settings.allowJson5InJsonBodies",
+        "settings.showEditorPositionIndicator",
+        "settings.environmentDialogWidthDp",
+        "settings.environmentDialogHeightDp",
     )
 
     @Before
@@ -64,6 +67,9 @@ class SettingsRepositoryTest {
         assertEquals("", settings.httpProxy)
         assertEquals("", settings.httpsProxy)
         assertTrue(settings.allowJson5InJsonBodies)
+        assertFalse(settings.showEditorPositionIndicator)
+        assertEquals(720f, settings.environmentDialogWidthDp)
+        assertEquals(560f, settings.environmentDialogHeightDp)
     }
 
     // ── Round-trip ──────────────────────────────────────────────────────────
@@ -86,6 +92,9 @@ class SettingsRepositoryTest {
             httpsProxy          = "https://proxy.example.com:8443"
             scriptPrefix        = "api"
             allowJson5InJsonBodies = false
+            showEditorPositionIndicator = false
+            environmentDialogWidthDp = 840f
+            environmentDialogHeightDp = 620f
         }
 
         SettingsRepository.save(original)
@@ -108,6 +117,9 @@ class SettingsRepositoryTest {
         assertEquals("https://proxy.example.com:8443", loaded.httpsProxy)
         assertEquals("api", loaded.scriptPrefix)
         assertFalse(loaded.allowJson5InJsonBodies)
+        assertFalse(loaded.showEditorPositionIndicator)
+        assertEquals(840f, loaded.environmentDialogWidthDp)
+        assertEquals(620f, loaded.environmentDialogHeightDp)
     }
 
     // ── Theme enum ──────────────────────────────────────────────────────────
@@ -209,6 +221,18 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun editor_position_indicator_defaults_off_and_round_trips() {
+        val defaults = AppSettings()
+        SettingsRepository.load(defaults)
+        assertFalse(defaults.showEditorPositionIndicator)
+
+        SettingsRepository.save(AppSettings().apply { showEditorPositionIndicator = true })
+        val shown = AppSettings()
+        SettingsRepository.load(shown)
+        assertTrue(shown.showEditorPositionIndicator)
+    }
+
+    @Test
     fun selected_env_name_survives_full_settings_round_trip() {
         val original = AppSettings().apply {
             theme = AppTheme.LIGHT
@@ -223,5 +247,46 @@ class SettingsRepositoryTest {
         assertEquals(AppTheme.LIGHT, loaded.theme)
         assertEquals("api", loaded.scriptPrefix)
         assertEquals("Production", loaded.selectedEnvName)
+    }
+
+    @Test
+    fun environment_dialog_size_round_trips() {
+        SettingsRepository.save(
+            AppSettings().apply {
+                environmentDialogWidthDp = 812f
+                environmentDialogHeightDp = 533f
+            },
+        )
+        val loaded = AppSettings()
+        SettingsRepository.load(loaded)
+        assertEquals(812f, loaded.environmentDialogWidthDp)
+        assertEquals(533f, loaded.environmentDialogHeightDp)
+    }
+
+    @Test
+    fun invalid_environment_dialog_size_falls_back_to_defaults() {
+        PlatformStorage.putString("settings.environmentDialogWidthDp", "not-a-number")
+        PlatformStorage.putString("settings.environmentDialogHeightDp", "-40")
+        val settings = AppSettings()
+        SettingsRepository.load(settings)
+        assertEquals(720f, settings.environmentDialogWidthDp)
+        assertEquals(560f, settings.environmentDialogHeightDp)
+    }
+
+    @Test
+    fun non_positive_or_non_finite_environment_dialog_size_falls_back_to_defaults() {
+        PlatformStorage.putString("settings.environmentDialogWidthDp", "0")
+        PlatformStorage.putString("settings.environmentDialogHeightDp", "NaN")
+        val zeroAndNan = AppSettings()
+        SettingsRepository.load(zeroAndNan)
+        assertEquals(720f, zeroAndNan.environmentDialogWidthDp)
+        assertEquals(560f, zeroAndNan.environmentDialogHeightDp)
+
+        PlatformStorage.putString("settings.environmentDialogWidthDp", "Infinity")
+        PlatformStorage.putString("settings.environmentDialogHeightDp", "-Infinity")
+        val inf = AppSettings()
+        SettingsRepository.load(inf)
+        assertEquals(720f, inf.environmentDialogWidthDp)
+        assertEquals(560f, inf.environmentDialogHeightDp)
     }
 }

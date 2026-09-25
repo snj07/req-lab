@@ -1,12 +1,28 @@
-# MCP in ReqLab
+# Model Context Protocol (MCP) in ReqLab
 
-ReqLab is an [MCP](https://modelcontextprotocol.io/) client in the same workspace as REST: collections, environments, `{{variables}}`, auth, and a shared Response pane. You save an MCP connection, Connect, then call tools, read resources, and fill prompts — with the JSON-RPC session visible when you need to debug.
+ReqLab is a local-first [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) **client**. It lets you configure, inspect, and exercise MCP servers beside the HTTP APIs they depend on—using the same collections, environments, `{{variables}}`, authentication editors, and response tooling.
 
-This page is the product guide. The local mock server, PATH shim, and e2e commands live in [DEVELOPMENT.md](../DEVELOPMENT.md) and [docs/tests.md](tests.md).
+Save a connection, connect to the server, and work with its tools, resources, and prompts. When something needs diagnosing, the session's JSON-RPC traffic remains available in Activity without mixing it into script output.
+
+> **Scope:** ReqLab connects to MCP servers; it does not expose an MCP server. It supports MCP 2025-06-18 over Streamable HTTP and stdio, plus the 2024-11-05 legacy HTTP+SSE transport.
+
+This is the product guide. For the local mock server, PATH shim, and end-to-end commands, see [DEVELOPMENT.md](../DEVELOPMENT.md) and [the test guide](tests.md).
 
 ---
 
-## What you can do
+## Quick start
+
+1. Create a connection from the sidebar: **Add → MCP connection**.
+2. In **Client**, select **HTTP** or **stdio**. For an HTTP server, start with **Auto**; it tries the current Streamable HTTP transport and falls back to legacy HTTP+SSE when appropriate.
+3. Enter the server URL or desktop stdio command. Variables resolve here just as they do in HTTP requests.
+4. Click **Connect**. Confirm before ReqLab starts a local stdio process.
+5. Select a tool, resource, or prompt. Results open in the shared Response pane; use **Activity** for the complete protocol exchange.
+
+If you change connection settings while connected, reconnect before testing again.
+
+---
+
+## Capabilities at a glance
 
 | Area | In the workspace |
 |---|---|
@@ -20,27 +36,29 @@ This page is the product guide. The local mock server, PATH shim, and e2e comman
 | Activity | Per-session JSON-RPC inspector (SENT / RECEIVED / NOTIFICATION / STATE / ERROR), expand payload, copy, Clear |
 | Logs | Bottom **Logs** tab: one-line MCP summaries. **Console** is scripts and app messages only |
 | Client callbacks | Sampling (mock or review + optional LLM), roots list, elicitation form, ping (always handled) |
-| Persistence | Collection item `kind: MCP`; import/export of transport, HTTP mode, headers, auth, roots, sampling, elicitation |
+| Persistence | Collection item `kind: MCP`; import/export of transport, HTTP mode, headers, auth, roots, sampling, and elicitation settings |
 
-The Response pane is the same viewer as REST (status, timing, size, pretty JSON). Nested JSON stored as a string is unwrapped for display. MCP responses have no cookie jar, so the Cookies tab is omitted.
+The Response pane is the same viewer as REST (status, timing, size, and pretty JSON). Nested JSON stored as a string is unwrapped for display. ReqLab does not show a Cookies tab for MCP responses.
 
 ---
 
-## Workspace tour
+## Connection lifecycle
 
-1. Add an MCP connection from the sidebar (**Add → MCP connection**) or open a collection item with the **MCP** badge.
-2. On the **Client** tab, choose **HTTP** or **stdio** (stdio is desktop-only). For HTTP, pick **Auto**, **2025-06-18**, or **Legacy**.
-3. Put the URL or command in the top bar (`{{variable}}` interpolation, same as REST).
-4. Confirm stdio if prompted — ReqLab starts a local process.
-5. Click **Connect**. Status goes Connecting → Connected (or Error). The session stays up when you switch tabs and disconnects when you close the MCP tab.
-6. When connected, the bar shows the negotiated protocol, HTTP mode, and server name, plus a **Session ID** (a UUID shows in full; longer ids truncate with `…`). Copy copies the complete id.
-7. Use **Tools**, **Resources**, and **Prompts**. `⌘/Ctrl+Enter` runs or stops the selected tool, resource read, or prompt — not only tools. Results open in Response.
+An MCP tab retains its active session while you work elsewhere in ReqLab. It disconnects when you close the tab or select **Disconnect**.
+
+- Open an MCP collection item (identified by an **MCP** badge), then choose **HTTP** or desktop **stdio** in the **Client** tab. HTTP exposes **Auto**, **2025-06-18**, and **Legacy** modes.
+- Put the URL or command in the top bar. `{{variable}}` interpolation works here, including in headers and configured authentication.
+- Select **Connect**. Status progresses through Connecting to Connected or Error.
+- While connected, the bar displays the negotiated protocol, HTTP mode, server name, and a copyable **Session ID**. A UUID is shown in full; longer identifiers are visually shortened without changing what Copy returns.
+- `⌘/Ctrl+Enter` runs or stops the selected tool, resource read, or prompt—not only a tool call. Results open in Response.
 
 Reconnect if Client-tab settings change while you are connected (transport, URL/command, auth, headers, sampling, LLM, roots, elicitation).
 
 ---
 
-## Tools
+## Work with server capabilities
+
+### Tools
 
 Pick a tool, fill arguments, Run. The screenshot is a connected Streamable HTTP session calling `add` with JSON arguments; the Response body is the JSON-RPC result.
 
@@ -52,18 +70,12 @@ Pick a tool, fill arguments, Run. The screenshot is a connected Streamable HTTP 
 - **Run** / **Stop** sit on the tool pane. Stop cancels the in-flight call in ReqLab (it does not send a protocol cancel notification).
 - Success and tool errors use the shared Response viewer.
 
-Try it locally: start the sample server (`./gradlew :sample-server:run`), import the test collection, open an MCP item, Connect, select a tool, Run. Mock URLs and tools are listed in [DEVELOPMENT.md](../DEVELOPMENT.md).
-
----
-
-## Resources
+### Resources
 
 - Search the list, select a resource, **Read**. Contents appear in Response.
 - If the server advertises `resources.subscribe`, **Subscribe** asks it to notify on change. ReqLab re-reads subscribed URIs on `notifications/resources/updated` and shows the new contents in Response. **Unsubscribe** stops that.
 
----
-
-## Prompts
+### Prompts
 
 - Search, select a prompt, fill arguments (Form or JSON), **Get prompt**.
 - Rendered messages open in Response.
@@ -86,7 +98,7 @@ Use Activity when you need the payload; use Logs for a compact trail.
 
 ## Client tab: how ReqLab answers the server
 
-Servers may call **back** into the client. Settings are stored on the tab and round-trip in collection JSON.
+Servers can call **back** into the client. Configure how ReqLab responds before connecting; these settings are stored on the tab and round-trip in collection JSON.
 
 ### Connection
 
@@ -103,6 +115,8 @@ Servers may call **back** into the client. Settings are stored on the tab and ro
 | Auto-accept elicitation **off** | Schema form in Response; Accept or Decline. |
 
 Ping has no switch: ReqLab always answers `ping` with an empty result.
+
+For unfamiliar servers, leave automatic sampling and elicitation disabled. That keeps each server-initiated request visible for review before ReqLab responds.
 
 ### Roots
 
@@ -134,7 +148,21 @@ OAuth 2.1 is not an Auth-tab option yet. If a server expects a bearer token you 
 
 HTTP example (test environment): `{{mcpBaseUrl}}` → `http://localhost:8080/mcp`. Legacy: `{{mcpLegacyUrl}}` → `http://localhost:8080/mcp/sse`.
 
-stdio is a **full command line** (executable plus arguments), for example `npx -y @modelcontextprotocol/server-everything` or `sample-server` after the PATH shim. Quoted paths with spaces work. How ReqLab resolves PATH and installs the sample shim: [DEVELOPMENT.md](../DEVELOPMENT.md).
+stdio is a **full command line** (executable plus arguments), for example `npx -y @modelcontextprotocol/server-everything` or `sample-server` after the PATH shim. Quoted paths with spaces work. Because the command starts a local process, ReqLab asks for confirmation before connecting. Review the resolved command and its variables before approving it. How ReqLab resolves PATH and installs the sample shim: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
+---
+
+## Troubleshooting a connection
+
+| Symptom | What to check |
+|---|---|
+| Connection fails immediately | Confirm the URL or stdio command after variable resolution. For HTTP, begin with **Auto** unless the server documents a specific transport. |
+| A server connects but calls fail | Open **Activity** to inspect the JSON-RPC request and response, then use **Logs** for the chronological connection trail. |
+| A setting change has no effect | Disconnect and reconnect after changing transport, URL/command, auth, headers, sampling, LLM, roots, or elicitation settings. |
+| Resource updates do not arrive | The server must advertise `resources.subscribe`; subscribe to the resource before it sends `notifications/resources/updated`. |
+| A local command does not start | Confirm the executable is on PATH, quote paths containing spaces, and review the stdio command confirmation. |
+
+Activity is the source of truth for protocol payloads. **Console** intentionally contains script output and app messages, not MCP wire traffic.
 
 ---
 

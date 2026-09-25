@@ -253,6 +253,16 @@ class McpClient(
         }
     }
 
+    suspend fun cancelInFlight(reason: String? = "cancelled") {
+        val ids = pendingMutex.withLock { pending.keys.toList() }
+        ids.forEach { cancel(it, reason) }
+    }
+
+    fun updateRoots(roots: List<McpRoot>) {
+        config = config.copy(roots = roots)
+        handlers.onRoots = { config.roots }
+    }
+
     suspend fun notifyRootsChanged() {
         notify("notifications/roots/list_changed", null)
     }
@@ -293,7 +303,7 @@ class McpClient(
         val params = McpInitializeParams(
             protocolVersion = MCP_PROTOCOL_VERSION,
             capabilities = McpClientCapabilities(),
-            clientInfo = McpImplementation(name = "ReqLab", version = "1.18.0"),
+            clientInfo = McpImplementation(name = "ReqLab", version = "1.19.0"),
         )
         val result = try {
             request<McpInitializeResult>("initialize", encodeParams(params))

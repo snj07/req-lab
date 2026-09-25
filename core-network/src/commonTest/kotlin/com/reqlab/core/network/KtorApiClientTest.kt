@@ -1,6 +1,10 @@
 package com.reqlab.core.network
 
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.AuthConfig
+import com.reqlab.core.model.AuthType
+import com.reqlab.core.model.FormDataEntry
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.GraphQlBody
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
@@ -18,12 +22,130 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class KtorApiClientTest {
+
+    @Test
+    fun explicit_api_key_placement_precedes_legacy_map_and_invalid_defaults_to_header() = runTest {
+        val captures = mutableListOf<Pair<String?, String?>>()
+        val engine = MockEngine { request ->
+            captures += request.url.parameters["api_key"] to request.headers["api_key"]
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        suspend fun execute(auth: AuthConfig) {
+            apiClient.execute(
+                RequestDefinition(
+                    id = "auth-${captures.size}", name = "auth", method = HttpMethodType.GET,
+                    url = "https://api.test/auth", auth = auth,
+                    createdAtEpochMillis = 1L, updatedAtEpochMillis = 1L,
+                ),
+            ).toList()
+        }
+
+        execute(AuthConfig(AuthType.API_KEY, mapOf("key" to "api_key", "value" to "one", "placement" to "query"), placement = "header"))
+        execute(AuthConfig(AuthType.API_KEY, mapOf("key" to "api_key", "value" to "two", "placement" to "query")))
+        execute(AuthConfig(AuthType.API_KEY, mapOf("key" to "api_key", "value" to "three"), placement = "invalid"))
+
+        assertEquals(null to "one", captures[0])
+        assertEquals("two" to null, captures[1])
+        assertEquals(null to "three", captures[2])
+    }
+
+    @Test
+    fun disabled_cookies_do_not_send_cookie_header() = runTest {
+        val cookieHeaders = mutableListOf<String?>()
+        val engine = MockEngine { request ->
+            cookieHeaders += request.headers[HttpHeaders.Cookie]
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        apiClient.execute(
+            RequestDefinition(
+                id = "cookies-disabled",
+                name = "cookies",
+                method = HttpMethodType.GET,
+                url = "https://api.test/cookies",
+                cookies = listOf(
+                    KeyValueEntry("session", "abc", enabled = false),
+                    KeyValueEntry("theme", "dark", enabled = false),
+                ),
+                createdAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L,
+            ),
+        ).toList()
+
+        assertEquals(1, cookieHeaders.size)
+        assertEquals(null, cookieHeaders.single(), "Cookie header must be omitted when no cookie is enabled")
+    }
+
+    @Test
+    fun enabled_cookies_are_sent_and_disabled_ones_are_omitted() = runTest {
+        val cookieHeaders = mutableListOf<String?>()
+        val engine = MockEngine { request ->
+            cookieHeaders += request.headers[HttpHeaders.Cookie]
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        apiClient.execute(
+            RequestDefinition(
+                id = "cookies-mixed",
+                name = "cookies",
+                method = HttpMethodType.GET,
+                url = "https://api.test/cookies",
+                cookies = listOf(
+                    KeyValueEntry("session", "abc", enabled = true),
+                    KeyValueEntry("theme", "dark", enabled = false),
+                ),
+                createdAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L,
+            ),
+        ).toList()
+
+        assertEquals("session=abc", cookieHeaders.single())
+    }
+
+    @Test
+    fun invalid_url_does_not_retry() = runTest {
+        var engineHits = 0
+        val engine = MockEngine {
+            engineHits++
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(engine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 3, baseDelayMs = 0L, maxDelayMs = 0L),
+        )
+        val events = apiClient.execute(
+            RequestDefinition(
+                id = "bad-url",
+                name = "bad url",
+                method = HttpMethodType.GET,
+                url = "::::",
+                createdAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L,
+            ),
+        ).toList()
+
+        assertEquals(0, engineHits, "Client-side URL errors must never hit the engine")
+        assertEquals(0, events.count { it is NetworkEvent.RetryScheduled }, "Invalid URL must not be retried")
+        assertTrue(events.last() is NetworkEvent.Failure)
+    }
 
     @Test
     fun emits_success_event_for_200_response() = runTest {
@@ -114,6 +236,35 @@ class KtorApiClientTest {
     }
 
     @Test
+    fun preserves_repeated_query_parameter_values_in_order() = runTest {
+        var capturedValues: List<String>? = null
+        val mockEngine = MockEngine { request ->
+            capturedValues = request.url.parameters.getAll("x")
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(mockEngine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        val request = RequestDefinition(
+            id = "req-repeated-query",
+            name = "Repeated query values",
+            method = HttpMethodType.GET,
+            url = "https://api.test/echo-query",
+            queryParams = listOf(
+                KeyValueEntry("x", "1"),
+                KeyValueEntry("x", "2"),
+            ),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+
+        apiClient.execute(request).toList()
+
+        assertEquals(listOf("1", "2"), capturedValues)
+    }
+
+    @Test
     fun success_response_includes_timing_metrics() = runTest {
         val mockEngine = MockEngine { _ ->
             respond(
@@ -199,6 +350,50 @@ class KtorApiClientTest {
         assertTrue(
             capturedBody.contains("name") && capturedBody.contains("alice") && capturedBody.contains("role") && capturedBody.contains("tester"),
             "Multipart payload should contain form fields, got '$capturedBody'",
+        )
+    }
+
+    @Test
+    fun form_data_file_entry_is_sent_as_multipart_file_part() = runTest {
+        var capturedBody = ""
+        val mockEngine = MockEngine { request ->
+            capturedBody = request.body.toByteArray().decodeToString()
+            respond(content = "ok", status = HttpStatusCode.OK)
+        }
+        val apiClient = KtorApiClient(
+            httpClient = HttpClient(mockEngine) { expectSuccess = false },
+            retryPolicy = RetryPolicy(maxAttempts = 1),
+        )
+        val request = RequestDefinition(
+            id = "req-form-file",
+            name = "Multipart file",
+            method = HttpMethodType.POST,
+            url = "https://api.test/upload",
+            body = RequestBody(
+                type = BodyType.FORM_DATA,
+                formDataEntries = listOf(
+                    FormDataEntry(key = "title", type = FormEntryType.TEXT, value = "notes"),
+                    FormDataEntry(
+                        key = "upload",
+                        type = FormEntryType.FILE,
+                        value = "note.txt",
+                        bytesBase64 = "aGVsbG8tZmlsZQ==",
+                    ),
+                ),
+            ),
+            createdAtEpochMillis = 1L,
+            updatedAtEpochMillis = 1L,
+        )
+
+        apiClient.execute(request).toList()
+
+        assertTrue(
+            capturedBody.contains("filename=") && capturedBody.contains("note.txt"),
+            "FILE rows must be a multipart file part with filename, got '$capturedBody'",
+        )
+        assertTrue(
+            capturedBody.contains("hello-file"),
+            "FILE part must carry decoded bytes, not the filename as text. Body: '$capturedBody'",
         )
     }
 
@@ -434,6 +629,22 @@ class KtorApiClientTest {
         assertTrue(!capturedBody.contains("//"), capturedBody)
         assertTrue(capturedBody.contains("\"id\""), capturedBody)
         assertTrue(capturedBody.contains("1"), capturedBody)
+    }
+
+    @Test
+    fun shared_graphql_envelope_encodes_query_operation_and_variables() {
+        val payload = encodeGraphQlEnvelope(
+            GraphQlBody(
+                query = "query Named { user(id: \"{{id}}\") { id } }",
+                operationName = "Named",
+                variablesJson = "{id: \"{{id}}\",}",
+            ),
+            listOf(mapOf("id" to "a+b")),
+        )
+        val parsed = Json.parseToJsonElement(payload).jsonObject
+        assertEquals("query Named { user(id: \"a+b\") { id } }", parsed["query"]?.jsonPrimitive?.content)
+        assertEquals("Named", parsed["operationName"]?.jsonPrimitive?.content)
+        assertEquals("a+b", parsed["variables"]?.jsonObject?.get("id")?.jsonPrimitive?.content)
     }
 
     private fun capturingClient(

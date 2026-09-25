@@ -17,6 +17,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -479,5 +480,12 @@ class ReadOnlyFormatOffloadTest {
         assertTrue(!shouldOffloadReadOnlyFormat(READ_ONLY_FORMAT_OFFLOAD_CHARS))
         assertTrue(!shouldOffloadReadOnlyFormat(1))
         assertTrue(shouldOffloadReadOnlyFormat(READ_ONLY_FORMAT_OFFLOAD_CHARS + 1))
+    }
+
+    @Test
+    fun shouldAutoPrettyPrintReadOnly_skips_large_payloads() {
+        assertTrue(shouldAutoPrettyPrintReadOnly(1))
+        assertTrue(shouldAutoPrettyPrintReadOnly(READ_ONLY_FORMAT_OFFLOAD_CHARS))
+        assertFalse(shouldAutoPrettyPrintReadOnly(READ_ONLY_FORMAT_OFFLOAD_CHARS + 1))
     }
 }

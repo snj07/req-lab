@@ -310,8 +310,8 @@ GitHub Actions release packaging is defined in [`.github/workflows/release.yml`]
 - **Push tag `v*`** — runs the same quality gate, then builds artifacts and publishes a GitHub release.
 - **Manual dispatch** — allows on-demand artifact builds.
 ```
-git tag -a v1.18.0 -m "<MSG>"
-git push origin v1.18.0
+git tag -a v1.19.0 -m "<MSG>"
+git push origin v1.19.0
 ```
 ---
 

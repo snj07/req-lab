@@ -50,17 +50,17 @@ ReqLab features a full-featured code editor used across request body editing, sc
 - JavaScript (keywords, builtins, strings, comments, numbers, operators)
 - Plain text (default)
 
-**Code Folding** (response viewer) — Collapse and expand regions:
+**Code Folding** — Collapse and expand regions in body, script, and response editors:
 - Brace-based folding for JSON, JavaScript, and GraphQL (`{ }`, `[ ]`)
 - Tag-based folding for XML and HTML (`<tag>...</tag>`)
 - Multi-line comment folding (`/* ... */`, `<!-- ... -->`)
 - Fold All / Unfold All toolbar controls
 - Fold marker badges showing hidden line count
 
-**Search / Find** — In-editor text search:
-- Case-insensitive search with match count
-- Previous / Next match navigation with active match highlighting
-- Keyboard-driven toggle (toolbar button)
+**Find / Replace** — In-editor search:
+- Case-insensitive find with match count and active-match highlighting
+- Previous / Next (`F3` / `Shift+F3`); `Esc` closes the bar
+- Replace and Replace All in editable editors (one undo step)
 
 **Formatting** — Auto-format source code:
 - JSON pretty-print (indented with 2-space indent). With JSON5 on, Format pretty-prints JSON5 and keeps comments, unquoted keys, single quotes, and trailing commas; Send still converts to strict JSON. With JSON5 off, Format is a no-op on invalid JSON.
@@ -70,6 +70,11 @@ ReqLab features a full-featured code editor used across request body editing, sc
 
 **Editor Features**:
 - Line numbers gutter (all editor modes)
+- Indent guides every 2 spaces; matching `()[]{}` highlight at the caret
+- Go to line (`Cmd/Ctrl+G`); status strip `Ln X, Col Y`
+- Duplicate / move / comment / select current line (see [docs/shortcuts.md](docs/shortcuts.md))
+- Diagnostic tick in the gutter with hover tooltip and status-bar message
+- Truncation banner when a line exceeds 50,000 characters
 - Word wrap toggle
 - Copy to clipboard (toolbar button)
 - Download to file (response viewer)

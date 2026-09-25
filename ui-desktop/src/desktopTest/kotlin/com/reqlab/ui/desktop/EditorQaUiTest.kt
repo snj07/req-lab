@@ -15,6 +15,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.dp
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.ResponseDefinition
@@ -816,6 +817,33 @@ class FoldIndicatorTest {
 
         composeRule.onNodeWithTag("body-editor-fold-indicator-0", useUnmergedTree = true)
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun fold_indicator_hit_box_is_at_least_20_dp() {
+        val state = AppState()
+        val json = "{\n  \"key\": \"value\",\n  \"num\": 42\n}"
+        composeRule.runOnUiThread {
+            state.activeTab?.bodyType = BodyType.JSON
+            state.activeTab?.bodyContent = json
+            state.activeTab?.selectedEditorTab = RequestEditorTab.BODY
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        val node = composeRule
+            .onNodeWithTag("body-editor-fold-indicator-0", useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val widthDp = with(composeRule.density) { node.size.width.toDp() }
+        val heightDp = with(composeRule.density) { node.size.height.toDp() }
+        assertTrue(
+            widthDp >= 20.dp,
+            "Fold indicator width ($widthDp) must be at least 20.dp so the chevron is hittable",
+        )
+        assertTrue(
+            heightDp >= 20.dp,
+            "Fold indicator height ($heightDp) must be at least 20.dp so the chevron is hittable",
+        )
     }
 
     @Test

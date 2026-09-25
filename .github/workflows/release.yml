@@ -247,12 +247,29 @@ jobs:
           fi
           echo "Tag matches gradle.properties appVersion: ${PROP_VER}"
 
+      # Publish the curated notes for this exact version, not only GitHub's
+      # commit-message summary. A missing section is a release-time failure.
+      - name: Extract release notes from changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v version="${VERSION}" '
+            $0 ~ "^## \\[" version "\\]" { in_section = 1; next }
+            in_section && /^## \[/ { exit }
+            in_section { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [[ ! -s RELEASE_NOTES.md ]]; then
+            echo "ERROR: no CHANGELOG.md section found for ${VERSION}"
+            exit 1
+          fi
+
       # Create the release and attach all artifacts
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           name: "ReqLab ${{ github.ref_name }}"
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: false
           fail_on_unmatched_files: true
           files: |
             artifacts/*.dmg

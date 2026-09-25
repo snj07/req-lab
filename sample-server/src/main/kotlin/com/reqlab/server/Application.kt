@@ -45,6 +45,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -338,6 +340,7 @@ fun Application.module() {
         get("/api/echo-query") {
             val params = call.request.queryParameters
             call.respond(buildJsonObject {
+                put("apiKeyHeader", call.request.header("api_key") ?: "")
                 put("paramCounts", buildJsonObject {
                     params.names().forEach { name ->
                         put(name, params.getAll(name)?.size ?: 0)
@@ -346,6 +349,13 @@ fun Application.module() {
                 put("params", buildJsonObject {
                     params.names().forEach { name ->
                         put(name, params[name] ?: "")
+                    }
+                })
+                put("paramValues", buildJsonObject {
+                    params.names().forEach { name ->
+                        put(name, buildJsonArray {
+                            params.getAll(name).orEmpty().forEach { value -> add(value) }
+                        })
                     }
                 })
             })
@@ -383,6 +393,11 @@ fun Application.module() {
             call.respond(buildJsonObject {
                 put("message", "Received headers echoed below")
                 put("receivedHeaders", headers)
+                put("receivedHeaderValues", buildJsonObject {
+                    call.request.headers.entries().forEach { (key, values) ->
+                        put(key, buildJsonArray { values.forEach { value -> add(value) } })
+                    }
+                })
             })
         }
 
@@ -399,12 +414,16 @@ fun Application.module() {
 
         post("/api/graphql") {
             val body = call.receiveText()
+            val envelope = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull()
             val userId = Regex(""""id"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1) ?: "1"
             val operationName = Regex(""""operationName"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)
                 ?: if (body.contains("user", ignoreCase = true)) "user" else "query"
             call.respond(buildJsonObject {
                 put("message", "GraphQL request received")
                 put("contentType", call.request.header("Content-Type") ?: "")
+                put("receivedQuery", envelope?.get("query")?.jsonPrimitive?.content ?: "")
+                put("receivedVariables", envelope?.get("variables") ?: JsonNull)
+                put("receivedOperationName", envelope?.get("operationName") ?: JsonNull)
                 put("data", buildJsonObject {
                     put("user", buildJsonObject {
                         put("id", userId)

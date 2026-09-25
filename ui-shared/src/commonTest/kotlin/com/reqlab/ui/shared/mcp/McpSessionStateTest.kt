@@ -411,4 +411,116 @@ class McpSessionStateTest {
             ),
         )
     }
+
+    @Test
+    fun stop_sends_cancelled_notification_for_in_flight_tool_call() = runTest {
+        val inbound = Channel<String>(Channel.UNLIMITED)
+        val written = Channel<String>(Channel.UNLIMITED)
+        val transport = NdjsonStdioTransport(this, inbound, { written.send(it) })
+        val session = McpSessionState(this) { scope ->
+            McpClient(scope, stdioFactory = { transport }, callTimeoutMs = 5_000)
+        }
+        session.confirmStdio = true
+        val job = async {
+            session.connect(McpConnectionConfig(transport = McpTransportType.STDIO, command = "x"))
+        }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"s","version":"1"}}}""")
+        written.receive()
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"slow","inputSchema":{"type":"object"}}]}}""")
+        job.await()
+
+        val call = async { session.callSelectedTool("slow", null) }
+        val callLine = written.receive()
+        assertTrue(callLine.contains("tools/call"), callLine)
+        session.cancelCall()
+        val cancelLine = withTimeout(5_000) { written.receive() }
+        assertTrue(cancelLine.contains("notifications/cancelled"), cancelLine)
+        assertTrue(cancelLine.contains("requestId"), cancelLine)
+        runCatching { call.await() }
+        session.disconnect()
+    }
+
+    @Test
+    fun tools_list_changed_refreshes_tool_list() = runTest {
+        val inbound = Channel<String>(Channel.UNLIMITED)
+        val written = Channel<String>(Channel.UNLIMITED)
+        val transport = NdjsonStdioTransport(this, inbound, { written.send(it) })
+        val session = McpSessionState(this) { scope ->
+            McpClient(scope, stdioFactory = { transport }, callTimeoutMs = 5_000)
+        }
+        session.confirmStdio = true
+        val job = async {
+            session.connect(McpConnectionConfig(transport = McpTransportType.STDIO, command = "x"))
+        }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"s","version":"1"}}}""")
+        written.receive()
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}}]}}""")
+        job.await()
+        assertEquals(listOf("echo"), session.tools.value.map { it.name })
+
+        inbound.send("""{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}""")
+        val listLine = withTimeout(5_000) { written.receive() }
+        assertTrue(listLine.contains("tools/list"), listLine)
+        inbound.send("""{"jsonrpc":"2.0","id":3,"result":{"tools":[{"name":"ping","inputSchema":{"type":"object"}}]}}""")
+        withTimeout(5_000) {
+            session.tools.first { tools -> tools.any { it.name == "ping" } }
+        }
+        session.disconnect()
+    }
+
+    @Test
+    fun tool_call_includes_progress_token() = runTest {
+        val inbound = Channel<String>(Channel.UNLIMITED)
+        val written = Channel<String>(Channel.UNLIMITED)
+        val transport = NdjsonStdioTransport(this, inbound, { written.send(it) })
+        val session = McpSessionState(this) { scope ->
+            McpClient(scope, stdioFactory = { transport }, callTimeoutMs = 5_000)
+        }
+        session.confirmStdio = true
+        val job = async {
+            session.connect(McpConnectionConfig(transport = McpTransportType.STDIO, command = "x"))
+        }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"s","version":"1"}}}""")
+        written.receive()
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}}]}}""")
+        job.await()
+
+        val call = async { session.callSelectedTool("echo", buildJsonObject { put("text", "hi") }) }
+        val callLine = written.receive()
+        assertTrue(callLine.contains("progressToken"), callLine)
+        inbound.send("""{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"ok"}],"isError":false}}""")
+        call.await()
+        session.disconnect()
+    }
+
+    @Test
+    fun roots_edit_notifies_server() = runTest {
+        val inbound = Channel<String>(Channel.UNLIMITED)
+        val written = Channel<String>(Channel.UNLIMITED)
+        val transport = NdjsonStdioTransport(this, inbound, { written.send(it) })
+        val session = McpSessionState(this) { scope ->
+            McpClient(scope, stdioFactory = { transport }, callTimeoutMs = 5_000)
+        }
+        session.confirmStdio = true
+        val job = async {
+            session.connect(McpConnectionConfig(transport = McpTransportType.STDIO, command = "x"))
+        }
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"s","version":"1"}}}""")
+        written.receive()
+        written.receive()
+        inbound.send("""{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}""")
+        job.await()
+
+        session.notifyRootsEdited(listOf(com.reqlab.core.model.McpRoot("file:///tmp", "tmp")))
+        val notifyLine = withTimeout(5_000) { written.receive() }
+        assertTrue(notifyLine.contains("notifications/roots/list_changed"), notifyLine)
+        session.disconnect()
+    }
 }

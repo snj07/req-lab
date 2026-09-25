@@ -6,17 +6,15 @@ package com.reqlab.editor.core
  * Mirrors Scintilla's CellBuffer style array + endStyled high-water mark:
  *  - [endStyled] is the char offset up to which styling is valid.
  *  - On any edit at position P call [invalidateFrom](P) → O(1).
- *  - The IdleLexer calls [applyStyle] from a background coroutine.
+ *  - The IdleLexer calls [applyStyle] on a private buffer from a background coroutine,
+ *    then publishes current-revision chunks with [copyRangeFrom].
  *  - The UI reads [styleAt] / [nextStyleChangeAfter] only for visible lines.
  *
- * Thread-safety contract (no explicit locks):
+ * Thread-safety contract:
  *  - [invalidateFrom] is called from the UI thread.
- *  - [applyStyle] / [grow] are called from a background coroutine (Dispatchers.Default).
- *  - A StateFlow update in [EditorViewModel] acts as the memory barrier: the
- *    background coroutine updates [styleClock] via the StateFlow, so the UI thread's
- *    next StateFlow read sees all preceding style writes (JVM happens-before chain).
- *  - Benign races on individual style bytes cause at most a one-frame stale colour,
- *    which is imperceptible and self-corrects on the next style update.
+ *  - Tokenization writes only to a private buffer on Dispatchers.Default.
+ *  - Publication and invalidation share the UI dispatcher when available;
+ *    plain JVM tests without a Main dispatcher use the default dispatcher fallback.
  */
 class StyleBuffer(initialCapacity: Int) {
 
@@ -75,6 +73,17 @@ class StyleBuffer(initialCapacity: Int) {
         styles = ByteArray(maxOf(newSize, styles.size * 2)) { i ->
             if (i < old.size) old[i] else TokenType.PLAIN.ordinal.toByte()
         }
+    }
+
+    /** Publish a completed lexer chunk from a private snapshot buffer. */
+    fun copyRangeFrom(source: StyleBuffer, from: Int, to: Int) {
+        val start = from.coerceAtLeast(0)
+        val end = to.coerceAtMost(source.styles.size)
+        if (start >= end) return
+        grow(end)
+        source.styles.copyInto(styles, start, start, end)
+        endStyled = maxOf(endStyled, end)
+        styleClock++
     }
 
     /**

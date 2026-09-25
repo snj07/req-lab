@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.platform.LocalDensity
@@ -29,6 +30,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -54,7 +57,7 @@ internal fun LineView(
     selStart: Int,
     selEnd: Int,
     diagnostics: List<InlineEditorError>,
-    onTap: (absoluteOffset: Int, extendSelection: Boolean) -> Unit,
+    onTap: (absoluteOffset: Int, extendSelection: Boolean, trailingWhitespace: Boolean) -> Unit,
     onDragTo: ((absoluteOffset: Int) -> Unit)? = null,
     // onWordSelect = { abs ->
     //     viewModel.selectWordAt(abs)
@@ -80,6 +83,8 @@ internal fun LineView(
      * Applied on top of the syntax highlighting so `{{token}}` text is always visually distinct.
      */
     variableSpans: List<Pair<IntRange, Color>> = emptyList(),
+    /** Matching bracket pair as absolute document offsets, or null. */
+    bracketPair: Pair<Int, Int>? = null,
     modifier: Modifier = Modifier,
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -112,13 +117,7 @@ internal fun LineView(
         )
     }
 
-    val textStyle = remember {
-        TextStyle(
-            fontSize   = 13.sp,
-            lineHeight = 20.sp,
-            fontFamily = FontFamily.Monospace,
-        )
-    }
+    val textStyle = remember { editorTextStyle() }
 
     val measured: TextLayoutResult = remember(annotated, wordWrap, containerWidthPx) {
         // Compose's packed Constraints use 18 bits per dimension: max = (1 shl 18) - 1 = 262_143 px.
@@ -182,11 +181,15 @@ internal fun LineView(
                     val charOff0 = if (down.position.x < padStartPx) 0
                         else offsetInLayout(layout, toLayout(down.position))
                     val absOff0 = lineStartOffset + charOff0
+                    val layoutPosition = toLayout(down.position)
+                    val visualLine = layout.getLineForVerticalPosition(layoutPosition.y)
+                    val lineEnd = layout.getLineEnd(visualLine, visibleEnd = true)
+                    val isTrailingWhitespace = layoutPosition.x > layout.getCursorRect(lineEnd).left
 
                     // Immediately place cursor on first press — no delay.
                     // If a double-click follows, onWordSelect will override this placement.
                     val shiftHeld = currentEvent.keyboardModifiers.isShiftPressed
-                    onTap(absOff0, shiftHeld)
+                    onTap(absOff0, shiftHeld, isTrailingWhitespace)
                     down.consume()
 
                     val lineHeightPx = with(density) { lineHeightDp.toPx() } + padTopPx * 2f
@@ -239,6 +242,44 @@ internal fun LineView(
                 drawPath(path, color = primary.copy(alpha = 0.28f))
             }
 
+            val guides = indentGuideColumns(lineText)
+            if (guides.isNotEmpty() && renderLen > 0) {
+                val h = size.height
+                for (col in guides) {
+                    if (col > renderLen) break
+                    val x = measured.getHorizontalPosition(col, true)
+                    drawLine(
+                        color = theme.indentGuide,
+                        start = Offset(x, 0f),
+                        end = Offset(x, h),
+                        strokeWidth = 1f,
+                    )
+                }
+            }
+
+            if (bracketPair != null) {
+                for (abs in listOf(bracketPair.first, bracketPair.second)) {
+                    val col = abs - lineStartOffset
+                    if (col in 0 until renderLen) {
+                        val box = measured.getBoundingBox(col)
+                        drawRect(
+                            color = theme.bracketMatchBackground,
+                            topLeft = Offset(box.left, box.top),
+                            size = androidx.compose.ui.geometry.Size(box.width.coerceAtLeast(1f), box.height),
+                        )
+                        drawRect(
+                            color = theme.bracketMatchBorder,
+                            topLeft = Offset(box.left + 0.5f, box.top + 0.5f),
+                            size = androidx.compose.ui.geometry.Size(
+                                (box.width - 1f).coerceAtLeast(1f),
+                                (box.height - 1f).coerceAtLeast(1f),
+                            ),
+                            style = Stroke(width = 1f),
+                        )
+                    }
+                }
+            }
+
             drawText(measured, topLeft = Offset.Zero)
 
             if (cursorCol >= 0 && effectiveCursorAlpha > 0f) {
@@ -285,6 +326,24 @@ private const val MAX_RENDER_CHARS_PER_LINE = 50_000
 internal val LINE_PAD_START = 8.dp
 internal val LINE_PAD_END = 16.dp
 internal val LINE_PAD_VERT = 1.dp
+internal val EditorFontSize = 13.sp
+internal val EditorLineHeight = 20.sp
+
+/** Shared by LineView, gutter numbers, and fold marks so one row shares one line box. */
+internal fun editorTextStyle(
+    color: Color = Color.Unspecified,
+    textAlign: TextAlign = TextAlign.Unspecified,
+): TextStyle = TextStyle(
+    color = color,
+    fontSize = EditorFontSize,
+    lineHeight = EditorLineHeight,
+    fontFamily = FontFamily.Monospace,
+    textAlign = textAlign,
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.None,
+    ),
+)
 
 /**
  * Compose's Constraints representation caps each dimension at (1 shl 18) − 1 = 262_143 px.

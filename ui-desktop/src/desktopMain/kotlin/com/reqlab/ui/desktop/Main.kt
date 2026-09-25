@@ -54,6 +54,7 @@ fun main() {
                 TabsRepository.save(state)
                 WorkspaceRepository.save(state)
             }
+            state.disposeAndAwait()
             exitApplication()
         }
     }

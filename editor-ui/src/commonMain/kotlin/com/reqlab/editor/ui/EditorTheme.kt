@@ -14,6 +14,8 @@ data class EditorTheme(
     val cursorLine: Color = EditorColors.cursorLine,
     val foldIndicator: Color = EditorColors.foldIndicator,
     val indentGuide: Color = EditorColors.indentGuide,
+    val bracketMatchBackground: Color = EditorColors.accent.copy(alpha = 0.22f),
+    val bracketMatchBorder: Color = EditorColors.accent,
     val errorUnderline: Color = EditorColors.errorUnderline,
     val warningUnderline: Color = EditorColors.warningUnderline,
     val accent: Color = EditorColors.accent,
@@ -35,6 +37,8 @@ data class EditorTheme(
             cursorLine = Color(0xFFF0F0F0),
             foldIndicator = Color(0xFF999999),
             indentGuide = Color(0xFFE0E0E0),
+            bracketMatchBackground = Color(0x0F0066CC),
+            bracketMatchBorder = Color(0x600066CC),
             accent = Color(0xFF0066CC),
             tokenColors = mapOf(
                 TokenType.KEYWORD to Color(0xFF0000FF),

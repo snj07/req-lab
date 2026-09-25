@@ -306,6 +306,7 @@ fun BodyEditor(tab: RequestTabState, state: AppState, onDirty: () -> Unit) {
                             enableWordWrap = true,
                             enableCopy = true,
                             enableDownload = false,
+                            showCursorPosition = state.settings.showEditorPositionIndicator,
                             allowJson5 = allowJson5 && language == SyntaxLanguage.JSON,
                             placeholder = when (tab.bodyType) {
                                 BodyType.JSON       -> "{\n  \n}"
@@ -531,7 +532,11 @@ private fun FormDataRowItem(
         if (showTypeColumn && row.type == FormEntryType.FILE) {
             FilePickerCell(
                 fileName = row.value.ifBlank { null },
-                onFilePicked = { name, _ -> row.value = name; onRowChange() },
+                onFilePicked = { name, b64 ->
+                    row.value = name
+                    row.bytesBase64 = b64
+                    onRowChange()
+                },
                 modifier = Modifier.weight(2f),
             )
         } else {

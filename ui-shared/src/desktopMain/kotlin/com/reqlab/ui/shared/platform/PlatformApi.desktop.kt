@@ -46,11 +46,17 @@ actual val horizontalResizeCursor: PointerIcon = PointerIcon(Cursor(Cursor.E_RES
 
 actual val verticalResizeCursor: PointerIcon = PointerIcon(Cursor(Cursor.S_RESIZE_CURSOR))
 
+actual val nwseResizeCursor: PointerIcon = PointerIcon(Cursor(Cursor.SE_RESIZE_CURSOR))
+
+actual val neswResizeCursor: PointerIcon = PointerIcon(Cursor(Cursor.SW_RESIZE_CURSOR))
+
 /**
  * H-5: Desktop already applies the correct cursor via `pointerHoverIcon(horizontalResizeCursor)`.
  * This modifier is a no-op on desktop.
  */
 actual fun Modifier.platformResizeCursorStyle(isHorizontal: Boolean): Modifier = this
+
+actual fun Modifier.platformDiagonalResizeCursorStyle(isNwSe: Boolean): Modifier = this
 
 actual fun pickFileForImport(onResult: (String) -> Unit) {
     val chooser = JFileChooser()

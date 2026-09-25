@@ -2,6 +2,8 @@ package com.reqlab.ui.desktop.integration
 
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.AuthType
+import com.reqlab.ui.shared.state.MutableFormDataRow
 import com.reqlab.server.module
 import com.reqlab.ui.shared.components.buildCurlCommand
 import com.reqlab.ui.shared.components.buildPowerShellCommand
@@ -10,6 +12,10 @@ import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestTabState
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.AfterClass
 import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
@@ -328,5 +334,68 @@ class CopyCommandIntegrationTest {
         assertTrue(curl.contains(compact), curl)
         assertTrue(python.contains("\\\"name\\\":\\\"Alice\\\""), python)
         assertTrue(powershell.contains(compact), powershell)
+    }
+
+    @Test
+    fun curl_and_python_copies_execute_graphql_urlencoded_and_text_multipart() {
+        assumeTrue(commandExists("curl"))
+        assumeTrue(pythonRequestsAvailable())
+        val cases = listOf(
+            Triple(BodyType.GRAPHQL, "/api/graphql", "receivedQuery"),
+            Triple(BodyType.X_WWW_FORM_URLENCODED, "/api/urlencoded", "a+b &"),
+            Triple(BodyType.FORM_DATA, "/api/form-data", "a+b &"),
+        )
+        cases.forEach { (bodyType, route, expected) ->
+            val tab = RequestTabState(method = HttpMethodType.POST, url = "http://localhost:$PORT$route").apply {
+                this.bodyType = bodyType
+                syncSystemHeaders()
+                if (bodyType == BodyType.GRAPHQL) bodyContent = "query { user(id: \"1\") { id } }"
+                else if (bodyType == BodyType.X_WWW_FORM_URLENCODED) {
+                    urlencodedRows.add(MutableFormDataRow("text", value = expected))
+                } else formRows.add(MutableFormDataRow("text", value = expected))
+                authType = AuthType.API_KEY
+                authApiPlacement = "query"
+                authApiKey = "api_key"
+                authApiValue = "secret +&"
+            }
+            val curl = buildCurlCommand(tab)
+            assertTrue(curl.contains("api_key=secret%20%2B%26"), curl)
+            val (curlCode, curlOutput) = runShell(curl)
+            assertEquals(0, curlCode, curlOutput)
+            assertTrue(curlOutput.contains(expected), curlOutput)
+
+            val script = buildPythonCommand(tab)
+            val temp = File.createTempFile("reqlab-copy-body", ".py")
+            try {
+                temp.writeText(script)
+                val (pythonCode, pythonOutput) = runShell("python3 ${temp.absolutePath}")
+                assertEquals(0, pythonCode, pythonOutput)
+                assertTrue(pythonOutput.contains(expected), pythonOutput)
+            } finally {
+                temp.delete()
+            }
+        }
+    }
+
+    @Test
+    fun curl_copy_executes_repeated_headers_without_collapsing_them() {
+        assumeTrue(commandExists("curl"))
+        val tab = RequestTabState(
+            method = HttpMethodType.GET,
+            url = "http://localhost:$PORT/api/echo-headers",
+        )
+        tab.headers.clear()
+        tab.headers.add(MutableKeyValue("X-Repeat", "one"))
+        tab.headers.add(MutableKeyValue("X-Repeat", "two"))
+
+        val (exit, output) = runShell(buildCurlCommand(tab))
+
+        assertEquals(0, exit, output)
+        val jsonStart = output.indexOf('{')
+        assertTrue(jsonStart >= 0, output)
+        val values = Json.parseToJsonElement(output.substring(jsonStart)).jsonObject["receivedHeaderValues"]!!.jsonObject
+        val repeated = values.entries.first { it.key.equals("X-Repeat", ignoreCase = true) }
+            .value.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("one", "two"), repeated)
     }
 }

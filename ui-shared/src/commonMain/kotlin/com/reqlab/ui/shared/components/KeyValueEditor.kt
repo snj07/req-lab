@@ -81,7 +81,7 @@ fun KeyValueEditor(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(end = 10.dp),
             ) {
-                itemsIndexed(entries, key = { idx, _ -> idx }) { idx, kv ->
+                itemsIndexed(entries, key = { _, kv -> kv.uid }) { idx, kv ->
                     KeyValueRow(
                         kv = kv,
                         onDelete = {
@@ -163,14 +163,14 @@ private fun KeyValueRow(
             value = kv.key,
             onValueChange = { if (!isSystemHeader) { kv.key = it; onDirty() } },
             placeholder = Strings.t("key_upper"),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag("$testTag-key"),
             state = state,
         )
         InlineTextField(
             value = kv.value,
             onValueChange = { kv.value = it; onDirty() },
             placeholder = Strings.t("value_upper"),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag("$testTag-value"),
             state = state,
         )
 
@@ -189,7 +189,7 @@ private fun KeyValueRow(
             }
         }
 
-        IconButton(onClick = onDelete, modifier = Modifier.size(24.dp), enabled = !isSystemHeader) {
+        IconButton(onClick = onDelete, modifier = Modifier.size(24.dp).testTag("$testTag-remove"), enabled = !isSystemHeader) {
             Icon(Icons.Default.Delete, contentDescription = Strings.t("remove"), tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }

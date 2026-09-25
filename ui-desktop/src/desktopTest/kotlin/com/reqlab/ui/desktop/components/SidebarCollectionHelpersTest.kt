@@ -3,6 +3,7 @@ package com.reqlab.ui.shared.components
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
+import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.ui.shared.state.CollectionNode
 import androidx.compose.runtime.mutableStateListOf
 import org.junit.Test
@@ -231,6 +232,12 @@ class SidebarCollectionHelpersTest {
                         authPassword = "pass",
                         authApiKey = "X-Key",
                         authApiValue = "myval",
+                        authApiPlacement = "query",
+                        queryEntries = listOf(
+                            KeyValueEntry("x", "1"),
+                            KeyValueEntry("x", "2", enabled = false, secret = true),
+                        ),
+                        headerEntries = listOf(KeyValueEntry("X-Secret", "value", secret = true)),
                     )
                 )
             )
@@ -243,6 +250,11 @@ class SidebarCollectionHelpersTest {
         assertEquals("pass", dup.authPassword)
         assertEquals("X-Key", dup.authApiKey)
         assertEquals("myval", dup.authApiValue)
+        assertEquals("query", dup.authApiPlacement)
+        assertEquals(listOf("1", "2"), dup.queryEntries?.map { it.value })
+        assertEquals(false, dup.queryEntries?.last()?.enabled)
+        assertEquals(true, dup.queryEntries?.last()?.secret)
+        assertEquals(true, dup.headerEntries?.single()?.secret)
     }
 
     @Test

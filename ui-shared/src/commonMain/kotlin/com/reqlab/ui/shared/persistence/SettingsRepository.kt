@@ -5,6 +5,8 @@ import com.reqlab.ui.shared.i18n.AppLanguage
 import com.reqlab.ui.shared.state.AppSettings
 import com.reqlab.ui.shared.state.ResponseLayout
 import com.reqlab.ui.shared.state.AppTheme
+import com.reqlab.ui.shared.state.DEFAULT_ENVIRONMENT_DIALOG_HEIGHT_DP
+import com.reqlab.ui.shared.state.DEFAULT_ENVIRONMENT_DIALOG_WIDTH_DP
 
 /**
  * Persists [AppSettings] using [PlatformStorage].
@@ -48,6 +50,13 @@ object SettingsRepository {
         settings.scriptPrefix = PlatformStorage.getString(PREFIX + "scriptPrefix") ?: settings.scriptPrefix
         settings.selectedEnvName = PlatformStorage.getString(PREFIX + "selectedEnvName") ?: settings.selectedEnvName
         settings.allowJson5InJsonBodies = getBool("allowJson5InJsonBodies", settings.allowJson5InJsonBodies)
+        settings.showEditorPositionIndicator = getBool("showEditorPositionIndicator", settings.showEditorPositionIndicator)
+        settings.environmentDialogWidthDp = getPositiveFloat(
+            "environmentDialogWidthDp", DEFAULT_ENVIRONMENT_DIALOG_WIDTH_DP,
+        )
+        settings.environmentDialogHeightDp = getPositiveFloat(
+            "environmentDialogHeightDp", DEFAULT_ENVIRONMENT_DIALOG_HEIGHT_DP,
+        )
     }
 
     // ── Save ───────────────────────────────────────────────────────────────
@@ -71,6 +80,9 @@ object SettingsRepository {
         PlatformStorage.putString(PREFIX + "scriptPrefix", settings.scriptPrefix)
         PlatformStorage.putString(PREFIX + "selectedEnvName", settings.selectedEnvName)
         putBool("allowJson5InJsonBodies", settings.allowJson5InJsonBodies)
+        putBool("showEditorPositionIndicator", settings.showEditorPositionIndicator)
+        putFloat("environmentDialogWidthDp", settings.environmentDialogWidthDp)
+        putFloat("environmentDialogHeightDp", settings.environmentDialogHeightDp)
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -85,6 +97,14 @@ object SettingsRepository {
         PlatformStorage.putString(PREFIX + key, value.toString())
 
     private fun putInt(key: String, value: Int) =
+        PlatformStorage.putString(PREFIX + key, value.toString())
+
+    private fun getPositiveFloat(key: String, default: Float): Float =
+        PlatformStorage.getString(PREFIX + key)?.toFloatOrNull()
+            ?.takeIf { it.isFinite() && it > 0f }
+            ?: default
+
+    private fun putFloat(key: String, value: Float) =
         PlatformStorage.putString(PREFIX + key, value.toString())
 
     private inline fun <reified T : Enum<T>> safeEnumOf(value: String, default: T): T =

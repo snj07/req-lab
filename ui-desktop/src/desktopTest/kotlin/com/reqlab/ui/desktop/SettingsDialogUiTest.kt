@@ -55,6 +55,23 @@ class SettingsDialogUiTest {
         composeRule.onNodeWithTag("settings-dialog", useUnmergedTree = true).assertDoesNotExist()
     }
 
+    @Test
+    fun editor_settings_exposes_and_enables_position_indicator_toggle() {
+        val state = AppState()
+        composeRule.setContent { MainScreen(state) }
+
+        composeRule.onNodeWithTag("settings-button", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("settings-section-editor", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("editor-position-indicator-toggle", useUnmergedTree = true)
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(state.settings.showEditorPositionIndicator)
+    }
+
     // ── Confirm delete dialog ───────────────────────────────────────────────
 
     @Test

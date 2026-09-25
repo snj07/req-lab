@@ -64,3 +64,26 @@ fun applySearchHighlights(
         }
     }
 }
+
+/** Replace every occurrence of [query] in [text]. Empty [query] is a no-op. */
+fun replaceAllOccurrences(
+    text: String,
+    query: String,
+    replacement: String,
+    ignoreCase: Boolean = true,
+): String {
+    if (query.isEmpty()) return text
+    val out = StringBuilder(text.length)
+    var i = 0
+    while (i < text.length) {
+        val pos = text.indexOf(query, i, ignoreCase)
+        if (pos < 0) {
+            out.append(text, i, text.length)
+            break
+        }
+        out.append(text, i, pos)
+        out.append(replacement)
+        i = pos + query.length
+    }
+    return out.toString()
+}

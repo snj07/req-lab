@@ -63,12 +63,16 @@ data class FormDataEntry(
     val value: String,
     val description: String = "",
     val enabled: Boolean = true,
+    /** File-part bytes as Base64; empty for TEXT rows. */
+    val bytesBase64: String = "",
 )
 
 @Serializable
 data class AuthConfig(
     val type: AuthType = AuthType.NONE,
-    val params: Map<String, String> = emptyMap()
+    val params: Map<String, String> = emptyMap(),
+    /** Explicit API-key placement. Null keeps legacy params["placement"] readable. */
+    val placement: String? = null,
 )
 
 @Serializable

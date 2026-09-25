@@ -2,10 +2,14 @@ package com.reqlab.ui.desktop
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.reqlab.ui.shared.components.KeyValueEditor
+import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.core.model.BodyType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.ui.shared.MainScreen
@@ -32,6 +36,38 @@ class RegressionBugsUiTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun deleting_first_parameter_keeps_remaining_row_text_attached_to_its_uid() {
+        val rows = mutableStateListOf(
+            MutableKeyValue("first", "one"),
+            MutableKeyValue("second", "two"),
+        )
+        val secondUid = rows[1].uid
+        composeRule.setContent { KeyValueEditor(rows, "param") {} }
+        composeRule.onNodeWithTag("param-row-1-value", useUnmergedTree = true).performClick()
+        composeRule.runOnIdle { rows.removeAt(0) }
+        composeRule.waitForIdle()
+        assertEquals(secondUid, rows.single().uid)
+        composeRule.onNodeWithTag("param-row-0", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("two", useUnmergedTree = true).assertIsDisplayed().assertIsFocused()
+    }
+
+    @Test
+    fun deleting_first_header_keeps_remaining_row_text_attached_to_its_uid() {
+        val rows = mutableStateListOf(
+            MutableKeyValue("X-First", "one"),
+            MutableKeyValue("X-Second", "two"),
+        )
+        val secondUid = rows[1].uid
+        composeRule.setContent { KeyValueEditor(rows, "header") {} }
+        composeRule.onNodeWithTag("header-row-1-value", useUnmergedTree = true).performClick()
+        composeRule.runOnIdle { rows.removeAt(0) }
+        composeRule.waitForIdle()
+        assertEquals(secondUid, rows.single().uid)
+        composeRule.onNodeWithTag("header-row-0", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("two", useUnmergedTree = true).assertIsDisplayed().assertIsFocused()
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

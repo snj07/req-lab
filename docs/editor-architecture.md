@@ -9,7 +9,7 @@ The code editor is a **Compose Multiplatform–native** implementation targeting
 | Data contracts | `editor-core` | Pure Kotlin engine — no Compose, no runtime dependencies |
 | UI renderer | `editor-ui` | Compose composables, ViewModel, background tokenizer |
 
-The public composable entry point is `CodeEditor.kt` in `ui-shared`, which wraps `EditorRenderer` with a toolbar, search bar, format button, and fold controls.
+The public composable entry point is `CodeEditor.kt` in `ui-shared`, which wraps `EditorRenderer` with a toolbar, find/replace, go-to-line, status strip, format button, and fold controls.
 
 > **Design inspiration:** The data structures throughout `editor-core` and `editor-ui` are
 > modelled after [Scintilla](https://www.scintilla.org/ScintillaDoc.html):
@@ -80,7 +80,8 @@ editor-ui/src/commonMain/kotlin/com/reqlab/editor/ui/
 │                           detectBraceFoldRegions / detectXmlFoldRegions /
 │                           detectCommentFoldRegions / detectFoldRegions /
 │                           computeVisibleLines helpers
-└── SearchHighlight.kt      Search-match highlight span builders
+├── BracketMatch.kt         Bounded caret bracket matcher + indent-guide columns
+└── SearchHighlight.kt      Search-match spans + replace-all helper
 ```
 
 ---
@@ -372,7 +373,15 @@ data class EditorDisplayState(
 | `deleteForwardAtCursor()` | Delete key — delete char after cursor |
 | `deleteWordBeforeCursor()` | Ctrl/Alt+Backspace — delete the whole word before cursor |
 | `insertNewlineWithAutoIndent()` | Enter — inserts `\n` plus leading whitespace matching the current line |
-| `dedentAtCursor()` | Shift+Tab — removes up to 4 spaces of leading indent on current line |
+| `dedentAtCursor()` | Shift+Tab — removes up to 2 spaces of leading indent on current line |
+| `duplicateLine()` | Duplicate the current line below the caret |
+| `moveLine(down)` | Swap the current line with the neighbour above/below |
+| `toggleComment()` | `//` for JSON/JS/GraphQL/plain; `<!-- -->` for XML/HTML |
+| `selectLine()` | Select the current line including its trailing newline |
+| `replaceRange(from, to, replacement)` | One undoable range replace (used by Find → Replace) |
+| `replaceAllMatches(query, replacement)` | One undoable replace-all |
+| `goToLine(oneBased)` | Move the caret to the start of that document line |
+| `canUndo()` / `canRedo()` | Whether the history stacks have an entry |
 | `undo()` / `redo()` | Pop from undo/redo stacks; capped by command count and byte budget |
 
 #### Cursor & selection API
@@ -381,7 +390,7 @@ data class EditorDisplayState(
 |---|---|
 | `moveCursorTo(offset, extendSelection)` | Jump to absolute offset |
 | `moveCursorLeft/Right/Up/Down(extendSelection)` | Arrow key navigation |
-| `moveCursorWordLeft/Right(extendSelection)` | Ctrl/Alt+←/→ word jump |
+| `moveCursorWordLeft/Right(extendSelection)` | Option/Ctrl+←/→ word jump (Cmd+←/→ stays line start/end on macOS) |
 | `moveCursorToLineStart/End(extendSelection)` | Home/End |
 | `moveCursorToDocStart/End(extendSelection)` | Cmd/Ctrl+Home/End |
 | `moveCursorPageUp/Down(pageSize, extendSelection)` | PgUp/PgDn |
@@ -524,8 +533,9 @@ Key events are processed in `Modifier.onPreviewKeyEvent`:
 
 | Category | Keys |
 |---|---|
-| Navigation | Arrow keys, Home/End, PgUp/PgDn, Cmd+Home/End, Ctrl+←/→ |
-| Editing | Printable characters, Enter (auto-indent), Backspace, Delete, Tab (4 spaces), Shift+Tab (dedent) |
+| Navigation | Arrow keys, Home/End, PgUp/PgDn, Cmd+Home/End, Option+←/→ (macOS) / Ctrl+←/→ (Win/Linux) word jump, Cmd/Ctrl+G (go to line) |
+| Editing | Printable characters, Enter (auto-indent), Backspace, Delete, Tab (2 spaces), Shift+Tab (dedent), Cmd/Ctrl+Shift+D (duplicate line), Alt+↑/↓ (move line), Cmd/Ctrl+/ (toggle comment), Cmd/Ctrl+L (select line) |
+| Find | Cmd/Ctrl+F, F3 / Shift+F3, Enter / Shift+Enter in the search bar, Esc |
 | Clipboard | Cmd/Ctrl+C, Cmd/Ctrl+V, Cmd/Ctrl+X |
 | Selection | Shift + any navigation key, Cmd+A |
 | History | Cmd/Ctrl+Z (undo), Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y (redo) |
@@ -534,7 +544,7 @@ Both read-only and editable modes support Cmd+C and Cmd+A. All other keys are ig
 
 #### Context menu
 
-A `DropdownMenu` appears on right-click (secondary pointer press). Options: Copy, Select All, and (editable only) Cut, Paste, Undo, Redo.
+A `DropdownMenu` appears on right-click (secondary pointer press). Options: Undo, Redo, Copy, Cut, Paste, Select All, Duplicate Line, Toggle Comment. Cut/Paste/Undo/Redo/Duplicate/Comment are disabled in read-only mode.
 
 #### Click-to-place cursor
 
@@ -565,7 +575,11 @@ internal fun LineView(
 2. **Search-match highlight** — yellow `Background` span over each match in `searchMatchRanges`; active match gets a distinct accent colour.
 3. **Inline-error underline** — red (ERROR) or amber (WARNING) `TextDecoration.Underline` span, covering the rest of the logical line from the `InlineEditorError.col` position.
 4. **Selection highlight** — `Background` span covering the selected character range.
-5. **Cursor** — drawn as a 2 dp animated `Canvas` line at the exact cursor character position, using `TextLayoutResult.getCursorRect()`. Alpha is `cursorBlinkAlpha` (keyframe: 1f at 0–530 ms, 0f at 600–930 ms, 1f at 1000 ms).
+5. **Indent guides** — vertical lines at every 2-space indent column (`indentGuideColumns`, `theme.indentGuide`). The gutter fold-region dash still uses the same colour.
+6. **Bracket match** — a translucent accent rect on the `()[]{}` pair under/before the caret (`matchingBracketOffsets`, scan capped at 64 KB).
+7. **Cursor** — drawn as a 2 dp animated `Canvas` line at the exact cursor character position, using `TextLayoutResult.getCursorRect()`. Alpha is `cursorBlinkAlpha` (keyframe: 1f at 0–530 ms, 0f at 600–930 ms, 1f at 1000 ms).
+
+The gutter also paints a diagnostic tick (error/warning) when `state.diagnostics` has an entry for that line; hovering it shows `InlineEditorError.message`.
 
 ---
 
@@ -683,7 +697,7 @@ fun computeVisibleLines(lines: List<String>, foldState: FoldState): List<Visible
 
 ## Public API — `CodeEditor` Composable
 
-`CodeEditor` in `ui-shared/components/CodeEditor.kt` wraps `EditorRenderer` and adds the toolbar, search bar, and lifecycle wiring:
+`CodeEditor` in `ui-shared/components/CodeEditor.kt` wraps `EditorRenderer` and adds the toolbar, find/replace, go-to-line, status strip, and lifecycle wiring:
 
 ```kotlin
 @Composable
@@ -708,7 +722,9 @@ fun CodeEditor(
 `SyntaxLanguage` is a `ui-shared` enum mirroring `LanguageMode` values (`JSON`, `XML`, `HTML`, `GRAPHQL`, `JAVASCRIPT`, `PLAIN`). It decouples call sites from the `editor-core` type — internally it is converted to `LanguageMode` via `SyntaxLanguage.toLanguageMode()`. `ui-shared/CodeFolding.kt` provides backward-compatible type aliases (`FoldRegion`, `FoldState`, `VisibleLine`) that re-export the canonical types from `editor-ui`.
 
 Toolbar actions: pretty-print / minify (Format), Fold All, Unfold All, Word-Wrap toggle, Copy, Download.
-Search bar: incremental match highlighting, match count `n/m`, Previous/Next navigation.
+Find bar (`Cmd/Ctrl+F`): incremental match highlighting, match count `n/m`, Previous/Next, F3/Shift+F3. Editable editors also show Replace / Replace All (one undo command).
+Go-to-line bar (`Cmd/Ctrl+G`): jump to a 1-based document line.
+Status strip: `Ln X, Col Y` plus the diagnostic message for the current line. A truncation banner appears when any line exceeds `DISPLAY_LINE_LENGTH_LIMIT` (50,000 chars).
 
 **ViewModel lifecycle:** `CodeEditor` creates one `EditorViewModel` per instance via `remember(language)`. It is disposed via `DisposableEffect { onDispose { viewModel.dispose() } }`, which cancels the `IdleLexer` and all coroutines.
 
@@ -766,6 +782,7 @@ Usage sites:
 | Test class | Coverage |
 |---|---|
 | `EditorViewModelFixTest` | Mutation correctness, undo/redo, cursor navigation |
+| `EditorCoreUxTest` | Replace-all, go-to-line, duplicate/move/comment/select line, bracket match, indent guides, truncation flag |
 | `DiagnosticsAndFoldUpdateTest` | Inline error spawning + fold interaction |
 | `PerformanceIssueReproTest` | Large-document regression |
 
@@ -798,6 +815,7 @@ Usage sites:
 | `EditorV2RegressionTest` | V2 editor architecture regression suite |
 | `EditorNoWrapRegressionTest` | No-wrap mode invariants: no line wrap, horizontal scroll range correct |
 | `EditorKnownIssuesBugTest` | Guards preventing previously-fixed known bugs from recurring |
+| `EditorCoreUxUiTest` | Find/replace bar, F3, go-to-line, status strip, truncation banner |
 | `GutterLayoutStabilityTest` | Gutter width stability across content changes and fold toggles |
 | `LargeTextEditorUiTest` | Large document load and render — no jank, correct display line count |
 | `LargePayloadSaveUiTest` | Large body save + reload round-trip correctness |

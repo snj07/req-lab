@@ -302,6 +302,29 @@ class PostmanImporterTest {
         assertEquals("API_KEY", req.authType)
         assertEquals("X-API-KEY", req.authApiKey)
         assertEquals("secret", req.authApiValue)
+        assertEquals("header", req.authApiPlacement)
+    }
+
+    @Test
+    fun `Postman query API key placement and disabled repeated query rows survive import`() {
+        val root = parse("""
+        {
+          "info":{"name":"Auth","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+          "item":[{"name":"R","request":{
+            "method":"GET",
+            "url":{"raw":"https://example.com/path?x=1&x=2","query":[
+              {"key":"x","value":"1"},{"key":"x","value":"2"},{"key":"off","value":"3","disabled":true}
+            ]},
+            "auth":{"type":"apikey","apikey":[
+              {"key":"key","value":"api_key"},{"key":"value","value":"secret"},{"key":"in","value":"query"}
+            ]}
+          }}]
+        }
+        """.trimIndent())
+        val request = PostmanImporter.importCollection(root).requests.single()
+        assertEquals("query", request.authApiPlacement)
+        assertEquals(listOf("x", "x", "off"), request.queryEntries?.map { it.key })
+        assertEquals(false, request.queryEntries?.last()?.enabled)
     }
 
     // ── Script parsing ─────────────────────────────────────────────────────────

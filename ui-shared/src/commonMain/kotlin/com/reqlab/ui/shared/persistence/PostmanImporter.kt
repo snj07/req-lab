@@ -1,5 +1,7 @@
 package com.reqlab.ui.shared.persistence
 
+import com.reqlab.core.model.KeyValueEntry
+import com.reqlab.ui.shared.state.normalizeApiKeyPlacement
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -91,6 +93,7 @@ object PostmanImporter {
         val requestObj = obj["request"]?.jsonObject ?: return null
         val method = normalizeMethod(requestObj["method"]?.jsonPrimitive?.contentOrNull)
         val url = parseUrl(requestObj["url"])
+        val queryEntries = parseQueryEntries(requestObj["url"])
         val headers = parseHeaders(requestObj["header"])
         val (bodyType, bodyContent) = parseBody(requestObj["body"], headers)
         val auth = parseAuth(requestObj["auth"])
@@ -102,6 +105,7 @@ object PostmanImporter {
             preRequestScript = preRequestScript.takeIf { it.isNotBlank() },
             testScript = testScript.takeIf { it.isNotBlank() },
             userHeaders = headers,
+            queryEntries = queryEntries,
             bodyType = bodyType,
             bodyContent = bodyContent,
             authType = auth.type,
@@ -110,7 +114,23 @@ object PostmanImporter {
             authToken = auth.token,
             authApiKey = auth.apiKey,
             authApiValue = auth.apiValue,
+            authApiPlacement = auth.apiPlacement,
         )
+    }
+
+    private fun parseQueryEntries(urlElement: JsonElement?): List<KeyValueEntry>? {
+        val urlObj = runCatching { urlElement?.jsonObject }.getOrNull() ?: return null
+        val query = urlObj["query"] as? JsonArray ?: return null
+        return query.mapNotNull { element ->
+            val item = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val key = item["key"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            KeyValueEntry(
+                key = key,
+                value = item["value"]?.jsonPrimitive?.contentOrNull ?: "",
+                enabled = !(item["disabled"]?.jsonPrimitive?.booleanOrNull ?: false),
+                secret = false,
+            )
+        }
     }
 
     private fun normalizeMethod(raw: String?): String = when (raw?.uppercase()) {
@@ -241,9 +261,10 @@ object PostmanImporter {
         val token: String?,
         val apiKey: String?,
         val apiValue: String?,
+        val apiPlacement: String?,
     )
 
-    private val noAuth = ParsedAuth(null, null, null, null, null, null)
+    private val noAuth = ParsedAuth(null, null, null, null, null, null, null)
 
     private fun parseAuth(authElement: JsonElement?): ParsedAuth {
         if (authElement == null || authElement is JsonNull) return noAuth
@@ -252,20 +273,21 @@ object PostmanImporter {
         return when (type) {
             "bearer" -> {
                 val token = authObj["bearer"]?.jsonArray?.kvValue("token")
-                ParsedAuth("BEARER", null, null, token, null, null)
+                ParsedAuth("BEARER", null, null, token, null, null, null)
             }
             "basic" -> {
                 val username = authObj["basic"]?.jsonArray?.kvValue("username")
                 val password = authObj["basic"]?.jsonArray?.kvValue("password")
-                ParsedAuth("BASIC", username, password, null, null, null)
+                ParsedAuth("BASIC", username, password, null, null, null, null)
             }
             "apikey" -> {
                 // Postman apikey: key = header name, value = header value
                 val apiKey = authObj["apikey"]?.jsonArray?.kvValue("key")
                 val apiValue = authObj["apikey"]?.jsonArray?.kvValue("value")
-                ParsedAuth("API_KEY", null, null, null, apiKey, apiValue)
+                val placement = normalizeApiKeyPlacement(authObj["apikey"]?.jsonArray?.kvValue("in"))
+                ParsedAuth("API_KEY", null, null, null, apiKey, apiValue, placement)
             }
-            "noauth", "none" -> ParsedAuth("NONE", null, null, null, null, null)
+            "noauth", "none" -> ParsedAuth("NONE", null, null, null, null, null, null)
             else -> noAuth
         }
     }

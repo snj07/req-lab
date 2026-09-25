@@ -2,6 +2,7 @@ package com.reqlab.core.network
 
 import com.reqlab.core.model.AuthType
 import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.core.model.HttpMethodType
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.RequestDefinition
@@ -26,6 +27,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
@@ -133,7 +135,7 @@ class KtorApiClient(
                 logger.error("Request failed at attempt $attempt", throwable)
                 interceptors.forEach { interceptor -> interceptor.onFailure(throwable, attempt) }
 
-                if (attempt == retryPolicy.maxAttempts) {
+                if (attempt == retryPolicy.maxAttempts || !retryPolicy.isRetryable(throwable)) {
                     break
                 }
 
@@ -167,20 +169,26 @@ class KtorApiClient(
 
         request.queryParams.filter { it.enabled }.forEach { queryParam ->
             builder.url.parameters.append(
-                queryParam.key,
+                VariableResolver.resolve(queryParam.key, variableLayers),
                 VariableResolver.resolve(queryParam.value, variableLayers)
             )
         }
 
         request.headers.filter { it.enabled }.forEach { header ->
-            builder.header(header.key, VariableResolver.resolve(header.value, variableLayers))
+            val key = VariableResolver.resolve(header.key, variableLayers)
+            if (key.isNotBlank()) {
+                builder.header(key, VariableResolver.resolve(header.value, variableLayers))
+            }
         }
 
-        if (request.cookies.isNotEmpty()) {
-            builder.header(HttpHeaders.Cookie, request.cookies.filter { it.enabled }
-                .joinToString(separator = "; ") { cookie ->
+        val enabledCookies = request.cookies.filter { it.enabled }
+        if (enabledCookies.isNotEmpty()) {
+            builder.header(
+                HttpHeaders.Cookie,
+                enabledCookies.joinToString(separator = "; ") { cookie ->
                     "${cookie.key}=${VariableResolver.resolve(cookie.value, variableLayers)}"
-                })
+                },
+            )
         }
 
         applyAuth(builder, request, variableLayers)
@@ -222,9 +230,10 @@ class KtorApiClient(
             }
 
             AuthType.API_KEY -> {
-                val key = auth.params["key"].orEmpty()
+                val key = VariableResolver.resolve(auth.params["key"].orEmpty(), variableLayers)
                 val value = VariableResolver.resolve(auth.params["value"].orEmpty(), variableLayers)
-                val placement = auth.params["placement"]?.lowercase() ?: "header"
+                val placement = normalizeApiKeyPlacement(auth.placement ?: auth.params["placement"])
+                if (key.isBlank()) return
                 if (placement == "query") {
                     builder.url.parameters.append(key, value)
                 } else {
@@ -240,6 +249,9 @@ class KtorApiClient(
             }
         }
     }
+
+    private fun normalizeApiKeyPlacement(value: String?): String =
+        if (value.equals("query", ignoreCase = true)) "query" else "header"
 
     private suspend fun executeWebSocketRequest(
         request: RequestDefinition,
@@ -322,29 +334,13 @@ class KtorApiClient(
 
             BodyType.GRAPHQL -> {
                 builder.contentType(ContentType.Application.Json)
-                val graphQlBody = body.graphQl
-                val query = VariableResolver.resolve(graphQlBody?.query.orEmpty(), variableLayers)
-                val operationName = graphQlBody?.operationName
-                val variables = graphQlBody?.variablesJson
-                val payload = buildString {
-                    append("{\"query\":")
-                    append(json.encodeToString(String.serializer(), query))
-                    if (!operationName.isNullOrBlank()) {
-                        append(",\"operationName\":")
-                        append(json.encodeToString(String.serializer(), operationName))
-                    }
-                    if (!variables.isNullOrBlank()) {
-                        append(",\"variables\":")
-                        if (allowJson5InJsonBodies) {
-                            val resolvedVars = VariableResolver.resolve(variables, variableLayers)
-                            append(Json5.toWireJson(resolvedVars).getOrElse { throw it })
-                        } else {
-                            append(variables)
-                        }
-                    }
-                    append("}")
-                }
-                builder.setBody(payload)
+                builder.setBody(
+                    encodeGraphQlEnvelope(
+                        body.graphQl ?: com.reqlab.core.model.GraphQlBody(),
+                        variableLayers,
+                        allowJson5InJsonBodies,
+                    )
+                )
             }
 
             BodyType.X_WWW_FORM_URLENCODED -> {
@@ -358,19 +354,32 @@ class KtorApiClient(
             }
 
             BodyType.FORM_DATA -> {
-                // Prefer the typed formDataEntries (new structured rows) over the legacy formEntries.
-                val entries = if (body.formDataEntries.isNotEmpty()) {
-                    body.formDataEntries.filter { it.enabled }.map { e ->
-                        KeyValueEntry(e.key, VariableResolver.resolve(e.value, variableLayers))
-                    }
-                } else {
-                    body.formEntries.filter { it.enabled }.map { e ->
-                        e.copy(value = VariableResolver.resolve(e.value, variableLayers))
-                    }
-                }
+                val typed = body.formDataEntries.filter { it.enabled }
                 val multipart = MultiPartFormDataContent(
                     formData {
-                        entries.forEach { entry -> append(entry.key, entry.value) }
+                        if (typed.isNotEmpty()) {
+                            typed.forEach { entry ->
+                                if (entry.type == FormEntryType.FILE) {
+                                    val filename = VariableResolver.resolve(entry.value, variableLayers)
+                                    append(
+                                        entry.key,
+                                        decodeBase64ToByteArray(entry.bytesBase64),
+                                        Headers.build {
+                                            append(
+                                                HttpHeaders.ContentDisposition,
+                                                "filename=\"$filename\"",
+                                            )
+                                        },
+                                    )
+                                } else {
+                                    append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
+                                }
+                            }
+                        } else {
+                            body.formEntries.filter { it.enabled }.forEach { entry ->
+                                append(entry.key, VariableResolver.resolve(entry.value, variableLayers))
+                            }
+                        }
                     }
                 )
                 builder.setBody(multipart)
@@ -583,7 +592,7 @@ private fun currentTimeMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 private val base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-private fun ByteArray.encodeBase64(): String {
+fun ByteArray.encodeBase64(): String {
     if (isEmpty()) return ""
     val result = StringBuilder((size + 2) / 3 * 4)
     var index = 0

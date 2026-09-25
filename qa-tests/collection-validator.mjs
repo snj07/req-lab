@@ -382,7 +382,7 @@ async function main() {
           params: {
             protocolVersion: '2025-06-18',
             capabilities: {},
-            clientInfo: { name: 'reqlab-validator', version: '1.18.0' },
+            clientInfo: { name: 'reqlab-validator', version: '1.19.0' },
           },
         });
         const initRes = await fetch(resolvedUrl, {

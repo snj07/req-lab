@@ -47,7 +47,10 @@ import com.reqlab.ui.shared.platform.saveFileForExport
 
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
-fun ResponseViewer(tab: RequestTabState) {
+fun ResponseViewer(
+    tab: RequestTabState,
+    showCursorPosition: Boolean = true,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -70,7 +73,7 @@ fun ResponseViewer(tab: RequestTabState) {
             // ── Content ─────────────────────────────────────────
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (selectedTab) {
-                    ResponseTab.BODY    -> ResponseBodyView(response)
+                    ResponseTab.BODY    -> ResponseBodyView(response, showCursorPosition)
                     ResponseTab.HEADERS -> ResponseHeadersView(response)
                     ResponseTab.COOKIES -> ResponseCookiesView(response)
                     ResponseTab.TIMING  -> ResponseTimingView(response)
@@ -282,7 +285,7 @@ private fun ResponseTabBar(
  */
 @kotlinx.serialization.ExperimentalSerializationApi
 @Composable
-private fun ResponseBodyView(response: ResponseDefinition) {
+private fun ResponseBodyView(response: ResponseDefinition, showCursorPosition: Boolean) {
     val isStream = response.streamEvents.isNotEmpty()
     val bodyText = if (isStream) {
         response.assembledText?.takeIf { it.isNotBlank() } ?: response.bodyText
@@ -304,6 +307,7 @@ private fun ResponseBodyView(response: ResponseDefinition) {
         enableCopy = true,
         enableDownload = true,
         onDownload = { saveResponseToFile(response) },
+        showCursorPosition = showCursorPosition,
         testTagPrefix = "response",
     )
 }

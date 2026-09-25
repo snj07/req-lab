@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -91,6 +92,10 @@ fun MainScreen(state: AppState = remember { AppState() }) {
     var multiDirtyIdsToClose by remember { mutableStateOf<List<String>>(emptyList()) }
     var lastActiveTabId by remember(state) { mutableStateOf(state.activeTab?.id) }
 
+    DisposableEffect(state) {
+        onDispose { state.dispose() }
+    }
+
     val forceCloseByIds: (List<String>) -> Unit = { ids ->
         ids
             .mapNotNull { id -> state.openTabs.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
@@ -118,7 +123,8 @@ fun MainScreen(state: AppState = remember { AppState() }) {
         snapshotFlow {
             with(state.settings) {
                 "$autoSaveRequests|$confirmBeforeDelete|$defaultTimeoutSec|${theme.name}" +
-                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies" +
+                    "|${responseLayout.name}|${language.name}|$requestTimeoutSec|$followRedirects|$collectionsExpanded|$environmentsExpanded|$proxyEnabled|$httpProxy|$httpsProxy|$allowJson5InJsonBodies|$showEditorPositionIndicator" +
+                    "|$environmentDialogWidthDp|$environmentDialogHeightDp" +
                     "|${state.selectedEnvironment?.name ?: ""}"
             }
         }.drop(1)
@@ -132,21 +138,8 @@ fun MainScreen(state: AppState = remember { AppState() }) {
     LaunchedEffect(state) {
         snapshotFlow {
             val t = state.activeTab
-            val params = t?.params?.joinToString(";") { p -> "${p.key}:${p.value}:${p.enabled}:${p.secret}" } ?: ""
-            val headers = t?.headers?.joinToString(";") { h -> "${h.key}:${h.value}:${h.enabled}:${h.secret}" } ?: ""
-            val auth = if (t == null) "" else {
-                "${t.authType}|${t.authUsername}|${t.authPassword}|${t.authToken}|${t.authApiKey}|${t.authApiValue}"
-            }
-            // Use bodyContent length as fingerprint instead of the full content.
-            // Including the full body (potentially multi-MB) would create a huge
-            // string on the main thread on every keystroke and block the UI.
-            val bodyLen = t?.bodyContent?.length ?: 0
-            // Include form row counts so adding/removing form-data or urlencoded
-            // rows triggers auto-save even if bodyContent length is unchanged.
-            val formCount = t?.formRows?.size ?: 0
-            val urlEncCount = t?.urlencodedRows?.size ?: 0
-            val mcp = t?.mcpClientFingerprint() ?: ""
-            "${state.openTabs.size}|${state.activeTabIndex}|${t?.name}|${t?.url}|${t?.method}|${t?.bodyType}|BL:$bodyLen|FR:$formCount|UE:$urlEncCount|$params|$headers|$auth|${t?.preRequestScript}|${t?.testScript}|$mcp"
+            val revisions = state.openTabs.joinToString("|") { "${it.id}:${it.persistenceRevision}" }
+            "${state.openTabs.size}|${state.activeTabIndex}|${t?.id}|$revisions"
         }.drop(1)
             .collect {
                 if (state.settings.autoSaveRequests) {
@@ -415,7 +408,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                             },
                             second = {
                                 key(tab.id) {
-                                    ResponseViewer(tab)
+                                    ResponseViewer(tab, showCursorPosition = state.settings.showEditorPositionIndicator)
                                 }
                             },
                         )
@@ -437,7 +430,7 @@ private fun ColumnScope.HttpWorkspaceContent(
                             },
                             second = {
                                 key(tab.id) {
-                                    ResponseViewer(tab)
+                                    ResponseViewer(tab, showCursorPosition = state.settings.showEditorPositionIndicator)
                                 }
                             },
                         )

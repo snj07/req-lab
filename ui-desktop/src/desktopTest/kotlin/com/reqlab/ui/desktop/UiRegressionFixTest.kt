@@ -175,6 +175,35 @@ class UiRegressionFixTest {
         assertTrue(ratio >= 4.5f, "Contrast ratio must be ≥ 4.5 for WCAG AA; got $ratio")
     }
 
+    /** Indentation and folded-region guides must remain visible on white editors. */
+    @Test
+    fun light_theme_editor_guides_are_more_visible_than_subtle_borders() {
+        val guideLuminance = LightAppColors.editorIndentGuide.luminance()
+        val subtleBorderLuminance = LightAppColors.borderLight.luminance()
+
+        assertTrue(
+            guideLuminance < subtleBorderLuminance,
+            "Editor guides must be darker than near-invisible separators in light mode",
+        )
+        val ratio = (LightAppColors.surface.luminance() + 0.05f) / (guideLuminance + 0.05f)
+        assertTrue(ratio >= 2.1f, "Editor guide contrast should be at least 2.1:1; got $ratio")
+    }
+
+    /** Matching brackets need a visible boundary without an opaque fill over punctuation. */
+    @Test
+    fun light_theme_bracket_match_keeps_delimiters_crisp() {
+        val fill = LightAppColors.editorBracketMatchBackground
+        val border = LightAppColors.editorBracketMatchBorder
+        val borderRatio = (LightAppColors.surface.luminance() + 0.05f) / (border.luminance() + 0.05f)
+
+        assertTrue(fill.alpha <= 0.07f, "Bracket-match fill must remain restrained in light mode")
+        assertTrue(
+            border.alpha in 0.33f..0.42f,
+            "Bracket-match outline must remain quiet in light mode",
+        )
+        assertTrue(borderRatio >= 3f, "Bracket-match outline contrast should be at least 3:1; got $borderRatio")
+    }
+
     // ── Issue 4: request name tooltip ────────────────────────────────────
 
     /**

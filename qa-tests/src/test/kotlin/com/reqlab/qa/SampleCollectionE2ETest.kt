@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.AfterClass
@@ -266,6 +267,24 @@ class SampleCollectionE2ETest {
             assertNotNull(allParams)
             assertEquals("name", allParams["sort"]?.jsonPrimitive?.content)
             assertEquals("asc", allParams["order"]?.jsonPrimitive?.content)
+        }
+    }
+
+    @Test
+    fun query_params_repeated_values() {
+        runBlocking {
+            val r = client.get("$baseUrl/api/echo-query?x=1&x=2")
+            assertEquals(HttpStatusCode.OK, r.status)
+
+            val body = parseJson(r.bodyAsText())
+            val counts = assertNotNull(body["paramCounts"]?.jsonObject)
+            assertEquals(2, counts["x"]?.jsonPrimitive?.content?.toIntOrNull())
+
+            val values = assertNotNull(body["paramValues"]?.jsonObject)
+            assertEquals(
+                listOf("1", "2"),
+                values["x"]?.jsonArray?.map { it.jsonPrimitive.content },
+            )
         }
     }
 

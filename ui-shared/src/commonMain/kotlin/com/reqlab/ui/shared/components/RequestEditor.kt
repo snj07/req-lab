@@ -32,8 +32,12 @@ import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.state.MutableKeyValue
 import com.reqlab.ui.shared.state.RequestEditorTab
 import com.reqlab.ui.shared.state.RequestTabState
+import com.reqlab.core.model.BodyType
+import com.reqlab.core.model.FormEntryType
 import com.reqlab.ui.shared.theme.ReqLabColors
 import com.reqlab.ui.shared.platform.copyToClipboard as platformCopyToClipboard
+import io.ktor.http.decodeURLQueryComponent
+import io.ktor.http.encodeURLParameter
 import kotlinx.serialization.ExperimentalSerializationApi
 
 /**
@@ -109,11 +113,13 @@ fun RequestEditor(
                     script          = tab.preRequestScript,
                     onScriptChanged = { tab.preRequestScript = it; markDirty() },
                     title           = "Pre-request Script",
+                    showCursorPosition = state.settings.showEditorPositionIndicator,
                 )
                 RequestEditorTab.TESTS       -> ScriptEditor(
                     script          = tab.testScript,
                     onScriptChanged = { tab.testScript = it; markDirty() },
                     title           = "Post-request Script",
+                    showCursorPosition = state.settings.showEditorPositionIndicator,
                 )
             }
         }
@@ -125,25 +131,12 @@ fun RequestEditor(
 /**
  * Parses query parameters out of [url] and replaces the tab's params list.
  * Called whenever the user edits the URL field directly.
- * Plain-list params are NOT URL-decoded here to keep it simple & predictable.
+ * Rows hold literal values decoded once from the pasted URL.
  */
 fun syncParamsFromUrl(tab: RequestTabState, url: String) {
-    val qIdx = url.indexOf('?')
-    val newParams: List<MutableKeyValue> = if (qIdx < 0 || qIdx == url.lastIndex) {
-        emptyList()
-    } else {
-        url.substring(qIdx + 1).split('&').mapNotNull { pair ->
-            if (pair.isBlank()) return@mapNotNull null
-            val eqIdx = pair.indexOf('=')
-            when {
-                eqIdx < 0  -> MutableKeyValue(key = pair,                    value = "")
-                eqIdx == 0 -> MutableKeyValue(key = "",                      value = pair.substring(1))
-                else       -> MutableKeyValue(key = pair.substring(0, eqIdx), value = pair.substring(eqIdx + 1))
-            }
-        }
-    }
+    val parts = splitRequestUrl(url)
     tab.params.clear()
-    tab.params.addAll(newParams)
+    tab.params.addAll(parseQueryPairs(parts.query).map { MutableKeyValue(key = it.first, value = it.second) })
 }
 
 /**
@@ -151,11 +144,65 @@ fun syncParamsFromUrl(tab: RequestTabState, url: String) {
  * Called whenever a param key, value, or enabled-state changes.
  */
 fun syncUrlFromParams(tab: RequestTabState) {
-    val base = tab.url.substringBefore('?')
+    val parts = splitRequestUrl(tab.url)
     val enabled = tab.params.filter { it.enabled && it.key.isNotBlank() }
-    tab.url = if (enabled.isEmpty()) base
-              else enabled.joinToString(separator = "&", prefix = "$base?") { "${it.key}=${it.value}" }
+    val query = encodeOrderedQuery(enabled.map { it.key to it.value }, preserveTemplates = true)
+    tab.url = joinRequestUrl(parts.base, query, parts.fragment)
 }
+
+internal data class RequestUrlParts(val base: String, val query: String, val fragment: String)
+
+internal fun splitRequestUrl(url: String): RequestUrlParts {
+    val hashIdx = url.indexOf('#')
+    val withoutFrag = if (hashIdx >= 0) url.substring(0, hashIdx) else url
+    val fragment = if (hashIdx >= 0) url.substring(hashIdx + 1) else ""
+    val qIdx = withoutFrag.indexOf('?')
+    val base = if (qIdx >= 0) withoutFrag.substring(0, qIdx) else withoutFrag
+    val query = if (qIdx >= 0 && qIdx < withoutFrag.lastIndex) withoutFrag.substring(qIdx + 1) else ""
+    return RequestUrlParts(base, query, fragment)
+}
+
+internal fun joinRequestUrl(base: String, query: String, fragment: String): String {
+    val withQuery = if (query.isEmpty()) base else "$base?$query"
+    return if (fragment.isEmpty()) withQuery else "$withQuery#$fragment"
+}
+
+internal fun parseQueryPairs(query: String): List<Pair<String, String>> {
+    if (query.isEmpty()) return emptyList()
+    return query.split('&').mapNotNull { pair ->
+        if (pair.isBlank()) return@mapNotNull null
+        val eqIdx = pair.indexOf('=')
+        when {
+            eqIdx < 0 -> decodeQueryComponent(pair) to ""
+            eqIdx == 0 -> "" to decodeQueryComponent(pair.substring(1))
+            else -> decodeQueryComponent(pair.substring(0, eqIdx)) to
+                decodeQueryComponent(pair.substring(eqIdx + 1))
+        }
+    }
+}
+
+private fun decodeQueryComponent(value: String): String =
+    runCatching { value.decodeURLQueryComponent() }.getOrDefault(value)
+
+private val templateToken = Regex("\\{\\{[^{}]+}}")
+
+internal fun encodeQueryComponent(value: String, preserveTemplates: Boolean = false): String {
+    if (!preserveTemplates) return value.encodeURLParameter()
+    val result = StringBuilder()
+    var offset = 0
+    templateToken.findAll(value).forEach { match ->
+        result.append(value.substring(offset, match.range.first).encodeURLParameter())
+        result.append(match.value)
+        offset = match.range.last + 1
+    }
+    result.append(value.substring(offset).encodeURLParameter())
+    return result.toString()
+}
+
+internal fun encodeOrderedQuery(entries: List<Pair<String, String>>, preserveTemplates: Boolean = false): String =
+    entries.joinToString("&") { (key, value) ->
+        "${encodeQueryComponent(key, preserveTemplates)}=${encodeQueryComponent(value, preserveTemplates)}"
+    }
 
 private fun copyToClipboard(text: String) {
     runCatching { platformCopyToClipboard(text) }
@@ -165,12 +212,31 @@ private fun copyToClipboard(text: String) {
  * Builds the list of (label, action) pairs shown in the copy-as dropdown.
  * Variables from the active environment are resolved for "resolved" variants.
  */
-private fun buildCopyFormats(tab: RequestTabState, state: AppState): List<Pair<String, () -> Unit>> {
+internal fun buildCopyFormats(tab: RequestTabState, state: AppState): List<CopyFormatOption> {
     val layers = state.activeVariableLayers()
+    val fileReason = when {
+        tab.bodyType == BodyType.BINARY -> "Embedded binary has no reusable file path"
+        tab.bodyType == BodyType.FORM_DATA && tab.formRows.any { it.enabled && it.type == FormEntryType.FILE } ->
+            "Embedded multipart file has no reusable file path"
+        else -> null
+    }
+    val headers = copyHeaderList(tab, layers, omitMultipartContentType = false)
+    val duplicateHeaders = headers.map { it.first.lowercase() }.distinct().size != headers.size
+    val mapReason = fileReason ?: if (duplicateHeaders) "Duplicate headers cannot be represented by this API" else null
+    val multipartKeys = tab.formRows.filter { it.enabled }.map { it.key }
+    val powerShellReason = mapReason ?: if (
+        tab.bodyType == BodyType.FORM_DATA && multipartKeys.distinct().size != multipartKeys.size
+    ) "Duplicate multipart field names cannot be represented by PowerShell -Form" else null
     return listOf(
-        "cURL"                   to { copyToClipboard(buildCurlCommand(tab, layers, state.settings.allowJson5InJsonBodies)) },
-        "Python"                 to { copyToClipboard(buildPythonCommand(tab, layers, state.settings.allowJson5InJsonBodies)) },
-        "PowerShell"             to { copyToClipboard(buildPowerShellCommand(tab, layers, state.settings.allowJson5InJsonBodies)) },
+        CopyFormatOption("cURL", fileReason == null, fileReason) {
+            copyToClipboard(buildCurlCommand(tab, layers, state.settings.allowJson5InJsonBodies))
+        },
+        CopyFormatOption("Python", mapReason == null, mapReason) {
+            copyToClipboard(buildPythonCommand(tab, layers, state.settings.allowJson5InJsonBodies))
+        },
+        CopyFormatOption("PowerShell", powerShellReason == null, powerShellReason) {
+            copyToClipboard(buildPowerShellCommand(tab, layers, state.settings.allowJson5InJsonBodies))
+        },
     )
 }
 
@@ -261,4 +327,3 @@ private fun EditorTabBar(
         )
     }
 }
-

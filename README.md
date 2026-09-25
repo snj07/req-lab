@@ -71,20 +71,30 @@ The collection includes an **LLM (OpenAI-compatible)** folder, an **SSE** folder
 - HTTP streaming: SSE (`text/event-stream`) and NDJSON on a single request (OpenAI-style `"stream": true`). Collection items with `Accept: text/event-stream` show an **SSE** badge in the HTTP method color; folder ⋮ → **New SSE Request**
 - Copy request as `curl`
 
-### MCP
+### 🧩 Model Context Protocol (MCP)
 
-ReqLab is an [MCP](https://modelcontextprotocol.io/) client in the same workspace as REST: collections, environments, auth, and a shared Response pane.
+ReqLab brings [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server testing into the same local-first workspace as your HTTP APIs. Configure a server once, keep it with its collection, and reuse the environments, variable resolution, authentication, and response tooling you already use for REST.
 
-![ReqLab MCP tools — connected session, tool list, Form/JSON arguments, JSON-RPC result](docs/images/mcp-tools.png)
+![ReqLab MCP client showing a connected server, its tools, typed arguments, and a JSON-RPC result](docs/images/mcp-tools.png)
 
-- Transports: Streamable HTTP, Auto (legacy fallback), Legacy HTTP+SSE, desktop stdio
-- Tools (Form/JSON), resources (read + subscribe), prompts — results in the shared Response pane
-- Activity JSON-RPC inspector; Logs vs Console
-- Sampling, roots, elicitation on the Client tab
-- Same auth editors as REST (None / Basic / Bearer / API Key / JWT); `{{variables}}` in URL, command, headers, and auth
-- Collection save, import, and export of MCP items
+**Connect with confidence**
 
-Full guide: [docs/mcp.md](docs/mcp.md)
+- Supports Streamable HTTP (MCP 2025-06-18), automatic fallback for legacy servers, Legacy HTTP+SSE (2024-11-05), and local stdio on desktop.
+- Keeps connection state, negotiated transport, server identity, and session details visible while you work.
+- Resolves `{{variables}}` in endpoints, stdio commands, headers, and authentication. Reuse Basic, Bearer, API Key, or JWT configuration alongside request headers and query parameters.
+
+**Explore the server**
+
+- Search and run tools with schema-driven forms or raw JSON, including server-provided read-only and destructive annotations.
+- Browse resources, read or subscribe to supported resource updates, and render prompt messages in the shared Response pane.
+- Inspect the complete JSON-RPC exchange in Activity, with protocol diagnostics in Logs and script output in Console.
+
+**Test the host boundary**
+
+- Configure roots, sampling responses, and elicitation behavior in the Client tab.
+- Save MCP connections in ReqLab collections and carry them through ReqLab collection import and export.
+
+[Read the MCP guide →](docs/mcp.md) · [Run the included MCP fixtures →](docs/tests.md#mcp-fixtures)
 
 ### 📬 Response Inspection
 
@@ -100,9 +110,11 @@ A full-featured Compose-native code editor — no WebView, no Electron.
 
 - **Syntax highlighting**: JSON, XML/HTML, GraphQL, JavaScript
 - **Code folding**: brace-based (`{ }`, `[ ]`), tag-based, comment-based; Fold All / Unfold All
-- **In-editor search**: incremental match count, Previous/Next, keyboard-accessible
+- **Find / replace**: match count, Previous/Next (`F3`), replace-all as one undo; go to line (`Cmd/Ctrl+G`)
 - **Auto-format**: JSON pretty-print, XML/HTML indentation, JavaScript formatting (script editor + body editor)
-- Line numbers gutter, word wrap toggle, monospace font
+- Line numbers gutter, 2-space indent guides, matching-bracket highlight, word wrap, monospace font
+- Status strip (`Ln X, Col Y`), diagnostic gutter ticks, truncation banner for 50k-char lines
+- Duplicate / move / comment / select line (see [docs/shortcuts.md](docs/shortcuts.md))
 - Virtualized rendering (no jank on responses over 10 MB)
 - Full clipboard support (copy, cut, paste, select all) in both edit and read-only modes
 
