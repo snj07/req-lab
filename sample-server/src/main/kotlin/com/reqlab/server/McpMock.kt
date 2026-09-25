@@ -127,7 +127,7 @@ object McpMockProtocol {
         })
         put("serverInfo", buildJsonObject {
             put("name", "ReqLab MCP Mock")
-            put("version", "1.18.0")
+            put("version", "1.19.0")
         })
         put("instructions", "Deterministic ReqLab sample MCP server")
     }

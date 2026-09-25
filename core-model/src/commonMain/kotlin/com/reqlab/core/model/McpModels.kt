@@ -129,7 +129,7 @@ data class McpServerCapabilities(
 data class McpInitializeParams(
     val protocolVersion: String = MCP_PROTOCOL_VERSION,
     val capabilities: McpClientCapabilities = McpClientCapabilities(),
-    val clientInfo: McpImplementation = McpImplementation(name = "ReqLab", version = "1.18.0"),
+    val clientInfo: McpImplementation = McpImplementation(name = "ReqLab", version = "1.19.0"),
 )
 
 @Serializable

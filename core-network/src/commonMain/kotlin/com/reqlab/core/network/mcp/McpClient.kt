@@ -303,7 +303,7 @@ class McpClient(
         val params = McpInitializeParams(
             protocolVersion = MCP_PROTOCOL_VERSION,
             capabilities = McpClientCapabilities(),
-            clientInfo = McpImplementation(name = "ReqLab", version = "1.18.0"),
+            clientInfo = McpImplementation(name = "ReqLab", version = "1.19.0"),
         )
         val result = try {
             request<McpInitializeResult>("initialize", encodeParams(params))

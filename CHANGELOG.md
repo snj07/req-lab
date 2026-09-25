@@ -4,18 +4,32 @@ All notable changes to ReqLab are documented here.
 
 ---
 
-## [Unreleased]
+## [1.19.0] — 2026-09-25
 
 ### Added
 
+- **Environment editor upgrades**: resize from every edge or corner, maximize/restore, and remember the preferred size. Search immediately filters variable keys and values (including masked secrets) without exposing secret contents; `Cmd/Ctrl+F` focuses search, and search results retain safe row identity while editing.
 - **Editor find/replace**: `Cmd/Ctrl+F` opens find; editable editors also get Replace and Replace All (one undo). `F3` / `Shift+F3` step matches; `Esc` closes the bar.
-- **Go to line** (`Cmd/Ctrl+G`) and a status strip with `Ln X, Col Y` plus the diagnostic on the current line.
+- **Go to line** (`Cmd/Ctrl+G`) and an optional status strip with `Ln X, Col Y` plus the diagnostic on the current line. Position display is off by default and can be enabled in Editor Settings.
 - **Line operations**: duplicate (`Cmd/Ctrl+Shift+D`), move (`Alt+↑/↓`), toggle comment (`Cmd/Ctrl+/`), select line (`Cmd/Ctrl+L`). Context menu includes Duplicate and Toggle comment.
 - **Bracket match** and 2-space indent guides in the editor canvas. Diagnostic ticks in the gutter with hover tooltips. Truncation banner when a line exceeds 50,000 characters.
 
 ### Changed
 
 - Tab inserts **2 spaces** (and Shift+Tab removes 2), matching JSON format. On Windows/Linux, `Ctrl+←/→` jumps by word; on macOS, `⌘+←/→` still goes to line start/end.
+- **Request fidelity**: Send and Copy now share request preparation for URL/query encoding, headers, API-key placement, and supported body formats. Repeated query values and headers retain their order.
+- **API-key authentication**: choose Header or Query placement; the choice survives duplicate, save/reopen, import/export, and Postman imports.
+- **Request persistence**: tabs and collections retain disabled, repeated, and secret query/header rows. Autosave tracks same-length text and same-count row edits reliably.
+- **Documentation**: refreshed README and MCP guide, including updated dark and light product screenshots.
+
+### Fixed
+
+- **Repeated query parameters**: requests such as `x=1&x=2` now reach the server as distinct, ordered values. URL replacement from scripts also clears stale query rows before applying new parameters.
+- **URL and copy encoding**: literal spaces, plus signs, percent signs, ampersands, equals signs, Unicode, empty values, fragments, and unresolved variables are handled consistently for Send and Copy.
+- **GraphQL request body**: normal GraphQL request tabs now send the editor content in the GraphQL query envelope instead of as unused raw content.
+- **Copy as request**: generated cURL commands preserve repeated headers and supported bodies; formats that cannot faithfully represent duplicate headers or embedded file/binary bodies are clearly marked unavailable.
+- **Editor stability**: background lexing uses immutable revisions so cancelled work cannot publish stale styles. Bracket highlighting is lighter in light theme and clears when clicking whitespace after a line’s content.
+- **Application cleanup**: shutdown and UI disposal clean up cached editor state, request work, and MCP sessions safely.
 
 ---
 
