@@ -13,6 +13,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -43,7 +44,10 @@ class StreamableHttpTransportTest {
         }
         val transport = StreamableHttpTransport(HttpClient(engine) { expectSuccess = false }, McpConnectionConfig(url = "https://example/mcp"), this)
         transport.start()
-        val received = async { transport.incoming.first() }
+        // Register the collector before the mocked response can complete. MockEngine
+        // may execute entirely inline, so a regular async start can otherwise miss
+        // the hot SharedFlow emission and leave runTest with an uncompleted child.
+        val received = async(start = CoroutineStart.UNDISPATCHED) { transport.incoming.first() }
         transport.send(JsonRpcEnvelope(id = jsonRpcId(1), method = "initialize"))
         val msg = received.await()
         assertEquals("sess-1", transport.sessionId)
@@ -62,7 +66,7 @@ class StreamableHttpTransportTest {
             )
         }
         val transport = StreamableHttpTransport(HttpClient(engine) { expectSuccess = false }, McpConnectionConfig(url = "https://example/mcp"), this)
-        val received = async { transport.incoming.first() }
+        val received = async(start = CoroutineStart.UNDISPATCHED) { transport.incoming.first() }
         transport.send(JsonRpcEnvelope(id = jsonRpcId(1), method = "ping"))
         received.await()
         assertEquals("7", transport.lastEventId)
@@ -86,7 +90,7 @@ class StreamableHttpTransportTest {
             )
         }
         val transport = StreamableHttpTransport(HttpClient(engine) { expectSuccess = false }, McpConnectionConfig(url = "https://example/mcp"), this)
-        val received = async { transport.incoming.first() }
+        val received = async(start = CoroutineStart.UNDISPATCHED) { transport.incoming.first() }
         transport.send(JsonRpcEnvelope(id = jsonRpcId(1), method = "tools/list"))
         received.await()
         val headers = transport.lastResponseHeaders
@@ -121,7 +125,7 @@ class StreamableHttpTransportTest {
             headers = listOf(com.reqlab.core.model.KeyValueEntry("X-Api-Key", "k1")),
         )
         val transport = StreamableHttpTransport(HttpClient(engine) { expectSuccess = false }, config, this)
-        val received = async { transport.incoming.first() }
+        val received = async(start = CoroutineStart.UNDISPATCHED) { transport.incoming.first() }
         transport.send(JsonRpcEnvelope(id = jsonRpcId(1), method = "initialize"))
         received.await()
         assertEquals("Bearer abc", auth)

@@ -4,6 +4,24 @@ All notable changes to ReqLab are documented here.
 
 ---
 
+## [1.20.1] — 2026-10-15
+
+### Fixed
+
+- **Release quality gate reliability**: MCP Streamable HTTP tests now register
+  their response collectors before mocked responses can emit, preventing an
+  intermittent `UncompletedCoroutinesError` on hosted runners.
+- **Sequential release verification**: the mandatory release suites run with
+  Gradle project parallelism disabled to avoid races between shared UI,
+  browser, and sample-server test resources.
+
+### Changed
+
+- Release testing documentation now records the complete quality gate and its
+  hosted-runner execution requirements.
+
+---
+
 ## [1.20.0] — 2026-10-15
 
 ### Added
