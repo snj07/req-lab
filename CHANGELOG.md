@@ -4,6 +4,32 @@ All notable changes to ReqLab are documented here.
 
 ---
 
+## [1.20.0] — 2026-10-15
+
+### Added
+
+- **Packaged runtime smoke test**: release builds now execute the exact self-contained JAR in headless shutdown mode before artifacts are uploaded, catching incomplete or stale runtime contents.
+- **Complete release quality gate**: release CI now covers core networking, editor core, editor UI, shared UI, desktop UI, web, and QA test suites.
+- **Compact find/replace actions**: editable editors use discoverable icon buttons with localized tooltips and accessible labels. `Enter` replaces the current match; `Alt/Option+Enter` replaces all matches.
+
+### Changed
+
+- **Response formatting**: read-only API responses are formatted by default at every size, with large payload formatting kept off the UI thread.
+- **Large-line rendering**: unwrapped lines are rendered through bounded viewport windows without truncating content or showing a misleading truncation banner.
+- **Editor diagnostics and styling**: syntax colors follow the active light/dark theme, lexer revisions cannot publish stale styles, and editor diagnostics are owned by the view model and renderer consistently.
+- **Editor polish**: line/column status is opt-in by default, gutter semantics and scrolling are more reliable, and light-theme bracket/indent highlights remain visible without overpowering the text.
+- **Packaging and documentation**: release packaging starts from a clean build, and the README, editor architecture, and testing guides now match the current editor behavior and release checks.
+
+### Fixed
+
+- Response search navigation now responds correctly to Up/Down arrows and keeps the active match in view.
+- Request editor find/replace controls no longer occupy the body editor together when replacement is not requested.
+- Quoted strings no longer fall back to white or stale styling after edits, dots, URLs, escapes, Unicode, or delayed background lexing.
+- Clicking editor whitespace clears bracket-match emphasis instead of leaving a distracting highlight behind.
+- Desktop shutdown no longer relies on an accidentally stale application bundle; the packaged runtime verifies lifecycle cleanup before release.
+
+---
+
 ## [1.19.0] — 2026-09-25
 
 ### Added
