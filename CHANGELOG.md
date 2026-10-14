@@ -4,39 +4,41 @@ All notable changes to ReqLab are documented here.
 
 ---
 
-## [1.20.1] — 2026-10-15
-
-### Fixed
-
-- **Release quality gate reliability**: MCP Streamable HTTP tests now register
-  their response collectors before mocked responses can emit, preventing an
-  intermittent `UncompletedCoroutinesError` on hosted runners.
-- **Sequential release verification**: the mandatory release suites run with
-  Gradle project parallelism disabled to avoid races between shared UI,
-  browser, and sample-server test resources.
-
-### Changed
-
-- Release testing documentation now records the complete quality gate and its
-  hosted-runner execution requirements.
-
----
-
-## [1.20.0] — 2026-10-15
+## [1.20.2] — 2026-10-15
 
 ### Added
 
-- **Packaged runtime smoke test**: release builds now execute the exact self-contained JAR in headless shutdown mode before artifacts are uploaded, catching incomplete or stale runtime contents.
-- **Complete release quality gate**: release CI now covers core networking, editor core, editor UI, shared UI, desktop UI, web, and QA test suites.
-- **Compact find/replace actions**: editable editors use discoverable icon buttons with localized tooltips and accessible labels. `Enter` replaces the current match; `Alt/Option+Enter` replaces all matches.
+- **Packaged runtime smoke test**: release builds execute the exact
+  self-contained JAR in headless shutdown mode before artifacts are uploaded.
+- **Complete release quality gate**: release CI covers core networking, editor
+  core, editor UI, shared UI, desktop UI, web, and QA suites.
+- **Compact find/replace actions**: editable editors provide localized,
+  accessible icon actions. `Enter` replaces the current match and
+  `Alt/Option+Enter` replaces all matches.
 
 ### Changed
 
-- **Response formatting**: read-only API responses are formatted by default at every size, with large payload formatting kept off the UI thread.
-- **Large-line rendering**: unwrapped lines are rendered through bounded viewport windows without truncating content or showing a misleading truncation banner.
-- **Editor diagnostics and styling**: syntax colors follow the active light/dark theme, lexer revisions cannot publish stale styles, and editor diagnostics are owned by the view model and renderer consistently.
-- **Editor polish**: line/column status is opt-in by default, gutter semantics and scrolling are more reliable, and light-theme bracket/indent highlights remain visible without overpowering the text.
-- **Packaging and documentation**: release packaging starts from a clean build, and the README, editor architecture, and testing guides now match the current editor behavior and release checks.
+- **Response formatting**: read-only API responses are formatted by default at
+  every size, with large payload formatting kept off the UI thread.
+- **Large-line rendering**: unwrapped lines use bounded viewport windows
+  without truncating content or showing a misleading truncation banner.
+- **Editor diagnostics and styling**: syntax colors follow the active theme,
+  lexer revisions reject stale results, and diagnostics are owned consistently
+  by the editor view model and renderer.
+- **Editor polish**: line/column status is opt-in, gutter and scrolling are
+  more reliable, and light-theme bracket/indent highlights remain visible.
+- **Request and copy fidelity**: Send and Copy share URL/query encoding,
+  headers, API-key placement, and supported body preparation. Repeated query
+  values and headers retain their order.
+- **Request persistence**: disabled, repeated, and secret query/header rows,
+  API-key placement, and same-length/same-count edits survive save, reopen,
+  import/export, duplication, and autosave.
+- **Packaging and documentation**: release packaging starts from a clean build;
+  the README, MCP guide, editor architecture, and testing guides reflect the
+  current behavior and release checks.
+- **CI execution**: mandatory suites run sequentially where shared resources
+  require it, and Linux desktop tests run under a virtual Xvfb display so
+  clipboard and file-dialog coverage is exercised reliably.
 
 ### Fixed
 
