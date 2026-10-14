@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
@@ -81,9 +83,8 @@ internal const val READ_ONLY_FORMAT_OFFLOAD_CHARS = 64_000
 
 internal fun shouldOffloadReadOnlyFormat(length: Int): Boolean = length > READ_ONLY_FORMAT_OFFLOAD_CHARS
 
-/** Large read-only bodies are shown as received; pretty-print is opt-in via the toolbar. */
-internal fun shouldAutoPrettyPrintReadOnly(length: Int): Boolean =
-    !shouldOffloadReadOnlyFormat(length)
+/** Read-only response bodies default to formatted; large bodies format off the UI thread. */
+internal fun shouldAutoPrettyPrintReadOnly(@Suppress("UNUSED_PARAMETER") length: Int): Boolean = true
 
 // ── Theme Helper ─────────────────────────────────────────────────
 
@@ -187,9 +188,8 @@ fun CodeEditor(
     val editorState by viewModel.state.collectAsState()
 
     // ── Format / display state ───────────────────────────────
-    // Auto-pretty only for small read-only bodies. Large payloads (>64 KB) are
-    // shown as received so we don't paint raw JSON and then swap in a pretty
-    // reprint a few hundred ms later.
+    // Read-only responses always default to formatted. Large payloads (>64 KB)
+    // are formatted off the UI thread; their raw form remains visible meanwhile.
     var isFormatted by remember {
         mutableStateOf(isReadOnly && shouldAutoPrettyPrintReadOnly(text.length))
     }
@@ -229,6 +229,7 @@ fun CodeEditor(
     // ── Toolbar state ────────────────────────────────────────
     var wordWrap by remember { mutableStateOf(true) }
     var showSearch by remember { mutableStateOf(false) }
+    var showReplace by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var replaceQuery by remember { mutableStateOf("") }
     var activeMatchIndex by remember { mutableIntStateOf(0) }
@@ -270,6 +271,7 @@ fun CodeEditor(
         showSearch = !showSearch
         if (!showSearch) {
             searchQuery = ""
+            showReplace = false
             restoreEditorFocus()
         }
     }
@@ -392,7 +394,10 @@ fun CodeEditor(
                 onQueryChange = { searchQuery = it; activeMatchIndex = 0 },
                 replaceQuery = replaceQuery,
                 onReplaceQueryChange = { replaceQuery = it },
-                showReplace = !isReadOnly,
+                showReplace = showReplace && !isReadOnly,
+                onToggleReplace = if (!isReadOnly) {
+                    { showReplace = !showReplace }
+                } else null,
                 matchCount = searchMatches.size,
                 activeIndex = activeMatchIndex,
                 onNext = {
@@ -415,7 +420,7 @@ fun CodeEditor(
                     viewModel.replaceAllMatches(searchQuery, replaceQuery)
                     activeMatchIndex = 0
                 },
-                onClose = { showSearch = false; searchQuery = ""; restoreEditorFocus() },
+                onClose = { showSearch = false; showReplace = false; searchQuery = ""; restoreEditorFocus() },
                 testTagPrefix = testTagPrefix,
             )
         }
@@ -431,19 +436,6 @@ fun CodeEditor(
                 },
                 onClose = { showGoToLine = false; restoreEditorFocus() },
                 testTagPrefix = testTagPrefix,
-            )
-        }
-
-        if (editorState.hasLineTruncation) {
-            Text(
-                text = "A line exceeds 50,000 characters and is truncated in the view.",
-                color = ReqLabColors.OnSurfaceDim,
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(ReqLabColors.SurfaceContainer)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag("$testTagPrefix-truncation-banner"),
             )
         }
 
@@ -690,6 +682,7 @@ private fun CodeEditorSearchBar(
     replaceQuery: String,
     onReplaceQueryChange: (String) -> Unit,
     showReplace: Boolean,
+    onToggleReplace: (() -> Unit)?,
     matchCount: Int,
     activeIndex: Int,
     onNext: () -> Unit,
@@ -715,6 +708,14 @@ private fun CodeEditorSearchBar(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
+                    event.key == Key.DirectionUp && matchCount > 0 -> {
+                        onPrev()
+                        true
+                    }
+                    event.key == Key.DirectionDown && matchCount > 0 -> {
+                        onNext()
+                        true
+                    }
                     event.key == Key.Enter -> {
                         if (event.isShiftPressed) onPrev() else onNext()
                         true
@@ -764,8 +765,26 @@ private fun CodeEditorSearchBar(
                 text = if (matchCount > 0) "${activeIndex + 1}/$matchCount" else Strings.noResults,
                 color = if (matchCount > 0) ReqLabColors.OnSurfaceVariant else ReqLabColors.OnSurfaceDim,
                 fontSize = 11.sp,
-                modifier = Modifier.widthIn(min = 60.dp),
+                modifier = Modifier
+                    .widthIn(min = 60.dp)
+                    .testTag("$testTagPrefix-search-match-count"),
             )
+        }
+
+        if (onToggleReplace != null) {
+            IconButton(
+                onClick = onToggleReplace,
+                modifier = Modifier
+                    .size(24.dp)
+                    .testTag("$testTagPrefix-search-replace-toggle"),
+            ) {
+                Icon(
+                    imageVector = if (showReplace) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (showReplace) "Hide replace" else "Show replace",
+                    tint = ReqLabColors.OnSurfaceDim,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
 
         IconButton(

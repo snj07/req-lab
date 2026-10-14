@@ -62,7 +62,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -71,7 +70,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -197,12 +195,9 @@ fun EditorRenderer(
     val scope        = rememberCoroutineScope()
     val fallbackFocus = remember { FocusRequester() }
     val focus        = focusRequester ?: fallbackFocus
-    // Tracks the widest line seen (px) so the dummy spacer keeps hScrollState.maxValue correct.
-    // Reset on every document edit (state.version) and on VM switch so deleted/replaced lines shrink.
-    var hMaxContentWidthPx by remember(viewModel, state.version) { mutableStateOf(0) }
     // Cache of per-displayLine TextLayoutResults fed back from LineView.
     // Used by the drag handler to map pointer coords → char offset accurately.
-    val layoutResultCache = remember(viewModel) { mutableStateMapOf<Int, TextLayoutResult>() }
+    val layoutResultCache = remember(viewModel) { mutableStateMapOf<Int, CachedLineLayout>() }
     // Context-menu state: show a DropdownMenu on secondary-button (right-click) press.
     var contextMenuVisible by remember { mutableStateOf(false) }
     var contextMenuOffset  by remember { mutableStateOf(Offset.Zero) }
@@ -541,10 +536,38 @@ fun EditorRenderer(
                 with(density) { 8.dp.toPx() } -
                 with(density) { 16.dp.toPx() }
                 ).toInt().coerceAtLeast(1)
+            val monospaceCharWidthPx = remember(textMeasurer, density) {
+                textMeasurer.measure(
+                    text = "M",
+                    style = editorTextStyle(),
+                    maxLines = 1,
+                    softWrap = false,
+                ).size.width.toFloat().coerceAtLeast(1f)
+            }
+            val longestLineLength = remember(viewModel, state.version) {
+                var longest = 0
+                for (line in 0 until viewModel.document.lineCount) {
+                    longest = maxOf(longest, viewModel.document.lineText(line).length)
+                }
+                longest
+            }
+            val logicalContentWidthPx = (
+                longestLineLength.toDouble() * monospaceCharWidthPx.toDouble() +
+                    with(density) { (LINE_PAD_START + LINE_PAD_END).toPx() }
+                ).coerceAtMost(Int.MAX_VALUE.toDouble()).toFloat()
+            val physicalContentWidthPx = logicalContentWidthPx
+                .coerceAtMost(MAX_PHYSICAL_HORIZONTAL_CONTENT_PX.toFloat())
+            val physicalScrollMax = hScrollState.maxValue
+            val logicalScrollMax = (logicalContentWidthPx - contentWidthPx).coerceAtLeast(0f)
+            val logicalHorizontalScrollPx = if (physicalScrollMax <= 0 || logicalScrollMax <= 0f) {
+                0f
+            } else {
+                (hScrollState.value.toFloat() / physicalScrollMax.toFloat()) * logicalScrollMax
+            }
 
             // ── Invisible spacer that keeps hScrollState.maxValue in sync ────────────────
             // horizontalScroll measures the Spacer at its natural width and sets
-            // maxValue = max(0, hMaxContentWidthPx − contentViewportWidth).
+            // maxValue is bounded for Compose, then mapped to the complete logical width.
             // height = 0.dp ensures no visual impact; elements are still measured.
             if (!wordWrap) {
                 val contentViewportWidthDp = maxWidth - gutterWidth - 1.dp
@@ -556,9 +579,7 @@ fun EditorRenderer(
                 ) {
                     Spacer(
                         Modifier
-                            // Clamp to Compose Constraints safe maximum (< 2^17 = 131072 px).
-                            // Extremely long single-line documents can exceed this limit.
-                            .width(with(density) { hMaxContentWidthPx.coerceAtMost(131_000).toDp() })
+                            .width(with(density) { physicalContentWidthPx.toDp() })
                             .height(0.dp),
                     )
                 }
@@ -607,7 +628,9 @@ fun EditorRenderer(
                                         viewModel         = viewModel,
                                         density           = density,
                                         gutterWidthPx     = gutterWidthPx,
-                                        hScrollValue      = hScrollState.value,
+                                        logicalScrollPx   = logicalHorizontalScrollPx,
+                                        wordWrap          = wordWrap,
+                                        charWidthPx       = monospaceCharWidthPx,
                                         layoutResultCache = layoutResultCache,
                                     )
                                     viewModel.moveCursorTo(docOff, extendSelection = true)
@@ -850,24 +873,19 @@ fun EditorRenderer(
                                     ?.second,
                                 wordWrap         = wordWrap,
                                 containerWidthPx = if (wordWrap) lineTextWidthPx else 0,
+                                horizontalScrollPx = logicalHorizontalScrollPx,
+                                horizontalViewportWidthPx = if (wordWrap) 0 else lineTextWidthPx,
+                                monospaceCharWidthPx = monospaceCharWidthPx,
                                 // Blink alpha from the single hoisted InfiniteTransition.
                                 // Only the line that holds the cursor gets the live value;
                                 // all others get -1f so the Canvas skips the cursor draw.
                                 cursorVisible    = if (cursorHere >= 0) cursorBlinkAlpha else -1f,
                                 variableSpans    = varSpans,
                                 bracketPair      = bracketPair,
-                                onLayoutMeasured = { lr -> layoutResultCache[displayLine] = lr },
-                                modifier         = Modifier
-                                    .then(
-                                        if (wordWrap) Modifier.fillMaxWidth()
-                                        else Modifier
-                                            .wrapContentWidth(unbounded = true, align = androidx.compose.ui.Alignment.Start)
-                                            .graphicsLayer { translationX = -hScrollState.value.toFloat() }
-                                            .onGloballyPositioned { coords ->
-                                                val w = coords.size.width
-                                                if (w > hMaxContentWidthPx) hMaxContentWidthPx = w
-                                            }
-                                    ),
+                                onLayoutMeasured = { lr, startColumn ->
+                                    layoutResultCache[displayLine] = CachedLineLayout(lr, startColumn)
+                                },
+                                modifier         = Modifier.fillMaxWidth(),
                             )
                         }
                     }
@@ -1043,8 +1061,10 @@ private fun posToDragOffset(
     viewModel: EditorViewModel,
     density: androidx.compose.ui.unit.Density,
     gutterWidthPx: Float,
-    hScrollValue: Int,
-    layoutResultCache: Map<Int, TextLayoutResult>,
+    logicalScrollPx: Float,
+    wordWrap: Boolean,
+    charWidthPx: Float,
+    layoutResultCache: Map<Int, CachedLineLayout>,
 ): Int {
     val visibleItems = listState.layoutInfo.visibleItemsInfo
     // Find the item whose top offset is closest to (but ≤) the pointer y
@@ -1063,28 +1083,37 @@ private fun posToDragOffset(
     val contentStartPx = gutterWidthPx + (9f * density.density)
 
     // ── Accurate path: use cached TextLayoutResult ───────────────────────────
-    val lr = layoutResultCache[displayLine]
-    if (lr != null) {
-        val xInCanvas = (posX - contentStartPx + hScrollValue).coerceAtLeast(0f)
+    val cached = layoutResultCache[displayLine]
+    if (wordWrap && cached != null) {
+        val lr = cached.result
+        val xInCanvas = (posX - contentStartPx).coerceAtLeast(0f)
         // Subtract 1dp top-padding applied inside LineView.
         val yInCanvas = (posY - item.offset - (1f * density.density)).coerceAtLeast(0f)
         val charOffset = lr.getOffsetForPosition(
             androidx.compose.ui.geometry.Offset(xInCanvas, yInCanvas)
         ).coerceIn(0, lineText.length)
-        return lineStart + charOffset
+        return lineStart + (cached.startColumn + charOffset).coerceIn(0, lineText.length)
     }
 
     // ── Fallback: monospace estimate (used before first composition) ─────────
-    val xInContent  = posX - contentStartPx + hScrollValue
-    val charWidthPx = 13f * density.density * 0.6f
-    val snapToLineEndThreshold = (lineText.length * charWidthPx) - (charWidthPx * 0.35f)
+    val effectiveCharWidth = charWidthPx.coerceAtLeast(1f)
+    val xInContent = posX - contentStartPx + if (wordWrap) 0f else logicalScrollPx
+    val snapToLineEndThreshold =
+        (lineText.length * effectiveCharWidth) - (effectiveCharWidth * 0.35f)
     val charOffset = if (xInContent >= snapToLineEndThreshold) {
         lineText.length
     } else {
-        ((xInContent / charWidthPx) + 0.5f).toInt().coerceIn(0, lineText.length)
+        ((xInContent / effectiveCharWidth) + 0.5f).toInt().coerceIn(0, lineText.length)
     }
     return lineStart + charOffset
 }
+
+private data class CachedLineLayout(
+    val result: TextLayoutResult,
+    val startColumn: Int,
+)
+
+private const val MAX_PHYSICAL_HORIZONTAL_CONTENT_PX = 131_000
 
 /** Stroke chevron centered in the first-line box (same box as number + LineView glyphs). */
 private fun DrawScope.drawFoldChevron(expanded: Boolean, color: Color) {

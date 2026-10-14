@@ -3,7 +3,6 @@ package com.reqlab.ui.shared.components
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.test.assertFalse
 
 /**
  * Unit tests that pin the highlighting behaviour for large documents in the
@@ -16,9 +15,9 @@ import kotlin.test.assertFalse
  *   each went entirely grey even though each per-line highlight call is cheap and
  *   cached via `remember`.
  *
- * The fix: apply `SyntaxLanguage.PLAIN` only when a **single line** was truncated
- * for display (syntax context is broken at the cut point).  All other lines keep
- * their requested language, regardless of total document size.
+ * Every rendered window keeps the requested language, regardless of total document
+ * size or logical line length. The editor renderer decides which bounded source
+ * window is visible without changing or truncating the source text.
  */
 class LargeDocumentHighlightingTest {
 
@@ -70,8 +69,7 @@ class LargeDocumentHighlightingTest {
     // ── PLAIN language produces NO colour spans ─────────────────────────────
 
     /**
-     * When SyntaxLanguage.PLAIN is used (e.g. for a truncated line), `highlightLine`
-     * must return an AnnotatedString with no spans — plain white text.
+     * PLAIN remains available for actual plain-text content.
      */
     @Test
     fun plain_language_produces_no_spans() {
@@ -84,56 +82,23 @@ class LargeDocumentHighlightingTest {
         assertEquals(line, result.text, "PLAIN language must preserve the original text exactly")
     }
 
-    // ── Per-line language selection logic ───────────────────────────────────
-
-    /**
-     * Simulates the VirtualizedEditableCodeContent per-line language selection:
-     * `lineLanguage = if (isTruncated) SyntaxLanguage.PLAIN else language`
-     *
-     * A non-truncated line must use the real language and produce spans.
-     */
     @Test
-    fun non_truncated_line_uses_real_language() {
-        val rawLine = "  \"boardId\": \"147654876797\","
-        val maxDisplayLength = 50_000
-        val isTruncated = rawLine.length > maxDisplayLength  // false
+    fun oversized_json_line_retains_language_text_and_colour_spans() {
+        val rawLine = "[" + "\"item\",".repeat(10_000) + "\"TAIL\"]"
+        assertTrue(rawLine.length > 50_000)
 
-        assertFalse(isTruncated, "Test setup: line is short and must not be truncated")
+        val result = highlightLine(rawLine, SyntaxLanguage.JSON)
 
-        val lineLanguage = if (isTruncated) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-        assertEquals(SyntaxLanguage.JSON, lineLanguage)
-
-        val result = highlightLine(rawLine, lineLanguage)
-        assertTrue(result.spanStyles.isNotEmpty(), "non-truncated JSON line must have colour spans")
-    }
-
-    /**
-     * A line longer than MAX_LINE_DISPLAY_LENGTH (50 000 chars) is truncated for
-     * display → its `lineLanguage` must be PLAIN.
-     */
-    @Test
-    fun truncated_line_uses_plain_language() {
-        val rawLine = "[" + "\"item\",".repeat(10_000) + "]"  // ~70 000 chars
-        val maxDisplayLength = 50_000
-        val isTruncated = rawLine.length > maxDisplayLength   // true
-
-        assertTrue(isTruncated, "Test setup: line must be > $maxDisplayLength chars")
-
-        val lineLanguage = if (isTruncated) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-        assertEquals(SyntaxLanguage.PLAIN, lineLanguage)
-
-        // Truncated display text: first 50K chars + suffix
-        val displayText = rawLine.take(maxDisplayLength) + " … (${rawLine.length} chars)"
-        val result = highlightLine(displayText, lineLanguage)
-        assertTrue(result.spanStyles.isEmpty(), "truncated line must use PLAIN (no colour spans)")
+        assertEquals(rawLine, result.text)
+        assertTrue(result.text.endsWith("\"TAIL\"]"))
+        assertTrue(result.spanStyles.isNotEmpty(), "Oversized JSON must not fall back to PLAIN")
     }
 
     // ── Large document simulation ────────────────────────────────────────────
 
     /**
      * Simulates a formatted 5 MB JSON document (~5 013 lines, total chars > 2 MB).
-     * Every line is short so `isTruncated = false` → every line uses the real
-     * language → every line produces colour spans.
+     * Every line keeps the real language and produces colour spans.
      *
      * Before the fix, a global `if (text.length > 2_000_000) SyntaxLanguage.PLAIN`
      * check would have returned PLAIN for ALL lines.
@@ -141,7 +106,6 @@ class LargeDocumentHighlightingTest {
     @Test
     fun formatted_5mb_document_lines_all_produce_spans() {
         // Build a document that resembles formatted 5 MB JSON (5 000 lines, > 2 MB total)
-        val singleLine = "  \"boardId\": \"147654876797\","  // 30 chars
         // 5 000 lines × 30 chars + 5 000 newlines ≈ 155 000 chars — not actually 2 MB
         // To hit 2 MB cheaply, make each line longer:
         val paddedLine = "  \"key\": \"${"x".repeat(400)}\"," // ~410 chars
@@ -149,12 +113,9 @@ class LargeDocumentHighlightingTest {
         assertTrue(totalChars > 2_000_000, "Test setup: total chars must exceed 2 MB, got $totalChars")
 
         // Verify that per-line highlighting is independent of document total size
-        val maxDisplayLength = 50_000
         repeat(5) { idx ->
             val lineText = "  \"key$idx\": \"${"v".repeat(400)}\","
-            val isTruncated = lineText.length > maxDisplayLength  // false
-            val lineLanguage = if (isTruncated) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-            val result = highlightLine(lineText, lineLanguage)
+            val result = highlightLine(lineText, SyntaxLanguage.JSON)
             assertTrue(
                 result.spanStyles.isNotEmpty(),
                 "Line $idx of a > 2 MB document must still produce colour spans"
@@ -162,41 +123,22 @@ class LargeDocumentHighlightingTest {
         }
     }
 
-    /**
-     * Exactly at the boundary: a line that is precisely MAX_LINE_DISPLAY_LENGTH chars
-     * must NOT be truncated and must still receive full highlighting.
-     */
     @Test
-    fun line_at_exact_display_limit_is_not_truncated() {
-        val maxDisplayLength = 50_000
-        // Construct a valid JSON string value exactly at the limit
-        val rawLine = "\"" + "a".repeat(maxDisplayLength - 2) + "\""
-        assertEquals(maxDisplayLength, rawLine.length)
-
-        val isTruncated = rawLine.length > maxDisplayLength   // false (equal, not greater)
-        assertFalse(isTruncated)
-
-        val lineLanguage = if (isTruncated) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-        assertEquals(SyntaxLanguage.JSON, lineLanguage)
-
-        val result = highlightLine(rawLine, lineLanguage)
+    fun line_at_former_display_limit_keeps_json_highlighting() {
+        val rawLine = "\"" + "a".repeat(49_998) + "\""
+        assertEquals(50_000, rawLine.length)
+        val result = highlightLine(rawLine, SyntaxLanguage.JSON)
         assertTrue(result.spanStyles.isNotEmpty())
+        assertEquals(rawLine, result.text)
     }
 
-    /**
-     * A line one character past the limit IS truncated and must use PLAIN.
-     */
     @Test
-    fun line_one_past_display_limit_is_truncated() {
-        val maxDisplayLength = 50_000
-        val rawLine = "\"" + "a".repeat(maxDisplayLength - 1) + "\""  // length = 50_001
-        assertEquals(maxDisplayLength + 1, rawLine.length)
-
-        val isTruncated = rawLine.length > maxDisplayLength   // true
-        assertTrue(isTruncated)
-
-        val lineLanguage = if (isTruncated) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-        assertEquals(SyntaxLanguage.PLAIN, lineLanguage)
+    fun line_one_past_former_display_limit_keeps_json_highlighting() {
+        val rawLine = "\"" + "a".repeat(49_999) + "\""
+        assertEquals(50_001, rawLine.length)
+        val result = highlightLine(rawLine, SyntaxLanguage.JSON)
+        assertTrue(result.spanStyles.isNotEmpty())
+        assertEquals(rawLine, result.text)
     }
 }
 

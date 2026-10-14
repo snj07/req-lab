@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.onNodeWithTag
@@ -29,9 +30,8 @@ import kotlin.test.assertTrue
 /**
  * Compose's packed Constraints representation caps each dimension at
  * (1 shl 18) - 1 = 262_143 pixels. A monospace character at 13 sp renders at
- * roughly 7.8 px (density=1.0) to 23.4 px (density=3.0) wide. With
- * MAX_RENDER_CHARS_PER_LINE = 50_000, the rendered width can reach up to
- * 50_000 * 23.4 ≈ 1_170_000 px — far above the safe 262_143 limit.
+ * roughly 7.8 px (density=1.0) to 23.4 px (density=3.0) wide. A complete
+ * 100,000-character line is therefore much wider than the safe 262,143 limit.
  *
  * Both the Canvas size modifier and the dummy-spacer that drives hScrollState
  * must be capped below this limit or Compose throws:
@@ -74,8 +74,7 @@ class EditorLongLineConstraintTest {
     }
 
     /**
-     * Regression test — MAX_RENDER_CHARS_PER_LINE truncation must still allow
-     * wordWrap=true without any crash (word-wrap path is unaffected by the width cap).
+     * Regression test — a long wrapped line remains complete and lays out without a crash.
      */
     @Test
     fun long_single_line_word_wrap_mode_does_not_crash() {
@@ -95,6 +94,47 @@ class EditorLongLineConstraintTest {
         }
         composeRule.waitForIdle()
         // Completion without exception is the assertion
+        vm.dispose()
+    }
+
+    @Test
+    fun oversized_unwrapped_line_scrolls_and_clicks_into_the_real_tail() {
+        val content = "A".repeat(100_000) + "TAIL"
+        val vm = EditorViewModel(content, LanguageMode.PLAIN_TEXT)
+        var scrollState: androidx.compose.foundation.ScrollState? = null
+        var tappedOffset = -1
+
+        composeRule.setContent {
+            Box(Modifier.size(600.dp, 200.dp)) {
+                EditorRenderer(
+                    viewModel = vm,
+                    isReadOnly = true,
+                    language = LanguageMode.PLAIN_TEXT,
+                    wordWrap = false,
+                    testTagPrefix = "virtual_tail",
+                    onScrollStateReady = { scrollState = it },
+                    onPrimaryTapOffset = { tappedOffset = it },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            val state = requireNotNull(scrollState)
+            state.dispatchRawDelta(state.maxValue.toFloat())
+        }
+        composeRule.waitForIdle()
+
+        val editorNode = composeRule.onNodeWithTag("virtual_tail-line-numbers")
+        val editorWidth = editorNode.fetchSemanticsNode().boundsInRoot.width
+        editorNode.performMouseInput { click(Offset(editorWidth - 12f, 12f)) }
+        composeRule.waitForIdle()
+
+        assertTrue(
+            tappedOffset >= content.length - 8,
+            "Clicking at the right edge after scrolling to the end must reach TAIL; offset=$tappedOffset",
+        )
+        vm.selectAll()
+        assertEquals(content, vm.getSelectedText(), "Virtualized rendering must not alter copied text")
         vm.dispose()
     }
 }

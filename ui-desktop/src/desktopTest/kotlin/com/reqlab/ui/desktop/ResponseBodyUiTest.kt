@@ -1,15 +1,21 @@
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
 package com.reqlab.ui.desktop
 
 import com.reqlab.ui.shared.MainScreen
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import com.reqlab.core.model.KeyValueEntry
 import com.reqlab.core.model.ResponseDefinition
 import com.reqlab.core.model.ResponseMetrics
@@ -75,6 +81,36 @@ class ResponseBodyUiTest {
             contentType = "text/html",
             executedAtEpochMillis = System.currentTimeMillis(),
             metrics = ResponseMetrics(statusCode = 200, responseTimeMs = 8, responseSizeBytes = 40),
+        )
+    }
+
+    private fun stateWithLargeJsonResponse(): AppState = AppState().apply {
+        val body = buildString {
+            append("{\"items\":[")
+            repeat(5_000) { index ->
+                if (index > 0) append(',')
+                append("{\"id\":")
+                append(index)
+                append(",\"value\":\"item.")
+                append(index)
+                append("\"}")
+            }
+            append("]}")
+        }
+        activeTab?.response = ResponseDefinition(
+            requestId = "req-large-json",
+            statusCode = 200,
+            statusText = "OK",
+            headers = listOf(KeyValueEntry("Content-Type", "application/json")),
+            cookies = emptyList(),
+            bodyText = body,
+            contentType = "application/json",
+            executedAtEpochMillis = System.currentTimeMillis(),
+            metrics = ResponseMetrics(
+                statusCode = 200,
+                responseTimeMs = 10,
+                responseSizeBytes = body.length.toLong(),
+            ),
         )
     }
 
@@ -161,6 +197,42 @@ class ResponseBodyUiTest {
     fun format_toggle_button_exists() {
         composeRule.setContent { MainScreen(stateWithJsonResponse()) }
         composeRule.onNodeWithTag("response-format-toggle").assertIsDisplayed()
+    }
+
+    @Test
+    fun large_json_response_is_formatted_by_default() {
+        composeRule.setContent { MainScreen(stateWithLargeJsonResponse()) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Raw", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun long_response_line_is_not_reported_as_truncated() {
+        val state = AppState().apply {
+            val body = "A".repeat(50_001) + "TAIL"
+            activeTab?.response = ResponseDefinition(
+                requestId = "req-long-line",
+                statusCode = 200,
+                statusText = "OK",
+                headers = listOf(KeyValueEntry("Content-Type", "text/plain")),
+                cookies = emptyList(),
+                bodyText = body,
+                contentType = "text/plain",
+                executedAtEpochMillis = System.currentTimeMillis(),
+                metrics = ResponseMetrics(
+                    statusCode = 200,
+                    responseTimeMs = 10,
+                    responseSizeBytes = body.length.toLong(),
+                ),
+            )
+        }
+
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText(
+            "A line exceeds 50,000 characters and is truncated in the view.",
+        ).assertDoesNotExist()
     }
 
     @Test
@@ -257,6 +329,31 @@ class ResponseBodyUiTest {
         // Should show match count (e.g., "1/2" for 2 occurrences of "id" in the JSON)
         // The exact count depends on formatting, but there should be results
         composeRule.onNodeWithTag("response-search-bar").assertIsDisplayed()
+    }
+
+    @Test
+    fun response_search_arrow_keys_navigate_matches() {
+        val state = stateWithJsonResponse().apply {
+            activeTab?.response = activeTab?.response?.copy(
+                bodyText = "needle needle needle",
+                contentType = "text/plain",
+            )
+        }
+        composeRule.setContent { MainScreen(state) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("response-search-toggle").performClick()
+        composeRule.onNodeWithTag("response-search-input").performTextInput("needle")
+        composeRule.waitForIdle()
+
+        val count = composeRule.onNodeWithTag("response-search-match-count")
+        count.assertTextEquals("1/3")
+        composeRule.onNodeWithTag("response-search-input").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        count.assertTextEquals("2/3")
+        composeRule.onNodeWithTag("response-search-input").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.waitForIdle()
+        count.assertTextEquals("1/3")
     }
 
     // ── Line numbers ──

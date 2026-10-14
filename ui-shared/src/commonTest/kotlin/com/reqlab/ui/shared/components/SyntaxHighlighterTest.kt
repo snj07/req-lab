@@ -483,9 +483,9 @@ class ReadOnlyFormatOffloadTest {
     }
 
     @Test
-    fun shouldAutoPrettyPrintReadOnly_skips_large_payloads() {
+    fun shouldAutoPrettyPrintReadOnly_includes_large_payloads() {
         assertTrue(shouldAutoPrettyPrintReadOnly(1))
         assertTrue(shouldAutoPrettyPrintReadOnly(READ_ONLY_FORMAT_OFFLOAD_CHARS))
-        assertFalse(shouldAutoPrettyPrintReadOnly(READ_ONLY_FORMAT_OFFLOAD_CHARS + 1))
+        assertTrue(shouldAutoPrettyPrintReadOnly(READ_ONLY_FORMAT_OFFLOAD_CHARS + 1))
     }
 }

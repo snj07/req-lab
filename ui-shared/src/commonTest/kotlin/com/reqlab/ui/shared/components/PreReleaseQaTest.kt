@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
  *  2. Default body type behaviour for new tabs
  *  3. Per-type body content round-trip via export / import (rawContents)
  *  4. AppState.addTab restores per-type body contents from CollectionNode
- *  5. Large single-line document: line-count and truncation boundary awareness
+ *  5. Large single-line document preservation
  *  6. Large-file validation threshold (> 1 MB skips inline validation)
  *  7. Fold region detection for multi-type documents
  *  8. Unique collection/environment naming collision avoidance
@@ -387,30 +387,11 @@ class AddTabBodyContentsRestorationTest {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Documents the rendering boundaries for large single-line content.
- *
- * KNOWN GAP: A minified single-line JSON file (e.g. 5MB-min.json, 4.4 MB, 1 line)
- * exceeds MAX_RENDER_CHARS_PER_LINE = 50_000. LineView.kt truncates the line to
- * 50 000 chars and appends " … (N chars)". Syntax highlighting falls back to PLAIN.
- * Fold detection returns zero regions for a single-line document.
+ * Regression guards for large single-line content. Rendering is horizontally
+ * virtualized; the complete source remains available to syntax highlighting,
+ * search, selection, and copy regardless of line length.
  */
 class SingleLineDocumentBoundaryTest {
-
-    private val MAX_RENDER_CHARS_PER_LINE = 50_000
-
-    @Test
-    fun single_line_below_threshold_is_not_truncated() {
-        val line = "a".repeat(MAX_RENDER_CHARS_PER_LINE)
-        assertFalse(line.length > MAX_RENDER_CHARS_PER_LINE,
-            "A line of exactly $MAX_RENDER_CHARS_PER_LINE chars must NOT be flagged as truncated")
-    }
-
-    @Test
-    fun single_line_above_threshold_is_truncated() {
-        val line = "a".repeat(MAX_RENDER_CHARS_PER_LINE + 1)
-        assertTrue(line.length > MAX_RENDER_CHARS_PER_LINE,
-            "A line of ${line.length} chars MUST be flagged as truncated (exceeds $MAX_RENDER_CHARS_PER_LINE)")
-    }
 
     /**
      * Documents the known gap: a minified 4.4 MB JSON is a single line.
@@ -425,40 +406,17 @@ class SingleLineDocumentBoundaryTest {
             "Single-line JSON must produce zero fold regions (all braces on one line)")
     }
 
-    /**
-     * Documents the known gap: when a line exceeds MAX_RENDER_CHARS_PER_LINE,
-     * the LineView falls back to PLAIN language (no syntax highlighting).
-     */
-    @Test
-    fun truncated_line_falls_back_to_plain_language() {
-        val oversizedLine = "[" + "\"item\",".repeat(10_000) + "]"  // ~70 000 chars
-        val isTruncated = oversizedLine.length > MAX_RENDER_CHARS_PER_LINE
-
-        assertTrue(isTruncated, "Test setup: line must exceed $MAX_RENDER_CHARS_PER_LINE chars")
-
-        // When truncated, LineView uses PLAIN to avoid colour artefacts at the cut point
-        val language = if (isTruncated) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-        assertEquals(SyntaxLanguage.PLAIN, language,
-            "A truncated line must fall back to PLAIN syntax highlighting")
-    }
-
     @Test
     fun single_line_minified_json_is_valid() {
-        // Even though it cannot be displayed completely, it must still parse as valid JSON
         val minifiedJson = """{"userId":1,"name":"Alice","roles":["admin","user"],"active":true}"""
         assertNull(validateJson(minifiedJson), "Minified single-line JSON must be valid")
     }
 
     @Test
-    fun multi_line_formatted_json_enables_syntax_highlighting() {
-        // A formatted JSON line (typical of 10mb-sample.json) is short → not truncated
-        val formattedLine = """  "boardId": "147654876797","""
-        assertFalse(formattedLine.length > MAX_RENDER_CHARS_PER_LINE,
-            "A typical formatted JSON line must not be truncated")
-
-        val language = if (formattedLine.length > MAX_RENDER_CHARS_PER_LINE) SyntaxLanguage.PLAIN else SyntaxLanguage.JSON
-        assertEquals(SyntaxLanguage.JSON, language,
-            "A short formatted line must keep JSON syntax highlighting")
+    fun oversized_single_line_source_is_preserved_exactly() {
+        val source = "[" + "\"item\",".repeat(10_000) + "\"TAIL\"]"
+        assertTrue(source.length > 50_000)
+        assertTrue(source.endsWith("\"TAIL\"]"), "The source tail must never be replaced by an ellipsis")
     }
 }
 

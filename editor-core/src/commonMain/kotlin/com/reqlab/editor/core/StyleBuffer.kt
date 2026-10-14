@@ -99,7 +99,7 @@ class StyleBuffer(initialCapacity: Int) {
 
     /** O(1): return the [TokenType] at logical position [pos]. */
     fun styleAt(pos: Int): TokenType {
-        if (pos < 0 || pos >= styles.size) return TokenType.PLAIN
+        if (pos < 0 || pos >= endStyled || pos >= styles.size) return TokenType.PLAIN
         return TokenType.entries.getOrElse(styles[pos].toInt() and 0xFF) { TokenType.PLAIN }
     }
 
@@ -108,10 +108,10 @@ class StyleBuffer(initialCapacity: Int) {
      * stopping at [limit] (exclusive).  Used for run-length encoding per-line spans.
      */
     fun nextStyleChangeAfter(from: Int, limit: Int): Int {
-        if (from < 0 || from >= styles.size) return limit
+        if (from < 0 || from >= endStyled || from >= styles.size) return limit
         val current = styles[from]
         var i = from + 1
-        val end = minOf(limit, styles.size)
+        val end = minOf(limit, endStyled, styles.size)
         while (i < end && styles[i] == current) i++
         return i
     }

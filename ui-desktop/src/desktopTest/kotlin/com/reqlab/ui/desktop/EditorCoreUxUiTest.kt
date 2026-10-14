@@ -82,10 +82,13 @@ class EditorCoreUxUiTest {
     }
 
     @Test
-    fun search_shows_replace_field_in_editable_editor() {
+    fun search_keeps_replace_collapsed_until_requested() {
         composeRule.setContent { MainScreen(openJsonBody("{\"a\":1}")) }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("body-editor-search-toggle", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("body-editor-search-replace-input", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("body-editor-search-replace-toggle", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("body-editor-search-replace-input", useUnmergedTree = true).assertIsDisplayed()
     }

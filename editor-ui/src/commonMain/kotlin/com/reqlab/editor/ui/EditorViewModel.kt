@@ -37,8 +37,6 @@ data class EditorDisplayState(
     val selectionEnd: Int      = -1,
     val diagnostics: List<InlineEditorError> = emptyList(),
     val totalDisplayLines: Int = 1,
-    /** True when at least one document line exceeds [EditorViewModel.DISPLAY_LINE_LENGTH_LIMIT] chars. */
-    val hasLineTruncation: Boolean = false,
 )
 
 private data class EditCommand(
@@ -77,7 +75,6 @@ class EditorViewModel(
         EditorDisplayState(
             version            = document.version,
             totalDisplayLines  = displayLineMap.totalDisplayLines,
-            hasLineTruncation  = computeHasLineTruncation(),
         )
     )
     val state: StateFlow<EditorDisplayState> = _state.asStateFlow()
@@ -107,7 +104,7 @@ class EditorViewModel(
         // Run initial fold detection synchronously to avoid startup race/flakiness
         // in tests and release CI. This is lightweight for initial payload sizes.
         computeAndApplyFolds()
-        emitFoldUpdate(computeHasLineTruncation())
+        emitFoldUpdate()
     }
 
     fun onExternalTextChanged(text: String) {
@@ -124,7 +121,6 @@ class EditorViewModel(
         val capturedSeq = editSequence
         val newVersion = document.version
         val docLen = document.length
-        val hasTruncation = computeHasLineTruncation()
         _state.update {
             it.copy(
                 version = newVersion,
@@ -134,7 +130,6 @@ class EditorViewModel(
                 selectionEnd = -1,
                 diagnostics = emptyList(),
                 totalDisplayLines = displayLineMap.totalDisplayLines,
-                hasLineTruncation = hasTruncation,
             )
         }
         notifyTextChanged()
@@ -146,7 +141,7 @@ class EditorViewModel(
                 scheduleInitialFoldsInternal()
             }
             if (editSequence != capturedSeq) return@launch
-            emitFoldUpdate(computeHasLineTruncation())
+            emitFoldUpdate()
         }
     }
 
@@ -352,7 +347,10 @@ class EditorViewModel(
             document.insert(f, insertText)
         }
 
-        styleBuffer.invalidateFrom(f)
+        val editLine = document.lineAt(f.coerceIn(0, document.length))
+        val editLineStart = document.lineStart(editLine)
+        styleBuffer.invalidateFrom(editLineStart)
+        styleEditedLine(editLine, editLineStart)
         // grow() is background-only (IdleLexer calls it before any write); calling it here
         // from the main thread races with IdleLexer's own grow() on the styles array reference.
         displayLineMap.reset(document.lineCount)
@@ -413,14 +411,7 @@ class EditorViewModel(
                 // Bump foldVersion only when arrow positions actually changed so the
                 // renderer re-reads foldRegions.
                 foldVersion = if (foldRegionsChanged) it.foldVersion + 1 else it.foldVersion,
-                hasLineTruncation = run {
-                    val lineLen = document.lineText(document.lineAt(f.coerceIn(0, document.length))).length
-                    when {
-                        lineLen > DISPLAY_LINE_LENGTH_LIMIT -> true
-                        it.hasLineTruncation -> computeHasLineTruncation()
-                        else -> false
-                    }
-                },
+                styleClock = styleBuffer.styleClock,
             )
         }
 
@@ -429,8 +420,6 @@ class EditorViewModel(
         // tokens. Without this, tokenization starting mid-word (e.g. at the 'e' of
         // "false") would only re-style the tail of the token, leaving stale colours
         // on the preceding characters.
-        val editLine      = document.lineAt(f.coerceAtLeast(0))
-        val editLineStart = document.lineStart(editLine)
         idleLexer.scheduleFrom(editLineStart, lastExternalText, scope)
         scheduleDiagnostics()
         scheduleFoldRegionsUpdate()
@@ -919,12 +908,11 @@ class EditorViewModel(
             .sortedBy { it.startLine }
     }
 
-    private fun emitFoldUpdate(hasTruncation: Boolean = false) {
+    private fun emitFoldUpdate() {
         _state.update {
             it.copy(
                 foldVersion = it.foldVersion + 1,
                 totalDisplayLines = displayLineMap.totalDisplayLines,
-                hasLineTruncation = hasTruncation,
             )
         }
     }
@@ -1001,17 +989,6 @@ class EditorViewModel(
         }
     }
 
-    /** O(lineCount) check: scans line start offsets to find any line > [DISPLAY_LINE_LENGTH_LIMIT] chars. */
-    private fun computeHasLineTruncation(): Boolean {
-        val count = document.lineCount
-        for (line in 0 until count) {
-            val start = document.lineStart(line)
-            val end = if (line + 1 < count) document.lineStart(line + 1) - 1 else document.length
-            if ((end - start) > DISPLAY_LINE_LENGTH_LIMIT) return true
-        }
-        return false
-    }
-
     /**
      * Color the first [FIRST_PAINT_STYLE_CHARS] on the caller thread so the first
      * frame is not unstyled PLAIN text. IdleLexer continues from [StyleBuffer.endStyled].
@@ -1037,11 +1014,29 @@ class EditorViewModel(
         }
     }
 
+    /**
+     * Re-style a normal edited line before the next frame so an invalidated string does not
+     * briefly render with stale token bytes. Oversized lines stay on the revision-safe idle
+     * lexer path to keep typing latency bounded.
+     */
+    private fun styleEditedLine(line: Int, lineStart: Int) {
+        val text = document.lineText(line)
+        if (text.isEmpty() || text.length > SYNC_EDIT_STYLE_CHARS) return
+        styleBuffer.applyStyle(lineStart, lineStart + text.length, com.reqlab.editor.core.TokenType.PLAIN)
+        val (tokens, _) = provider.tokenizeLine(text, line + 1, null)
+        for (token in tokens) {
+            styleBuffer.applyStyle(
+                lineStart + token.startOffset,
+                lineStart + token.endOffset,
+                token.type,
+            )
+        }
+    }
+
     companion object {
-        /** Matches LineView.MAX_RENDER_CHARS_PER_LINE — lines longer than this are truncated in the renderer. */
-        const val DISPLAY_LINE_LENGTH_LIMIT = 50_000
         /** Bytes styled synchronously so a large JSON load is not a white flash then color. */
         const val FIRST_PAINT_STYLE_CHARS = 128_000
+        private const val SYNC_EDIT_STYLE_CHARS = 16_384
         // Keep undo memory bounded for multi-MB documents while still allowing
         // long Cmd+Z/Cmd+Shift+Z chains.
         private const val MAX_UNDO_COMMANDS = 2_000

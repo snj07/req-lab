@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.platform.LocalDensity
@@ -69,6 +70,9 @@ internal fun LineView(
     activeSearchRange: IntRange? = null,
     wordWrap: Boolean = true,
     containerWidthPx: Int = 0,
+    horizontalScrollPx: Float = 0f,
+    horizontalViewportWidthPx: Int = 0,
+    monospaceCharWidthPx: Float = 8f,
     /**
      * Pre-computed cursor-blink alpha (0f..1f) from the hoisted InfiniteTransition
      * in EditorRenderer. -1f means "no cursor on this line" (draws nothing).
@@ -77,7 +81,7 @@ internal fun LineView(
     /** Called after every (re-)measure with the new TextLayoutResult. Used by
      *  the drag-selection handler to map pointer coordinates to character offsets
      *  without relying on a hardcoded character-width estimate. */
-    onLayoutMeasured: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
+    onLayoutMeasured: ((androidx.compose.ui.text.TextLayoutResult, Int) -> Unit)? = null,
     /**
      * Pre-computed per-line variable color spans (range relative to line start → Color).
      * Applied on top of the syntax highlighting so `{{token}}` text is always visually distinct.
@@ -89,7 +93,6 @@ internal fun LineView(
 ) {
     val textMeasurer = rememberTextMeasurer()
     val density      = LocalDensity.current
-    val onSurface    = theme.foreground
     val primary      = theme.accent
 
     // cursorVisible is provided by the caller (hoisted to EditorRenderer).
@@ -102,18 +105,51 @@ internal fun LineView(
     val lineStartOffset: Int = remember(version, docLine, document) {
         if (docLine < document.lineCount) document.lineStart(docLine) else 0
     }
+    val horizontalWindow = remember(
+        lineText,
+        wordWrap,
+        horizontalScrollPx,
+        horizontalViewportWidthPx,
+        monospaceCharWidthPx,
+        cursorOffset,
+        activeSearchRange,
+    ) {
+        if (wordWrap) {
+            val anchor = activeSearchRange?.first
+                ?: (cursorOffset - lineStartOffset).takeIf { it in 0..lineText.length }
+                ?: 0
+            wrappedLineWindow(lineText.length, anchor)
+        } else {
+            horizontalLineWindow(
+                lineLength = lineText.length,
+                scrollPx = horizontalScrollPx,
+                viewportWidthPx = horizontalViewportWidthPx,
+                charWidthPx = monospaceCharWidthPx,
+            )
+        }
+    }
 
-    val annotated: AnnotatedString = remember(lineText, styleClock, searchRanges, activeSearchRange, diagnostics, variableSpans) {
+    val annotated: AnnotatedString = remember(
+        lineText,
+        styleClock,
+        searchRanges,
+        activeSearchRange,
+        diagnostics,
+        variableSpans,
+        horizontalWindow,
+        theme,
+    ) {
         buildLineAnnotatedString(
             lineText        = lineText,
             lineStartOffset = lineStartOffset,
             styleBuffer     = styleBuffer,
-            language        = language,
+            theme           = theme,
             diagnostics     = diagnostics,
-            onSurface       = onSurface,
             searchRanges    = searchRanges,
             activeSearchRange = activeSearchRange,
             variableSpans   = variableSpans,
+            renderStartColumn = horizontalWindow.startColumn,
+            renderEndColumn = horizontalWindow.endColumn,
         )
     }
 
@@ -121,9 +157,8 @@ internal fun LineView(
 
     val measured: TextLayoutResult = remember(annotated, wordWrap, containerWidthPx) {
         // Compose's packed Constraints use 18 bits per dimension: max = (1 shl 18) - 1 = 262_143 px.
-        // In non-wordWrap mode, measuring an unbounded single line can easily exceed this limit
-        // (50_000 chars × 7.8 px/char ≈ 390_000 px at density=1). Cap the measurement width
-        // to MAX_SAFE_RENDER_WIDTH_PX so that the TextLayoutResult.size.width is always safe.
+        // In non-wordWrap mode, measuring an unbounded single line can easily exceed this limit.
+        // The visible window is small, but retain a defensive cap for every platform density.
         val constraints = when {
             wordWrap && containerWidthPx > 0 -> Constraints.fixedWidth(containerWidthPx)
             !wordWrap -> Constraints(maxWidth = MAX_SAFE_RENDER_WIDTH_PX)
@@ -140,7 +175,7 @@ internal fun LineView(
     // in EditorRenderer can use getOffsetForPosition() instead of a
     // hardcoded character-width estimate.
     LaunchedEffect(measured) {
-        onLayoutMeasured?.invoke(measured)
+        onLayoutMeasured?.invoke(measured, horizontalWindow.startColumn)
     }
 
     val measuredLatest = rememberUpdatedState(measured)
@@ -150,18 +185,25 @@ internal fun LineView(
     val renderLen  = measured.layoutInput.text.length
 
     val hasSelection  = selStart >= 0 && selEnd > selStart
-    val lineSelStart  = if (hasSelection) (selStart - lineStartOffset).coerceIn(0, renderLen) else -1
-    val lineSelEnd    = if (hasSelection) (selEnd   - lineStartOffset).coerceIn(0, renderLen) else -1
+    val lineSelStart  = if (hasSelection) {
+        (selStart - lineStartOffset - horizontalWindow.startColumn).coerceIn(0, renderLen)
+    } else -1
+    val lineSelEnd = if (hasSelection) {
+        (selEnd - lineStartOffset - horizontalWindow.startColumn).coerceIn(0, renderLen)
+    } else -1
     val showSelection = hasSelection && lineSelStart < lineSelEnd &&
         selEnd > lineStartOffset && selStart < lineEndOff
 
     val cursorInLine = cursorOffset >= lineStartOffset && cursorOffset <= lineEndOff
     val cursorCol    = if (cursorInLine)
-        (cursorOffset - lineStartOffset).coerceIn(0, minOf(lineLen, renderLen))
+        (cursorOffset - lineStartOffset - horizontalWindow.startColumn).coerceIn(0, renderLen)
     else -1
 
     val lineHeightDp = with(density) { measured.size.height.toDp() }.coerceAtLeast(20.dp)
-    val lineWidthDp  = with(density) { measured.size.width.toDp() }
+    val lineWidthDp = with(density) {
+        if (!wordWrap && horizontalViewportWidthPx > 0) horizontalViewportWidthPx.toDp()
+        else measured.size.width.toDp()
+    }
     val wrapping = wordWrap && containerWidthPx > 0
     val padStartPx = with(density) { LINE_PAD_START.toPx() }
     val padTopPx = with(density) { LINE_PAD_VERT.toPx() }
@@ -170,9 +212,17 @@ internal fun LineView(
         modifier = modifier
             .then(if (wrapping) Modifier.fillMaxWidth() else Modifier)
             .semantics { contentDescription = lineText }
-            .pointerInput(lineStartOffset, version, document, wordWrap, containerWidthPx) {
+            .pointerInput(
+                lineStartOffset,
+                version,
+                document,
+                wordWrap,
+                containerWidthPx,
+                horizontalWindow,
+                horizontalScrollPx,
+            ) {
                 fun toLayout(p: Offset) = Offset(
-                    (p.x - padStartPx).coerceAtLeast(0f),
+                    (p.x - padStartPx - horizontalWindow.drawOffsetPx).coerceAtLeast(0f),
                     (p.y - padTopPx).coerceAtLeast(0f),
                 )
                 awaitEachGesture {
@@ -180,11 +230,16 @@ internal fun LineView(
                     val layout = measuredLatest.value
                     val charOff0 = if (down.position.x < padStartPx) 0
                         else offsetInLayout(layout, toLayout(down.position))
-                    val absOff0 = lineStartOffset + charOff0
+                    val absOff0 = lineStartOffset + horizontalWindow.startColumn + charOff0
                     val layoutPosition = toLayout(down.position)
                     val visualLine = layout.getLineForVerticalPosition(layoutPosition.y)
                     val lineEnd = layout.getLineEnd(visualLine, visibleEnd = true)
-                    val isTrailingWhitespace = layoutPosition.x > layout.getCursorRect(lineEnd).left
+                    val isTrailingWhitespace = if (wordWrap) {
+                        layoutPosition.x > layout.getCursorRect(lineEnd).left
+                    } else {
+                        down.position.x - padStartPx + horizontalScrollPx >=
+                            lineText.length * monospaceCharWidthPx
+                    }
 
                     // Immediately place cursor on first press — no delay.
                     // If a double-click follows, onWordSelect will override this placement.
@@ -206,7 +261,9 @@ internal fun LineView(
                             if (ptr.position.y in 0f..lineHeightPx) {
                                 val charOff = if (ptr.position.x < padStartPx) 0
                                     else offsetInLayout(measuredLatest.value, toLayout(ptr.position))
-                                onDragTo?.invoke(lineStartOffset + charOff)
+                                onDragTo?.invoke(
+                                    lineStartOffset + horizontalWindow.startColumn + charOff,
+                                )
                             }
                             ptr.consume()
                         }
@@ -232,64 +289,64 @@ internal fun LineView(
             modifier = if (wrapping) Modifier.matchParentSize()
                        // Clamp to prevent Modifier.size() from producing a Constraints width
                        // above Compose's packed safe limit of 262_143 px.
-                       else Modifier.size(
-                           width  = lineWidthDp.coerceAtMost(with(density) { MAX_SAFE_RENDER_WIDTH_PX.toDp() }),
-                           height = lineHeightDp,
-                       ),
+                       else Modifier.size(width = lineWidthDp, height = lineHeightDp),
         ) {
-            if (showSelection) {
-                val path = measured.getPathForRange(lineSelStart, lineSelEnd)
-                drawPath(path, color = primary.copy(alpha = 0.28f))
-            }
-
-            val guides = indentGuideColumns(lineText)
-            if (guides.isNotEmpty() && renderLen > 0) {
-                val h = size.height
-                for (col in guides) {
-                    if (col > renderLen) break
-                    val x = measured.getHorizontalPosition(col, true)
-                    drawLine(
-                        color = theme.indentGuide,
-                        start = Offset(x, 0f),
-                        end = Offset(x, h),
-                        strokeWidth = 1f,
-                    )
+            translate(left = horizontalWindow.drawOffsetPx) {
+                if (showSelection) {
+                    val path = measured.getPathForRange(lineSelStart, lineSelEnd)
+                    drawPath(path, color = primary.copy(alpha = 0.28f))
                 }
-            }
 
-            if (bracketPair != null) {
-                for (abs in listOf(bracketPair.first, bracketPair.second)) {
-                    val col = abs - lineStartOffset
-                    if (col in 0 until renderLen) {
-                        val box = measured.getBoundingBox(col)
-                        drawRect(
-                            color = theme.bracketMatchBackground,
-                            topLeft = Offset(box.left, box.top),
-                            size = androidx.compose.ui.geometry.Size(box.width.coerceAtLeast(1f), box.height),
-                        )
-                        drawRect(
-                            color = theme.bracketMatchBorder,
-                            topLeft = Offset(box.left + 0.5f, box.top + 0.5f),
-                            size = androidx.compose.ui.geometry.Size(
-                                (box.width - 1f).coerceAtLeast(1f),
-                                (box.height - 1f).coerceAtLeast(1f),
-                            ),
-                            style = Stroke(width = 1f),
+                val guides = indentGuideColumns(lineText)
+                if (guides.isNotEmpty() && renderLen > 0) {
+                    val h = size.height
+                    for (col in guides) {
+                        val localCol = col - horizontalWindow.startColumn
+                        if (localCol !in 0..renderLen) continue
+                        val x = measured.getHorizontalPosition(localCol, true)
+                        drawLine(
+                            color = theme.indentGuide,
+                            start = Offset(x, 0f),
+                            end = Offset(x, h),
+                            strokeWidth = 1f,
                         )
                     }
                 }
-            }
 
-            drawText(measured, topLeft = Offset.Zero)
+                if (bracketPair != null) {
+                    for (abs in listOf(bracketPair.first, bracketPair.second)) {
+                        val col = abs - lineStartOffset - horizontalWindow.startColumn
+                        if (col in 0 until renderLen) {
+                            val box = measured.getBoundingBox(col)
+                            drawRect(
+                                color = theme.bracketMatchBackground,
+                                topLeft = Offset(box.left, box.top),
+                                size = androidx.compose.ui.geometry.Size(box.width.coerceAtLeast(1f), box.height),
+                            )
+                            drawRect(
+                                color = theme.bracketMatchBorder,
+                                topLeft = Offset(box.left + 0.5f, box.top + 0.5f),
+                                size = androidx.compose.ui.geometry.Size(
+                                    (box.width - 1f).coerceAtLeast(1f),
+                                    (box.height - 1f).coerceAtLeast(1f),
+                                ),
+                                style = Stroke(width = 1f),
+                            )
+                        }
+                    }
+                }
 
-            if (cursorCol >= 0 && effectiveCursorAlpha > 0f) {
-                val cursorRect: Rect = measured.getCursorRect(cursorCol)
-                drawLine(
-                    color       = primary.copy(alpha = effectiveCursorAlpha),
-                    start       = Offset(cursorRect.left, cursorRect.top),
-                    end         = Offset(cursorRect.left, cursorRect.bottom),
-                    strokeWidth = 2f,
-                )
+                drawText(measured, topLeft = Offset.Zero)
+
+                if (cursorCol >= 0 && effectiveCursorAlpha > 0f) {
+                    val cursorRect: Rect = measured.getCursorRect(cursorCol)
+                    drawLine(
+                        color       = primary.copy(alpha = effectiveCursorAlpha),
+                        start       = Offset(cursorRect.left, cursorRect.top),
+                        end         = Offset(cursorRect.left, cursorRect.bottom),
+                        strokeWidth = 2f,
+                    )
+                }
             }
         }
     }
@@ -321,8 +378,6 @@ private fun offsetInLayout(lr: TextLayoutResult, position: androidx.compose.ui.g
     return lr.getOffsetForPosition(position).coerceIn(0, textLen)
 }
 
-private const val MAX_RENDER_CHARS_PER_LINE = 50_000
-
 internal val LINE_PAD_START = 8.dp
 internal val LINE_PAD_END = 16.dp
 internal val LINE_PAD_VERT = 1.dp
@@ -353,38 +408,81 @@ internal fun editorTextStyle(
  */
 private const val MAX_SAFE_RENDER_WIDTH_PX = 262_000
 
+internal data class HorizontalLineWindow(
+    val startColumn: Int,
+    val endColumn: Int,
+    val drawOffsetPx: Float,
+)
+
+internal fun horizontalLineWindow(
+    lineLength: Int,
+    scrollPx: Float,
+    viewportWidthPx: Int,
+    charWidthPx: Float,
+    overscanColumns: Int = 64,
+): HorizontalLineWindow {
+    if (lineLength <= 0) return HorizontalLineWindow(0, 0, 0f)
+    val width = charWidthPx.coerceAtLeast(1f)
+    val viewport = viewportWidthPx.coerceAtLeast(1)
+    val firstVisible = (scrollPx.coerceAtLeast(0f) / width).toInt().coerceIn(0, lineLength)
+    val visibleCount = kotlin.math.ceil(viewport / width).toInt().coerceAtLeast(1)
+    val start = (firstVisible - overscanColumns).coerceAtLeast(0)
+    val end = (firstVisible + visibleCount + overscanColumns).coerceAtMost(lineLength)
+    return HorizontalLineWindow(
+        startColumn = start,
+        endColumn = end,
+        drawOffsetPx = start * width - scrollPx,
+    )
+}
+
+internal fun wrappedLineWindow(
+    lineLength: Int,
+    anchorColumn: Int,
+    maxWindowChars: Int = MAX_WRAPPED_WINDOW_CHARS,
+): HorizontalLineWindow {
+    if (lineLength <= maxWindowChars) return HorizontalLineWindow(0, lineLength, 0f)
+    val anchor = anchorColumn.coerceIn(0, lineLength)
+    val start = (anchor - maxWindowChars / 2).coerceIn(0, lineLength - maxWindowChars)
+    return HorizontalLineWindow(start, start + maxWindowChars, 0f)
+}
+
+private const val MAX_WRAPPED_WINDOW_CHARS = 128_000
+
 private fun buildLineAnnotatedString(
     lineText: String,
     lineStartOffset: Int,
     styleBuffer: StyleBuffer,
-    language: LanguageMode,
+    theme: EditorTheme,
     diagnostics: List<InlineEditorError>,
-    onSurface: Color,
     searchRanges: List<IntRange>,
     activeSearchRange: IntRange?,
     variableSpans: List<Pair<IntRange, Color>> = emptyList(),
+    renderStartColumn: Int = 0,
+    renderEndColumn: Int = lineText.length,
 ): AnnotatedString {
     if (lineText.isEmpty()) return AnnotatedString("")
 
-    val renderText = if (lineText.length > MAX_RENDER_CHARS_PER_LINE) {
-        lineText.substring(0, MAX_RENDER_CHARS_PER_LINE) + "\u2026"
-    } else {
-        lineText
-    }
+    val sourceStart = renderStartColumn.coerceIn(0, lineText.length)
+    val sourceEnd = renderEndColumn.coerceIn(sourceStart, lineText.length)
+    val renderText = lineText.substring(sourceStart, sourceEnd)
     val renderLen = renderText.length
-    val styled = styleBuffer.endStyled > lineStartOffset
+    val renderAbsoluteStart = lineStartOffset + sourceStart
+    val styled = styleBuffer.endStyled > renderAbsoluteStart
 
     return buildAnnotatedString {
         if (!styled) {
-            withStyle(SpanStyle(color = onSurface)) { append(renderText) }
+            withStyle(SpanStyle(color = theme.foreground)) { append(renderText) }
         } else {
             var pos = 0
             while (pos < renderLen) {
-                val absPos  = lineStartOffset + pos
+                val absPos  = renderAbsoluteStart + pos
                 val style   = styleBuffer.styleAt(absPos)
-                val absNext = styleBuffer.nextStyleChangeAfter(absPos, lineStartOffset + renderLen)
-                val nextPos = (absNext - lineStartOffset).coerceIn(pos + 1, renderLen)
-                withStyle(SpanStyle(color = colorForToken(style, language))) {
+                val absNext = styleBuffer.nextStyleChangeAfter(
+                    absPos,
+                    renderAbsoluteStart + renderLen,
+                )
+                val nextPos = (absNext - renderAbsoluteStart).coerceIn(pos + 1, renderLen)
+                withStyle(theme.spanStyleFor(style)) {
                     append(renderText, pos, nextPos)
                 }
                 pos = nextPos
@@ -392,15 +490,15 @@ private fun buildLineAnnotatedString(
         }
         // ── Variable token colour overlay (overrides syntax colours) ──────────
         for ((range, color) in variableSpans) {
-            val spanStart = range.first.coerceIn(0, renderLen)
-            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            val spanStart = (range.first - sourceStart).coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1 - sourceStart).coerceIn(0, renderLen)
             if (spanStart < spanEnd) {
                 addStyle(SpanStyle(color = color, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, background = color.copy(alpha = 0.13f)), spanStart, spanEnd)
             }
         }
 
         for (err in diagnostics) {
-            val colStart = (err.col - 1).coerceAtLeast(0)
+            val colStart = (err.col - 1 - sourceStart).coerceAtLeast(0)
             val spanStart = colStart.coerceAtMost(renderLen)
             val spanEnd   = renderLen.coerceAtLeast(spanStart + 1).coerceAtMost(renderLen)
             if (spanStart < spanEnd) {
@@ -421,8 +519,8 @@ private fun buildLineAnnotatedString(
         }
 
         for (range in searchRanges) {
-            val spanStart = range.first.coerceIn(0, renderLen)
-            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            val spanStart = (range.first - sourceStart).coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1 - sourceStart).coerceIn(0, renderLen)
             if (spanStart < spanEnd) {
                 addStyle(
                     SpanStyle(background = SyntaxColors.searchMatch),
@@ -433,8 +531,8 @@ private fun buildLineAnnotatedString(
         }
 
         activeSearchRange?.let { range ->
-            val spanStart = range.first.coerceIn(0, renderLen)
-            val spanEnd = (range.last + 1).coerceIn(0, renderLen)
+            val spanStart = (range.first - sourceStart).coerceIn(0, renderLen)
+            val spanEnd = (range.last + 1 - sourceStart).coerceIn(0, renderLen)
             if (spanStart < spanEnd) {
                 addStyle(
                     SpanStyle(background = SyntaxColors.searchActive, color = Color.White),

@@ -51,9 +51,11 @@ object SyntaxColors {
 /**
  * Maps [type] to a display [Color] for [language].
  *
- * Delegates to [TokenColorRegistry]; color schemes are registered per language
- * via [TokenColorRegistry.register] so **new languages never require editing
- * this function**.  Call [TokenColorRegistry.registerBuiltinSchemes] at startup.
+ * Legacy token-colour entry point. Rendering should pass its active [EditorTheme]
+ * and never rely on a process-global dark palette.
  */
-fun colorForToken(type: TokenType, language: LanguageMode): Color =
-    TokenColorRegistry.colorFor(language, type)
+fun colorForToken(
+    type: TokenType,
+    @Suppress("UNUSED_PARAMETER") language: LanguageMode,
+    theme: EditorTheme = EditorTheme.Light,
+): Color = theme.tokenColors[type] ?: theme.foreground
