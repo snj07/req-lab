@@ -276,6 +276,11 @@ The release gate passes `--no-parallel` because desktop UI, browser, and QA
 tests can use shared local storage or sample-server ports; running those suites
 concurrently makes the gate unnecessarily flaky on hosted runners.
 
+The Linux CI jobs run these suites through `xvfb-run` with a virtual 1920×1080
+display. Desktop Compose tests exercise real clipboard and file-dialog paths,
+so running them with AWT headless mode would produce `HeadlessException` rather
+than testing the application behavior.
+
 Release packaging also runs `:ui-desktop:verifyPackagedRuntime` after creating
 the self-contained JAR. It launches that exact artifact in headless shutdown
 mode so stale or incomplete runtime contents fail before upload.
