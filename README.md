@@ -42,6 +42,16 @@ cd req-lab
 ./gradlew :ui-desktop:run
 ```
 
+To build and verify the self-contained desktop JAR, start from a clean build:
+
+```bash
+./gradlew clean :ui-desktop:packageReqLabJar :ui-desktop:verifyPackagedRuntime
+```
+
+The `verifyPackagedRuntime` task launches the exact packaged JAR in a headless
+shutdown mode, checking that lifecycle and generated runtime classes are present
+before the artifact is distributed.
+
 ### macOS First Launch Note
 
 Note for macOS users: If you see a warning that the app "cannot be opened because Apple cannot check it for malicious software":
@@ -113,7 +123,7 @@ A full-featured Compose-native code editor — no WebView, no Electron.
 - **Find / replace**: match count, Previous/Next (`F3`), replace-all as one undo; go to line (`Cmd/Ctrl+G`)
 - **Auto-format**: JSON pretty-print, XML/HTML indentation, JavaScript formatting (script editor + body editor)
 - Line numbers gutter, 2-space indent guides, matching-bracket highlight, word wrap, monospace font
-- Status strip (`Ln X, Col Y`), diagnostic gutter ticks, truncation banner for 50k-char lines
+- Status strip (`Ln X, Col Y`), diagnostic gutter ticks, and full-content rendering for very long lines
 - Duplicate / move / comment / select line (see [docs/shortcuts.md](docs/shortcuts.md))
 - Virtualized rendering (no jank on responses over 10 MB)
 - Full clipboard support (copy, cut, paste, select all) in both edit and read-only modes
@@ -234,7 +244,7 @@ For larger changes, open an issue first to align on approach and scope.
 
 ## Continuous Integration
 
-ReqLab uses [GitHub Actions](https://github.com/features/actions) for CI. Push to `main` runs the quality gate; tags matching `v*` run the full build and publish a GitHub Release.
+ReqLab uses [GitHub Actions](https://github.com/features/actions) for CI. Push to `main` runs the quality gate; tags matching `v*` run the full desktop, network, web, and QA test gate, then build and publish a GitHub Release.
 
 See the workflow: [`.github/workflows/release.yml`](https://github.com/snj07/req-lab/actions)
 

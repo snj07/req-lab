@@ -2,6 +2,9 @@ package com.reqlab.ui.shared.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +24,9 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -53,6 +58,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -62,9 +68,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.reqlab.editor.core.LanguageMode
+import com.reqlab.editor.ui.EditorLabels
 import com.reqlab.editor.ui.EditorRenderer
 import com.reqlab.editor.ui.EditorTheme
 import com.reqlab.editor.ui.EditorViewModel
@@ -76,6 +86,7 @@ import com.reqlab.ui.shared.theme.CodeFontFamily
 import com.reqlab.ui.shared.theme.LocalAppColors
 import com.reqlab.ui.shared.theme.ReqLabColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** Pretty-print of read-only bodies larger than this is offloaded off the composition thread. */
@@ -458,6 +469,19 @@ fun CodeEditor(
             activeSearchMatch = activeSearchMatch,
             onPrimaryTapOffset = onCursorTap,
             lineVariableSpans = lineVariableSpans,
+            labels = EditorLabels(
+                expand = Strings.expand,
+                collapse = Strings.collapse,
+                diagnostic = Strings.diagnostic,
+                undo = Strings.undo,
+                redo = Strings.redo,
+                copy = Strings.copy,
+                cut = Strings.cut,
+                paste = Strings.paste,
+                selectAll = Strings.selectAll,
+                duplicateLine = Strings.duplicateLine,
+                toggleComment = Strings.toggleComment,
+            ),
             focusRequester = editorFocus,
         )
 
@@ -581,7 +605,7 @@ private fun CodeEditorToolbar(
         if (onToggleWordWrap != null) {
             ToolbarBtn(
                 icon = Icons.Default.WrapText,
-                contentDescription = if (wordWrap) "Disable word wrap" else "Enable word wrap",
+                contentDescription = if (wordWrap) Strings.disableWordWrap else Strings.enableWordWrap,
                 active = wordWrap,
                 onClick = onToggleWordWrap,
                 testTag = "$testTagPrefix-word-wrap-toggle",
@@ -603,13 +627,13 @@ private fun CodeEditorToolbar(
         if (hasFoldRegions) {
             ToolbarBtn(
                 icon = Icons.Default.UnfoldLess,
-                contentDescription = "Fold all",
+                contentDescription = Strings.collapseAll,
                 onClick = onFoldAll ?: {},
                 testTag = "$testTagPrefix-fold-all",
             )
             ToolbarBtn(
                 icon = Icons.Default.UnfoldMore,
-                contentDescription = "Unfold all",
+                contentDescription = Strings.expandAll,
                 onClick = onUnfoldAll ?: {},
                 testTag = "$testTagPrefix-unfold-all",
             )
@@ -780,7 +804,7 @@ private fun CodeEditorSearchBar(
             ) {
                 Icon(
                     imageVector = if (showReplace) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (showReplace) "Hide replace" else "Show replace",
+                    contentDescription = if (showReplace) Strings.hideReplace else Strings.showReplace,
                     tint = ReqLabColors.OnSurfaceDim,
                     modifier = Modifier.size(16.dp),
                 )
@@ -791,13 +815,13 @@ private fun CodeEditorSearchBar(
             onClick = onPrev,
             modifier = Modifier.size(24.dp).focusProperties { canFocus = false },
         ) {
-            Icon(Icons.Default.ArrowUpward, "Previous match", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.ArrowUpward, Strings.previousMatch, tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
         IconButton(
             onClick = onNext,
             modifier = Modifier.size(24.dp).focusProperties { canFocus = false },
         ) {
-            Icon(Icons.Default.ArrowDownward, "Next match", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.ArrowDownward, Strings.nextMatch, tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
         IconButton(
             onClick = onClose,
@@ -806,7 +830,7 @@ private fun CodeEditorSearchBar(
                 .focusProperties { canFocus = false }
                 .testTag("$testTagPrefix-search-close"),
         ) {
-            Icon(Icons.Default.Close, "Close search", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Close, Strings.closeSearch, tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }
 
@@ -834,12 +858,19 @@ private fun CodeEditorSearchBar(
                     .background(ReqLabColors.Background)
                     .border(1.dp, ReqLabColors.Border, RoundedCornerShape(4.dp))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown || event.key != Key.Enter || query.isEmpty()) {
+                            return@onPreviewKeyEvent false
+                        }
+                        if (event.isAltPressed) onReplaceAll() else onReplace()
+                        true
+                    }
                     .testTag("$testTagPrefix-search-replace-input"),
                 decorationBox = { inner ->
                     Box {
                         if (replaceQuery.isEmpty()) {
                             Text(
-                                "Replace",
+                                Strings.replace,
                                 color = ReqLabColors.OnSurfaceDim,
                                 fontSize = 12.sp,
                                 fontFamily = CodeFontFamily,
@@ -849,20 +880,91 @@ private fun CodeEditorSearchBar(
                     }
                 },
             )
-            TextButton(
+            EditorIconButtonWithTooltip(
                 onClick = onReplace,
                 enabled = query.isNotEmpty(),
+                tooltip = Strings.replace,
+                icon = Icons.Default.FindReplace,
                 modifier = Modifier.testTag("$testTagPrefix-search-replace"),
-            ) { Text("Replace", fontSize = 12.sp) }
-            TextButton(
+            )
+            EditorIconButtonWithTooltip(
                 onClick = onReplaceAll,
                 enabled = query.isNotEmpty(),
+                tooltip = Strings.replaceAll,
+                icon = Icons.Default.DoneAll,
                 modifier = Modifier.testTag("$testTagPrefix-search-replace-all"),
-            ) { Text("All", fontSize = 12.sp) }
+            )
         }
     }
 
     Box(Modifier.fillMaxWidth().height(1.dp).background(ReqLabColors.Border))
+    }
+}
+
+/**
+ * Compact replace action with a discoverable hover tooltip. The text label remains
+ * available through the button semantics so icon-only controls are still usable
+ * with keyboard navigation and assistive technology.
+ */
+@Composable
+private fun EditorIconButtonWithTooltip(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    tooltip: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    var tooltipVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isHovered, enabled) {
+        if (isHovered && enabled) {
+            delay(250L)
+            tooltipVisible = true
+        } else {
+            tooltipVisible = false
+        }
+    }
+
+    Box {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier
+                .size(28.dp)
+                .hoverable(interactionSource),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = tooltip,
+                tint = if (enabled) ReqLabColors.OnSurfaceDim else ReqLabColors.OnSurfaceDim.copy(alpha = 0.45f),
+                modifier = Modifier.size(17.dp),
+            )
+        }
+
+        if (tooltipVisible) {
+            Popup(
+                alignment = Alignment.BottomCenter,
+                offset = IntOffset(0, 38),
+                properties = PopupProperties(focusable = false),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(ReqLabColors.SurfaceHigh)
+                        .border(1.dp, ReqLabColors.Border, RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = tooltip,
+                        color = ReqLabColors.OnSurface,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -893,7 +995,7 @@ private fun CodeEditorGoToLineBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Go to line", color = ReqLabColors.OnSurfaceDim, fontSize = 11.sp)
+        Text(Strings.goToLine, color = ReqLabColors.OnSurfaceDim, fontSize = 11.sp)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -914,13 +1016,13 @@ private fun CodeEditorGoToLineBar(
                 .testTag("$testTagPrefix-goto-input"),
         )
         TextButton(onClick = onGo, modifier = Modifier.testTag("$testTagPrefix-goto-go")) {
-            Text("Go", fontSize = 12.sp)
+            Text(Strings.go, fontSize = 12.sp)
         }
         IconButton(
             onClick = onClose,
             modifier = Modifier.size(24.dp).focusProperties { canFocus = false },
         ) {
-            Icon(Icons.Default.Close, "Close go to line", tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Close, Strings.close, tint = ReqLabColors.OnSurfaceDim, modifier = Modifier.size(14.dp))
         }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(ReqLabColors.Border))

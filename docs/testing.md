@@ -54,7 +54,7 @@ Editor engine micro-tests (15 test classes).
 Editor renderer/ViewModel logic and regression tests.
 - `DiagnosticsAndFoldUpdateTest` — diagnostic overlay rendering, fold version consistency
 - `EditorViewModelFixTest` — ViewModel command sequencing, state emission correctness
-- `EditorCoreUxTest` — replace-all, go-to-line, line ops, bracket match, indent guides, truncation flag
+- `EditorCoreUxTest` — replace-all, go-to-line, line ops, bracket match, indent guides
 - `PerformanceIssueReproTest` — regression guards for previously found performance problems
 
 ### `ui-shared`
@@ -123,7 +123,7 @@ Compose Desktop UI automation, regression, integration, and persistence tests (5
 - `EditorV2RegressionTest` — V2 editor architecture regression suite
 - `EditorNoWrapRegressionTest` — no-wrap mode invariants
 - `EditorKnownIssuesBugTest` — known-issue guards preventing regressions
-- `EditorCoreUxUiTest` — find/replace bar, F3, go-to-line, status strip, truncation banner
+- `EditorCoreUxUiTest` — find/replace bar, F3, go-to-line, status strip, long-line behavior
 - `GutterLayoutStabilityTest` — gutter width stability across content/fold changes
 - `LargeTextEditorUiTest` — large document load/render, no jank
 - `LargePayloadSaveUiTest` — large body save + reload correctness
@@ -264,9 +264,17 @@ Implemented and tested:
 
 Quality-gate tests used by release packaging:
 
+- `:core-network:desktopTest`
+- `:editor-core:desktopTest`
 - `:editor-ui:allTests`
 - `:ui-shared:desktopTest`
+- `:ui-desktop:desktopTest`
 - `:ui-web:wasmJsTest`
+- `:qa-tests:jvmTest`
+
+Release packaging also runs `:ui-desktop:verifyPackagedRuntime` after creating
+the self-contained JAR. It launches that exact artifact in headless shutdown
+mode so stale or incomplete runtime contents fail before upload.
 
 Partially covered or still evolving areas:
 

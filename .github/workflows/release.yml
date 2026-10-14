@@ -41,9 +41,13 @@ jobs:
       - name: Run mandatory tests
         run: |
           ./gradlew \
+            :core-network:desktopTest \
+            :editor-core:desktopTest \
             :editor-ui:allTests \
             :ui-shared:desktopTest \
+            :ui-desktop:desktopTest \
             :ui-web:wasmJsTest \
+            :qa-tests:jvmTest \
             --no-daemon --stacktrace
 
   build:
@@ -116,8 +120,10 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           ./gradlew \
+            clean \
             :ui-desktop:${{ matrix.package-task }} \
             :ui-desktop:packageReqLabJar \
+            :ui-desktop:verifyPackagedRuntime \
             --no-daemon --stacktrace
 
       # ── 6b. Build – Windows ───────────────────────────────────────────────────
@@ -126,8 +132,10 @@ jobs:
         shell: pwsh
         run: |
           .\gradlew.bat `
+            clean `
             :ui-desktop:${{ matrix.package-task }} `
             :ui-desktop:packageReqLabJar `
+            :ui-desktop:verifyPackagedRuntime `
             --no-daemon --stacktrace
 
       # ── 7. Collect, rename, and stage artifacts ───────────────────────────────

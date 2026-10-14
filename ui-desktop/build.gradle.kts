@@ -175,6 +175,26 @@ tasks.register<org.gradle.jvm.tasks.Jar>("packageReqLabJar") {
     group = "distribution"
 }
 
+/**
+ * Executes the exact fat JAR produced for release in headless shutdown mode.
+ * This catches incomplete/stale runtime contents (for example, a missing
+ * generated coroutine lambda) before an artifact is uploaded.
+ */
+tasks.register<Exec>("verifyPackagedRuntime") {
+    dependsOn("packageReqLabJar")
+    val jarFile = layout.buildDirectory.file("distribute/ReqLab-${project.version}.jar")
+
+    workingDir = project.rootDir
+    commandLine(
+        "java",
+        "-jar",
+        jarFile.get().asFile.absolutePath,
+        "--shutdown-smoke-test",
+    )
+    description = "Runs the packaged ReqLab JAR through its headless shutdown path."
+    group = "verification"
+}
+
 tasks.register<Exec>("runReqLabJar") {
     dependsOn("packageReqLabJar")
     val jarFile = layout.buildDirectory.file("distribute/ReqLab-${project.version}.jar")

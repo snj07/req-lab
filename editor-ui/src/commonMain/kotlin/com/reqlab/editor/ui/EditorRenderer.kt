@@ -91,7 +91,6 @@ import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalDensity
@@ -127,6 +126,20 @@ private val NON_CHARACTER_KEYS = setOf(
     Key.MetaLeft, Key.MetaRight,
 )
 
+data class EditorLabels(
+    val expand: String = "Expand",
+    val collapse: String = "Collapse",
+    val diagnostic: String = "Diagnostic",
+    val undo: String = "Undo",
+    val redo: String = "Redo",
+    val copy: String = "Copy",
+    val cut: String = "Cut",
+    val paste: String = "Paste",
+    val selectAll: String = "Select All",
+    val duplicateLine: String = "Duplicate Line",
+    val toggleComment: String = "Toggle Comment",
+)
+
 /**
  * Fully virtualized code editor renderer.
  *
@@ -144,6 +157,7 @@ private val NON_CHARACTER_KEYS = setOf(
  * @param onCopyRequest  Called with the selected text on Ctrl/Cmd+C. Write it to the clipboard.
  * @param testTagPrefix  Compose test-tag prefix for integration tests.
  * @param modifier       Layout modifier.
+ * @param labels         Localized labels for fold and context-menu actions.
  */
 @Composable
 fun EditorRenderer(
@@ -176,6 +190,7 @@ fun EditorRenderer(
      * Pass `null` (the default) to leave the editor with plain syntax colours.
      */
     lineVariableSpans: ((lineText: String, lineStartOffset: Int) -> List<Pair<IntRange, Color>>)? = null,
+    labels: EditorLabels = EditorLabels(),
     /**
      * Optional focus requester for the editor surface. When null, an internal requester is used.
      * Pass a shared instance from a parent (e.g. CodeEditor toolbar) to restore focus after
@@ -714,10 +729,16 @@ fun EditorRenderer(
                                         else Modifier
                                     ),
                             ) {
-                                Canvas(Modifier.matchParentSize()) {
-                                    val y = (size.height - lineNumLayout.size.height) / 2f
-                                    drawText(lineNumLayout, topLeft = Offset(0f, y))
-                                }
+                                // Keep line numbers in the semantics tree as well as on
+                                // screen. This preserves the measured gutter geometry while
+                                // making the gutter discoverable to accessibility and UI tests.
+                                Text(
+                                    text = lineLabel,
+                                    style = lineNumStyle,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
                             }
 
                             val foldTag = if (testTagPrefix.isNotEmpty())
@@ -737,7 +758,7 @@ fun EditorRenderer(
                                     foldColumnModifier
                                         .hoverable(foldInteraction)
                                         .semantics {
-                                            contentDescription = if (isFolded) "Expand" else "Collapse"
+                                            contentDescription = if (isFolded) labels.expand else labels.collapse
                                         }
                                         .pointerInput(docLine) {
                                             detectTapGestures {
@@ -784,7 +805,7 @@ fun EditorRenderer(
                                             .clip(CircleShape)
                                             .background(sevColor)
                                             .hoverable(diagInteraction)
-                                            .semantics { contentDescription = diagMsg ?: "Diagnostic" }
+                                            .semantics { contentDescription = diagMsg ?: labels.diagnostic }
                                             .then(if (diagTag.isNotEmpty()) Modifier.testTag(diagTag) else Modifier),
                                     )
                                 }
@@ -950,7 +971,7 @@ fun EditorRenderer(
                 offset           = DpOffset.Zero,
             ) {
                 DropdownMenuItem(
-                    text    = { Text("Undo") },
+                    text    = { Text(labels.undo) },
                     enabled = !isReadOnly && viewModel.canUndo(),
                     onClick = {
                         contextMenuVisible = false
@@ -960,7 +981,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-undo") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Redo") },
+                    text    = { Text(labels.redo) },
                     enabled = !isReadOnly && viewModel.canRedo(),
                     onClick = {
                         contextMenuVisible = false
@@ -970,7 +991,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-redo") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Copy") },
+                    text    = { Text(labels.copy) },
                     enabled = hasSelection,
                     onClick = {
                         contextMenuVisible = false
@@ -981,7 +1002,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-copy") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Cut") },
+                    text    = { Text(labels.cut) },
                     enabled = hasSelection && !isReadOnly,
                     onClick = {
                         contextMenuVisible = false
@@ -995,7 +1016,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-cut") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Paste") },
+                    text    = { Text(labels.paste) },
                     enabled = !isReadOnly,
                     onClick = {
                         contextMenuVisible = false
@@ -1010,7 +1031,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-paste") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Select All") },
+                    text    = { Text(labels.selectAll) },
                     onClick = {
                         contextMenuVisible = false
                         viewModel.selectAll()
@@ -1019,7 +1040,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-selectall") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Duplicate Line") },
+                    text    = { Text(labels.duplicateLine) },
                     enabled = !isReadOnly,
                     onClick = {
                         contextMenuVisible = false
@@ -1029,7 +1050,7 @@ fun EditorRenderer(
                         Modifier.testTag("$testTagPrefix-context-duplicate") else Modifier,
                 )
                 DropdownMenuItem(
-                    text    = { Text("Toggle Comment") },
+                    text    = { Text(labels.toggleComment) },
                     enabled = !isReadOnly,
                     onClick = {
                         contextMenuVisible = false

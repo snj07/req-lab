@@ -33,6 +33,7 @@ class I18nCompletenessTest {
         "collapse_all", "expand_all", "search_environment_variables",
         "environment_variable_result_count", "no_matching_variables", "clear_search",
         "maximize_dialog", "restore_dialog",
+        "expand", "collapse",
         // Request Editor
         "params", "headers", "body", "auth", "pre_request", "tests",
         "send_request", "enter_url", "url_is_empty",
@@ -41,6 +42,10 @@ class I18nCompletenessTest {
         "no_cookies", "send_to_see_response", "sending_request",
         "request_failed", "format", "word_wrap", "search_in_response",
         "copy_body", "download_response", "no_results",
+        "disable_word_wrap", "enable_word_wrap", "previous_match", "next_match",
+        "close_search", "show_replace", "hide_replace", "replace", "replace_all",
+        "go_to_line", "go", "diagnostic", "undo", "redo", "cut", "paste",
+        "select_all", "duplicate_line", "toggle_comment",
         // Timing
         "request_timing_breakdown", "dns_lookup", "tcp_connect",
         "tls_handshake", "server_processing", "content_download",

@@ -21,8 +21,23 @@ import com.reqlab.ui.shared.persistence.TabsRepository
 import com.reqlab.ui.shared.persistence.WorkspaceRepository
 import com.reqlab.ui.shared.state.AppState
 import com.reqlab.ui.shared.theme.ReqLabTheme
+import kotlinx.coroutines.runBlocking
 
-fun main() {
+/**
+ * Starts ReqLab, or runs the headless packaged-runtime shutdown smoke test.
+ *
+ * The smoke mode intentionally exercises the same [AppState.disposeAndAwait]
+ * path used during desktop shutdown without opening a Compose window. It is
+ * used by the packaging task to catch stale or incomplete fat-JAR contents.
+ */
+fun main(args: Array<String>) {
+    if ("--shutdown-smoke-test" in args) {
+        runBlocking {
+            AppState(openDefaultTab = false).disposeAndAwait()
+        }
+        return
+    }
+
     // Ensure OS surfaces (dock/app switcher/task tooltip) use the product name.
     System.setProperty("apple.awt.application.name", "ReqLab")
     System.setProperty("java.awt.application.name", "ReqLab")

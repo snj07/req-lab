@@ -312,7 +312,7 @@ data class InlineEditorError(
 )
 ```
 
-Pure data — no Compose dependency. Produced by `LanguageModeProvider.validate()`. `BodyEditor` calls `validate()` on every body content change and passes the result into `CodeEditor` → `EditorRenderer`.
+Pure data — no Compose dependency. Produced by `LanguageModeProvider.validate()`. `EditorViewModel` schedules validation after edits and exposes the results through `EditorDisplayState.diagnostics`; `EditorRenderer` forwards the diagnostics for each visible line to `LineView`.
 
 ---
 
@@ -332,7 +332,6 @@ data class EditorDisplayState(
     val selectionEnd: Int = -1,
     val diagnostics: List<InlineEditorError> = emptyList(),
     val totalDisplayLines: Int = 1,
-    val hasLineTruncation: Boolean = false,  // true if any line > 50,000 chars
 )
 ```
 
@@ -358,7 +357,6 @@ data class EditorDisplayState(
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `DISPLAY_LINE_LENGTH_LIMIT` | 50,000 chars | Lines longer than this set `hasLineTruncation = true` |
 | `MAX_UNDO_COMMANDS` | 2,000 | Maximum history entries |
 | `MAX_UNDO_BYTES` | 32 MB | Maximum total undo memory |
 | `LARGE_EDIT_SCROLL_SUPPRESS_THRESHOLD_CHARS` (renderer) | 100,000 chars | Pastes larger than this suppress scroll-to-cursor |
@@ -411,7 +409,7 @@ Fold regions are detected asynchronously by `computeAndApplyFolds()`, which runs
 
 #### Diagnostic API
 
-`scheduleDiagnostics()` is a **private** internal function launched after every edit. It calls `LanguageModeProvider.validate()` on the current text and emits results into `state.diagnostics`. The job is cancelled and re-launched on each subsequent edit. Callers control diagnostics by passing `inlineErrors` directly to `CodeEditor`.
+`scheduleDiagnostics()` is a **private** internal function launched after every edit. It calls `LanguageModeProvider.validate()` on the current text and emits results into `state.diagnostics`. The job is cancelled and re-launched on each subsequent edit. `EditorRenderer` reads those diagnostics from the view-model state and passes only the diagnostics for the visible document line to `LineView`.
 
 #### Read API
 
@@ -488,7 +486,7 @@ Box (clip, background, border, focus, key events, pointer input)
     └── item[displayLine] ─► Row {
             GutterCell(lineNumber, foldIndicator, gutterWidth)
             VerticalDivider()
-            LineView(tokens, cursor, selection, searchHighlights, inlineErrors)
+            LineView(tokens, cursor, selection, searchHighlights, diagnostics)
         }
 ```
 
@@ -714,7 +712,6 @@ fun CodeEditor(
     enableDownload: Boolean = false,
     onDownload: (() -> Unit)? = null,
     placeholder: String = "",
-    inlineErrors: List<InlineEditorError> = emptyList(),
     testTagPrefix: String = "code-editor",
 )
 ```
@@ -724,7 +721,7 @@ fun CodeEditor(
 Toolbar actions: pretty-print / minify (Format), Fold All, Unfold All, Word-Wrap toggle, Copy, Download.
 Find bar (`Cmd/Ctrl+F`): incremental match highlighting, match count `n/m`, Previous/Next, F3/Shift+F3. Editable editors also show Replace / Replace All (one undo command).
 Go-to-line bar (`Cmd/Ctrl+G`): jump to a 1-based document line.
-Status strip: `Ln X, Col Y` plus the diagnostic message for the current line. A truncation banner appears when any line exceeds `DISPLAY_LINE_LENGTH_LIMIT` (50,000 chars).
+Status strip: `Ln X, Col Y` plus the diagnostic message for the current line. Long unwrapped lines are rendered through bounded viewport windows without replacing or hiding document content.
 
 **ViewModel lifecycle:** `CodeEditor` creates one `EditorViewModel` per instance via `remember(language)`. It is disposed via `DisposableEffect { onDispose { viewModel.dispose() } }`, which cancels the `IdleLexer` and all coroutines.
 
@@ -782,7 +779,7 @@ Usage sites:
 | Test class | Coverage |
 |---|---|
 | `EditorViewModelFixTest` | Mutation correctness, undo/redo, cursor navigation |
-| `EditorCoreUxTest` | Replace-all, go-to-line, duplicate/move/comment/select line, bracket match, indent guides, truncation flag |
+| `EditorCoreUxTest` | Replace-all, go-to-line, duplicate/move/comment/select line, bracket match, indent guides |
 | `DiagnosticsAndFoldUpdateTest` | Inline error spawning + fold interaction |
 | `PerformanceIssueReproTest` | Large-document regression |
 
@@ -815,7 +812,7 @@ Usage sites:
 | `EditorV2RegressionTest` | V2 editor architecture regression suite |
 | `EditorNoWrapRegressionTest` | No-wrap mode invariants: no line wrap, horizontal scroll range correct |
 | `EditorKnownIssuesBugTest` | Guards preventing previously-fixed known bugs from recurring |
-| `EditorCoreUxUiTest` | Find/replace bar, F3, go-to-line, status strip, truncation banner |
+| `EditorCoreUxUiTest` | Find/replace bar, F3, go-to-line, status strip, long-line editor behavior |
 | `GutterLayoutStabilityTest` | Gutter width stability across content changes and fold toggles |
 | `LargeTextEditorUiTest` | Large document load and render — no jank, correct display line count |
 | `LargePayloadSaveUiTest` | Large body save + reload round-trip correctness |
